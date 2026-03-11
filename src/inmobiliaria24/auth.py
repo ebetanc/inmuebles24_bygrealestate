@@ -254,6 +254,9 @@ async def launch_chrome(
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-blink-features=AutomationControlled",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
     ]
     if headless:
         args.append("--headless=new")
@@ -263,9 +266,9 @@ async def launch_chrome(
         args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     # Give Chrome time to start and open the debug port.
-    await asyncio.sleep(2)
+    await asyncio.sleep(4)
 
-    browser = await pw.chromium.connect_over_cdp(f"http://localhost:{CDP_PORT}")
+    browser = await pw.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
     context = browser.contexts[0]
     logger.info("Connected to Chrome via CDP")
 
