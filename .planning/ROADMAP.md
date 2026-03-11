@@ -28,7 +28,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Running the script a second time reuses a cached `storage_state` session without performing a fresh login
   3. If the cached session is stale or invalid, the script falls back to a fresh login automatically without crashing
   4. Credentials are never visible in source code, logs, or error output — only read from environment variables at runtime
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold, dependency manifest, and credential-safe config loader
+- [ ] 01-02-PLAN.md — Authenticated Playwright session with stealth, storage_state caching, and CLI entrypoint
 
 ### Phase 2: Extraction
 **Goal**: A scraper that returns structured lead data (linked to its source property) for all active listings in the authenticated account
@@ -69,7 +73,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/2 | In progress | - |
 | 2. Extraction | 0/TBD | Not started | - |
 | 3. State and Deduplication | 0/TBD | Not started | - |
 | 4. Notification | 0/TBD | Not started | - |
