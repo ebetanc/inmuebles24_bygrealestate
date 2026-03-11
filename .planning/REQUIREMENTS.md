@@ -7,7 +7,7 @@
 
 ### Authentication
 
-- [ ] **AUTH-01**: System logs in to Inmuebles24 with email and password supplied via environment variables
+- [x] **AUTH-01**: System logs in to Inmuebles24 with email and password supplied via environment variables
 - [x] **AUTH-02**: Credentials are never hardcoded — read from `.env` file at runtime
 
 ### Extraction
@@ -67,7 +67,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 1 | Pending |
+| AUTH-01 | Phase 1 | Complete |
 | AUTH-02 | Phase 1 | Complete |
 | EXTR-01 | Phase 2 | Pending |
 | EXTR-02 | Phase 2 | Pending |

@@ -12,7 +12,7 @@ Build a scheduled Python + Playwright automation that logs into Inmuebles24, ext
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Config, authenticated Playwright session, stealth, and bot-detection hardening
+- [x] **Phase 1: Foundation** - Config, authenticated Playwright session, stealth, and bot-detection hardening (completed 2026-03-11)
 - [ ] **Phase 2: Extraction** - Scrape active listings and per-listing leads into structured data
 - [ ] **Phase 3: State and Deduplication** - Persist seen lead IDs, compute new-only diff, guard against concurrent runs
 - [ ] **Phase 4: Notification** - Format and deliver Telegram message; suppress on no-new-leads
@@ -73,7 +73,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 1/2 | In Progress|  |
+| 1. Foundation | 2/2 | Complete   | 2026-03-11 |
 | 2. Extraction | 0/TBD | Not started | - |
 | 3. State and Deduplication | 0/TBD | Not started | - |
 | 4. Notification | 0/TBD | Not started | - |
