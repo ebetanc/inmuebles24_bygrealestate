@@ -1,7 +1,7 @@
 """CLI entrypoint for the Inmobiliaria24 scraper.
 
-Owns the browser lifecycle: launches Chromium, delegates authentication to
-auth.py, and coordinates scraper phases (Phase 2+).
+Owns the browser lifecycle: launches Playwright Chromium, delegates
+authentication to auth.py, and coordinates scraper phases (Phase 2+).
 
 Usage:
     python -m inmobiliaria24 [--headful] [--dry-run]
@@ -19,8 +19,9 @@ import sys
 from loguru import logger
 from playwright.async_api import async_playwright
 
-from inmobiliaria24.auth import AuthenticationError, load_or_login
+from inmobiliaria24.auth import AuthenticationError, launch_chrome, load_or_login
 from inmobiliaria24.config import Settings
+from inmobiliaria24.scraper import scrape_and_send
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -56,7 +57,7 @@ def _parse_args() -> argparse.Namespace:
         "--headful",
         action="store_true",
         default=False,
-        help="Run Chromium with a visible browser window (default: headless)",
+        help="Run Chrome with a visible browser window (default: headless)",
     )
     parser.add_argument(
         "--dry-run",
@@ -76,29 +77,35 @@ def _parse_args() -> argparse.Namespace:
 async def async_main(args: argparse.Namespace, settings: Settings) -> int:
     """Run the scraper lifecycle. Returns an integer exit code (0=success, 1=failure)."""
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(
-            headless=not args.headful,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        context, chrome_proc = await launch_chrome(
+            pw, headless=not args.headful
         )
         try:
-            context = await load_or_login(browser, settings)
-            try:
-                if args.dry_run:
-                    logger.info("Dry run complete — session is valid")
-                    print("Dry run complete — session is valid")
-                    return 0
-                # Phase 2+ will add scraper call here
+            page = await load_or_login(context, settings)
+            if args.dry_run:
+                logger.info("Dry run complete — session is valid, on Mis avisos")
+                print("Dry run complete — session is valid, on Mis avisos")
+                print(f"Final URL: {page.url}")
                 return 0
-            finally:
-                await context.close()
+
+            # Scrape Pendiente leads from Interesados inbox.
+            leads = await scrape_and_send(page)
+            print(f"Sent {len(leads)} Pendiente leads to webhook")
+            for lead in leads:
+                print(f"  - {lead.get('name', '?')} (lead_id={lead.get('lead_id', '?')}, listing={lead.get('listing_id', '?')})")
+            return 0
         except AuthenticationError as e:
             logger.error("Authentication failed: {}", str(e))
+            print(f"AUTH FAILED: {e}")
             return 1
         except Exception as e:
             logger.exception("Unexpected error: {}", str(e))
             return 1
         finally:
-            await browser.close()
+            await context.close()
+            chrome_proc.terminate()
+            chrome_proc.wait(timeout=5)
+            logger.debug("Chrome process terminated")
 
 
 # ---------------------------------------------------------------------------

@@ -10,3 +10,8 @@ logs/*
 !logs/.gitkeep
 .session/*
 !.session/.gitkeep
+*.png
+*.jpg
+.claude/
+.planning/
+n8n-workflow-leads-telegram.json

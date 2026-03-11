@@ -1,22 +1,20 @@
 """Authentication module for Inmuebles24 scraper.
 
 Owns the full authentication lifecycle:
-- Storage_state caching with freshness check
-- Stealth browser context creation
-- Login with timing jitter and credential hygiene
-- Stale session detection with automatic re-auth fallback
-- Failure screenshots for CAPTCHA / block detection
+- Playwright Chromium browser launch with persistent profile (cookies survive between runs)
+- Multi-step login: homepage -> Ingresar -> email -> Continuar -> password -> Iniciar sesion
+- Navigation to "Mis avisos" panel after login
 """
 from __future__ import annotations
 
 import asyncio
+import os
 import random
-from datetime import datetime
+import subprocess
 from pathlib import Path
 
 from loguru import logger
-from playwright.async_api import Browser, BrowserContext, Page
-from playwright_stealth import Stealth
+from playwright.async_api import BrowserContext, Page, Playwright
 
 from inmobiliaria24.config import Settings
 
@@ -24,18 +22,30 @@ from inmobiliaria24.config import Settings
 # Constants
 # ---------------------------------------------------------------------------
 
-SESSION_PATH = Path(".session/storage_state.json")
-SESSION_MAX_AGE_HOURS = 12
-SCREENSHOTS_DIR = Path("logs/screenshots")
+PROFILE_DIR = Path(".session/chrome-profile")
+CDP_PORT = 9222
 
-LOGIN_URL = "https://www.inmuebles24.com/login"
-ACCOUNT_CHECK_URL = "https://www.inmuebles24.com/mis-propiedades"
+_CHROME_CANDIDATES = [
+    # Linux
+    Path("/usr/bin/google-chrome"),
+    Path("/usr/bin/google-chrome-stable"),
+    Path("/usr/bin/chromium-browser"),
+    Path("/usr/bin/chromium"),
+    # Windows
+    Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
+    Path("C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"),
+]
 
-# Adjust after live browser inspection — these are best-guess selectors.
-AUTH_INDICATOR_SELECTOR = "[data-qa='user-menu'], .user-menu, [aria-label='Mi cuenta']"
+HOME_URL = "https://www.inmuebles24.com/"
+AVISOS_URL = "https://www.inmuebles24.com/panel.bum"
 
-# Shared stealth instance (stateless config object, safe to reuse).
-_STEALTH = Stealth()
+# Selectors (from live DOM inspection)
+BTN_INGRESAR = '[data-qa="HEADER_LOGIN"]'
+INPUT_EMAIL = '[data-qa="input_usuario_login"]'
+BTN_CONTINUAR = '[data-qa="boton_continuar_login"]'
+INPUT_PASSWORD = '[data-qa="input_contraseña_login"]'
+BTN_INICIAR_SESION = '[data-qa="boton_iniciar_sesion_login"]'
+MENU_MIS_AVISOS = '[data-qa="mis-avisos"]'
 
 
 # ---------------------------------------------------------------------------
@@ -48,106 +58,218 @@ class AuthenticationError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Cloudflare handling
 # ---------------------------------------------------------------------------
 
 
-def is_session_fresh(path: Path, max_age_hours: int) -> bool:
-    """Return True if *path* exists and its mtime is within *max_age_hours*.
-
-    Never raises — returns False on any OS error.
-    """
-    try:
-        if not path.exists():
-            return False
-        mtime = path.stat().st_mtime
-        age_hours = (datetime.now().timestamp() - mtime) / 3600
-        return age_hours < max_age_hours
-    except OSError:
-        return False
+_CF_TITLES = ("just a moment", "un momento")
 
 
-async def save_failure_screenshot(page: Page, label: str) -> Path:
-    """Capture a screenshot of *page* and save it under SCREENSHOTS_DIR.
-
-    Returns the path to the saved screenshot.
-    """
-    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    screenshot_path = SCREENSHOTS_DIR / f"{label}_{timestamp}.png"
-    await page.screenshot(path=str(screenshot_path), full_page=True)
-    logger.info("Failure screenshot saved: {}", screenshot_path)
-    return screenshot_path
+def _is_cloudflare_page(title: str) -> bool:
+    """Return True if the page title matches a Cloudflare challenge (EN or ES)."""
+    lower = title.lower()
+    return any(t in lower for t in _CF_TITLES)
 
 
-# ---------------------------------------------------------------------------
-# Core authentication
-# ---------------------------------------------------------------------------
+async def _wait_for_cloudflare(page: Page, timeout_ms: int = 90_000) -> None:
+    """Wait for Cloudflare Turnstile challenge to resolve, if present."""
+    await asyncio.sleep(1.5)
+    title = await page.title()
+    if not _is_cloudflare_page(title):
+        return
 
-
-async def _assert_authenticated(page: Page) -> None:
-    """Navigate to the protected account page and verify the auth indicator.
-
-    Raises AuthenticationError if the session appears invalid.
-    """
-    await page.goto(ACCOUNT_CHECK_URL, wait_until="domcontentloaded")
-
-    # If redirected back to login, session is invalid.
-    if "login" in page.url or "acceso" in page.url:
-        raise AuthenticationError("Session invalid — redirected to login page")
+    logger.info(
+        "Cloudflare challenge detected (title={!r}) — waiting up to {}s for "
+        "auto-resolve (click the checkbox if running --headful)",
+        title, timeout_ms // 1000,
+    )
 
     try:
-        await page.wait_for_selector(AUTH_INDICATOR_SELECTOR, timeout=10_000)
-    except Exception:
-        # Selector not found within timeout — check URL again before giving up.
-        if "login" in page.url or "acceso" in page.url:
-            raise AuthenticationError("Session invalid — redirected to login page")
-        raise AuthenticationError(
-            "Session invalid — auth indicator not found on account page"
+        await page.wait_for_function(
+            """() => {
+                const t = document.title.toLowerCase();
+                return !t.includes('just a moment') && !t.includes('un momento');
+            }""",
+            timeout=timeout_ms,
         )
+        await page.wait_for_load_state("domcontentloaded")
+        await asyncio.sleep(random.uniform(1.5, 3.0))
+        logger.info("Cloudflare challenge resolved")
+    except Exception as e:
+        raise AuthenticationError(
+            f"Cloudflare challenge did not resolve within "
+            f"{timeout_ms // 1000}s — try running with --headful and clicking "
+            f"the checkbox manually. Error: {e}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Core login flow
+# ---------------------------------------------------------------------------
 
 
 async def login(page: Page, settings: Settings) -> None:
-    """Perform a fresh login using *settings* credentials.
+    """Perform a fresh login.
 
-    Uses randomised timing jitter between interactions to reduce bot-detection
-    risk.  Never logs the password.
-
-    Raises AuthenticationError on failure.
+    Flow:
+      1. Navigate to homepage
+      2. Click "Ingresar" button
+      3. Fill email
+      4. Click "Continuar"
+      5. Fill password
+      6. Click "Iniciar sesion"
+      7. Verify we landed on the panel
     """
-    logger.info("Logging in as {}", settings.email)
+    logger.info("Starting login for {}", settings.email)
 
-    await page.goto(LOGIN_URL, wait_until="domcontentloaded")
+    # Step 1: Navigate to homepage
+    logger.info("Step 1: Navigating to {}", HOME_URL)
+    await page.goto(HOME_URL, wait_until="domcontentloaded")
+    await _wait_for_cloudflare(page)
 
-    # Jitter before email
-    await asyncio.sleep(random.uniform(0.8, 2.5))
-    email_field = page.locator("[type=email]")
-    await email_field.fill(settings.email)
-
-    # Jitter before password
-    await asyncio.sleep(random.uniform(0.8, 2.5))
-    password_field = page.locator("[type=password]")
-    await password_field.fill(settings.password)
-
-    # Jitter before submit
-    await asyncio.sleep(random.uniform(0.8, 2.5))
-    submit_button = page.locator("[type=submit]")
-    await submit_button.click()
-
-    # Wait for navigation to complete after submit.
-    await page.wait_for_load_state("domcontentloaded")
-
+    # Step 2: Click "Ingresar"
+    logger.info("Step 2: Clicking 'Ingresar' button")
+    await asyncio.sleep(random.uniform(1.0, 2.5))
     try:
-        await _assert_authenticated(page)
-    except AuthenticationError:
-        # Capture screenshot before re-raising.
-        try:
-            await save_failure_screenshot(page, "login_failed")
-        except Exception as screenshot_err:
-            logger.warning("Could not save failure screenshot: {}", screenshot_err)
+        await page.wait_for_selector(BTN_INGRESAR, timeout=15_000)
+        await page.click(BTN_INGRESAR)
+    except Exception as e:
+        raise AuthenticationError(f"Could not find/click 'Ingresar' button: {e}")
+    await asyncio.sleep(random.uniform(1.0, 2.0))
+
+    # Step 3: Fill email
+    logger.info("Step 3: Filling email field")
+    try:
+        await page.wait_for_selector(INPUT_EMAIL, timeout=15_000)
+        await page.fill(INPUT_EMAIL, settings.email)
+    except Exception as e:
+        raise AuthenticationError(f"Could not find/fill email field: {e}")
+    await asyncio.sleep(random.uniform(0.5, 1.5))
+
+    # Step 4: Click "Continuar"
+    logger.info("Step 4: Clicking 'Continuar' button")
+    try:
+        await page.wait_for_selector(BTN_CONTINUAR, timeout=10_000)
+        await page.click(BTN_CONTINUAR)
+    except Exception as e:
+        raise AuthenticationError(f"Could not find/click 'Continuar' button: {e}")
+    await asyncio.sleep(random.uniform(1.0, 2.5))
+
+    # Step 5: Fill password
+    logger.info("Step 5: Filling password field")
+    try:
+        await page.wait_for_selector(INPUT_PASSWORD, timeout=15_000)
+        await page.fill(INPUT_PASSWORD, settings.password)
+    except Exception as e:
+        raise AuthenticationError(f"Could not find/fill password field: {e}")
+    await asyncio.sleep(random.uniform(0.5, 1.5))
+
+    # Step 6: Click "Iniciar sesion"
+    logger.info("Step 6: Clicking 'Iniciar sesion' button")
+    try:
+        await page.wait_for_selector(BTN_INICIAR_SESION, timeout=10_000)
+        await page.click(BTN_INICIAR_SESION)
+    except Exception as e:
+        raise AuthenticationError(f"Could not find/click 'Iniciar sesion' button: {e}")
+
+    # Wait for post-login navigation to complete.
+    await page.wait_for_load_state("domcontentloaded")
+    await asyncio.sleep(random.uniform(2.0, 4.0))
+    await _wait_for_cloudflare(page)
+
+    # Step 7: Verify login succeeded
+    logger.info("Step 7: Verifying login succeeded (current url: {})", page.url)
+    if "login" in page.url or "acceso" in page.url:
         raise AuthenticationError(
-            "Login failed — check credentials or CAPTCHA"
+            "Login failed — still on login page after submitting credentials"
         )
+    logger.info("Login successful!")
+
+
+async def navigate_to_avisos(page: Page) -> None:
+    """Navigate to 'Mis avisos' panel after login."""
+    logger.info("Step 8: Navigating to 'Mis avisos'")
+
+    # Try clicking the menu item directly first.
+    try:
+        avisos_link = page.locator(f"{MENU_MIS_AVISOS} a")
+        if await avisos_link.count() > 0:
+            await avisos_link.click()
+            await page.wait_for_load_state("domcontentloaded")
+            await asyncio.sleep(random.uniform(1.0, 2.0))
+            await _wait_for_cloudflare(page)
+            logger.info("Navigated to Mis avisos via menu click")
+            return
+    except Exception:
+        logger.debug("Menu click failed — falling back to direct navigation")
+
+    # Fallback: navigate directly.
+    await page.goto(AVISOS_URL, wait_until="domcontentloaded")
+    await asyncio.sleep(random.uniform(1.0, 2.0))
+    await _wait_for_cloudflare(page)
+    logger.info("Navigated to Mis avisos via direct URL")
+
+
+# ---------------------------------------------------------------------------
+# Browser launch
+# ---------------------------------------------------------------------------
+
+
+def _find_chrome() -> Path:
+    """Locate the system Chrome binary."""
+    env_path = os.environ.get("CHROME_PATH")
+    if env_path:
+        p = Path(env_path)
+        if p.exists():
+            return p
+    for candidate in _CHROME_CANDIDATES:
+        if candidate.exists():
+            return candidate
+    raise RuntimeError(
+        "Chrome not found. Install Google Chrome or set the CHROME_PATH "
+        "environment variable."
+    )
+
+
+async def launch_chrome(
+    pw: Playwright, *, headless: bool = False
+) -> tuple[BrowserContext, subprocess.Popen]:
+    """Launch real Chrome with a persistent profile and connect via CDP.
+
+    Unlike Playwright's bundled Chromium, the real Chrome binary does NOT
+    expose automation markers (navigator.webdriver, etc.), so Cloudflare
+    Turnstile passes without a challenge.
+
+    Returns (context, chrome_process) — caller must terminate the process.
+    """
+    chrome_path = _find_chrome()
+    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+    args = [
+        str(chrome_path),
+        f"--remote-debugging-port={CDP_PORT}",
+        f"--user-data-dir={PROFILE_DIR.resolve()}",
+        "--lang=es-MX",
+        "--start-maximized",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-blink-features=AutomationControlled",
+    ]
+    if headless:
+        args.append("--headless=new")
+
+    logger.info("Launching Chrome via CDP on port {}", CDP_PORT)
+    proc = subprocess.Popen(
+        args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    # Give Chrome time to start and open the debug port.
+    await asyncio.sleep(2)
+
+    browser = await pw.chromium.connect_over_cdp(f"http://localhost:{CDP_PORT}")
+    context = browser.contexts[0]
+    logger.info("Connected to Chrome via CDP")
+
+    return context, proc
 
 
 # ---------------------------------------------------------------------------
@@ -155,86 +277,36 @@ async def login(page: Page, settings: Settings) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def load_or_login(browser: Browser, settings: Settings) -> BrowserContext:
-    """Return an authenticated BrowserContext, reusing a cached session if fresh.
+async def load_or_login(context: BrowserContext, settings: Settings) -> Page:
+    """Ensure the context is authenticated, then navigate to Mis avisos.
 
-    1. If SESSION_PATH exists and is fresh:
-       - Create context with storage_state.
-       - Apply stealth and verify the session is still valid.
-       - Return context on success; fall through to fresh login on failure.
-    2. Fresh login path:
-       - Delete stale/corrupt cache.
-       - Create a new context, apply stealth, perform login.
-       - Save storage_state and return the context.
+    Because we use a persistent browser profile, cookies (including
+    Cloudflare cf_clearance and login session) survive between runs
+    automatically — no manual storage_state needed.
 
-    The caller is responsible for closing the returned context.
+    Returns the Page object sitting on the avisos panel.
 
-    Note: playwright_stealth 2.x uses Stealth().apply_stealth_async(page) instead
-    of the legacy stealth_async(page) from 1.x.
+    Raises AuthenticationError on failure.
     """
-    SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    if is_session_fresh(SESSION_PATH, SESSION_MAX_AGE_HOURS):
-        logger.info("Cached session found — attempting reuse")
-        context = await browser.new_context(storage_state=str(SESSION_PATH))
-        test_page = await context.new_page()
-        try:
-            await _STEALTH.apply_stealth_async(test_page)
-            await _assert_authenticated(test_page)
-            await test_page.close()
-            logger.info("Cached session is valid — skipping fresh login")
-            return context
-        except AuthenticationError:
-            logger.warning("Cached session invalid — falling back to fresh login")
-            await test_page.close()
-            await context.close()
-            # Fall through to fresh login below.
-        except Exception as e:
-            logger.warning(
-                "Session validation error ({}): falling back to fresh login", e
-            )
-            try:
-                await test_page.close()
-            except Exception:
-                pass
-            await context.close()
-            # Fall through to fresh login below.
-
-    # Fresh login path — delete stale/corrupt cache first.
-    if SESSION_PATH.exists():
-        try:
-            SESSION_PATH.unlink()
-            logger.debug("Deleted stale session cache: {}", SESSION_PATH)
-        except OSError as e:
-            logger.warning("Could not delete stale session file: {}", e)
-
-    logger.info("Starting fresh login")
-    context = await browser.new_context(
-        extra_http_headers={
-            "Accept-Language": "es-MX,es;q=0.9,en;q=0.8",
-        }
-    )
     page = await context.new_page()
 
-    await page.set_extra_http_headers({
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/131.0.0.0 Safari/537.36"
-        )
-    })
-    await _STEALTH.apply_stealth_async(page)
-
+    # Try navigating directly — cookies from previous run may still be valid.
+    logger.info("Checking if persistent session is still valid")
     try:
-        await login(page, settings)
-    except AuthenticationError:
-        await page.close()
-        await context.close()
-        raise
+        await page.goto(AVISOS_URL, wait_until="domcontentloaded")
+        await _wait_for_cloudflare(page)
 
-    # Persist the session for future runs.
-    await context.storage_state(path=str(SESSION_PATH))
-    logger.info("Session saved to {}", SESSION_PATH)
+        if "login" not in page.url and "acceso" not in page.url:
+            logger.info("Persistent session is valid — skipping login")
+            return page
+        logger.warning("Session expired — performing fresh login")
+    except Exception as e:
+        logger.warning("Session check error ({}): performing fresh login", e)
 
-    await page.close()
-    return context
+    # Fresh login.
+    await login(page, settings)
+
+    # Navigate to Mis avisos.
+    await navigate_to_avisos(page)
+
+    return page
