@@ -31,15 +31,29 @@ INTERESADOS_URL = "https://www.inmuebles24.com/panel/interesados"
 # SPA helper — wait for React to render meaningful content
 # ---------------------------------------------------------------------------
 
-async def _wait_for_spa(page: Page, timeout: int = 30_000) -> None:
+async def _wait_for_spa(page: Page, timeout: int = 60_000) -> None:
     """Wait for the React SPA to render content inside #root."""
-    await page.wait_for_function(
-        """() => {
-            const root = document.getElementById('root');
-            return root && root.children.length > 0 && root.innerText.trim().length > 50;
-        }""",
-        timeout=timeout,
-    )
+    try:
+        await page.wait_for_function(
+            """() => {
+                const root = document.getElementById('root');
+                return root && root.children.length > 0 && root.innerText.trim().length > 50;
+            }""",
+            timeout=timeout,
+        )
+    except Exception:
+        # Capture debug screenshot and page info on failure.
+        from pathlib import Path
+        Path("logs").mkdir(exist_ok=True)
+        await page.screenshot(path="logs/spa_timeout_debug.png", full_page=True)
+        title = await page.title()
+        url = page.url
+        text = await page.evaluate("() => document.body?.innerText?.substring(0, 500) || ''")
+        logger.error(
+            "SPA timeout — title={!r}, url={!r}, body_preview={!r}",
+            title, url, text,
+        )
+        raise
     # Extra settle time for async data fetching.
     await asyncio.sleep(random.uniform(2.0, 3.5))
 
