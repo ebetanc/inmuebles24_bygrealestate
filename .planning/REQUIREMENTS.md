@@ -75,9 +75,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STAT-01 | Phase 3 | Pending |
 | STAT-02 | Phase 3 | Pending |
 | STAT-03 | Phase 3 | Pending |
-| NOTF-01 | Phase 3 | Pending |
-| NOTF-02 | Phase 3 | Pending |
-| NOTF-03 | Phase 3 | Pending |
+| NOTF-01 | Phase 4 | Pending |
+| NOTF-02 | Phase 4 | Pending |
+| NOTF-03 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 11 total
@@ -86,4 +86,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-11 after initial definition*
+*Last updated: 2026-03-11 after roadmap creation*
