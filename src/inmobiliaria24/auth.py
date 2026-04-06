@@ -232,7 +232,12 @@ def _find_chrome() -> Path:
 
 
 async def launch_chrome(
-    pw: Playwright, *, headless: bool = False
+    pw: Playwright,
+    *,
+    headless: bool = False,
+    proxy_server: str = "",
+    proxy_username: str = "",
+    proxy_password: str = "",
 ) -> tuple[BrowserContext, subprocess.Popen]:
     """Launch real Chrome with a persistent profile and connect via CDP.
 
@@ -258,6 +263,9 @@ async def launch_chrome(
         "--disable-dev-shm-usage",
         "--disable-gpu",
     ]
+    if proxy_server:
+        args.append(f"--proxy-server={proxy_server}")
+        logger.info("Chrome will use proxy: {}", proxy_server)
     if headless:
         args.append("--headless=new")
 
@@ -271,6 +279,9 @@ async def launch_chrome(
     browser = await pw.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
     context = browser.contexts[0]
     logger.info("Connected to Chrome via CDP")
+
+    if proxy_server and proxy_username:
+        logger.info("Proxy auth configured for user: {}", proxy_username.split("-")[0] + "...")
 
     return context, proc
 
