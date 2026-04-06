@@ -1,8 +1,7 @@
 """Scraper for the Interesados (leads) inbox on Inmuebles24.
 
 Navigates to the centralized Interesados page, extracts all Pendiente
-leads from the inbox, opens each one to collect full contact details,
-and sends everything to an n8n webhook.
+leads from the inbox, and opens each one to collect full contact details.
 
 Important: Inmuebles24's panel is a React SPA — all content renders
 dynamically inside <div id="root">. We must wait for React to render
@@ -13,17 +12,12 @@ from __future__ import annotations
 import asyncio
 import random
 
-import httpx
 from loguru import logger
 from playwright.async_api import Page
 
 from inmobiliaria24.auth import _wait_for_cloudflare
 
 
-WEBHOOK_URL = (
-    "https://n8n.srv856940.hstgr.cloud/webhook/"
-    "63340e41-c487-4e66-86fe-c4ff710fbcdd"
-)
 INTERESADOS_URL = "https://www.inmuebles24.com/panel/interesados"
 
 
@@ -433,41 +427,25 @@ async def _extract_lead_by_click(
 
 
 # ---------------------------------------------------------------------------
-# 4. Webhook
+# 4. Orchestrator
 # ---------------------------------------------------------------------------
 
 
-async def send_to_webhook(leads: list[dict], webhook_url: str = WEBHOOK_URL) -> None:
-    """POST lead data to an n8n webhook."""
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(webhook_url, json=leads)
-        resp.raise_for_status()
-        logger.info(
-            "Webhook response: {} {}",
-            resp.status_code, resp.reason_phrase,
-        )
+async def scrape_leads(page: Page) -> list[dict]:
+    """Full scrape flow: Interesados inbox -> detail per Pendiente lead.
 
-
-# ---------------------------------------------------------------------------
-# 5. Orchestrator
-# ---------------------------------------------------------------------------
-
-
-async def scrape_and_send(page: Page) -> list[dict]:
-    """Full flow: Interesados inbox -> detail per Pendiente lead -> webhook."""
-    # Step 1: Get Pendiente leads from the inbox.
+    Returns the list of lead dicts. Does NOT send to webhook (caller handles that).
+    """
     pendiente_leads = await extract_leads_list(page)
     if not pendiente_leads:
-        logger.warning("No Pendiente leads found — nothing to send")
+        logger.warning("No Pendiente leads found")
         return []
 
     results: list[dict] = []
 
-    # Check if we got lead_id links (Strategy 1) or need click-based nav (Strategy 2).
     has_links = any(l.get("lead_id") for l in pendiente_leads)
 
     if has_links:
-        # Strategy 1: direct navigation via URL
         for i, lead in enumerate(pendiente_leads):
             lead_id = lead["lead_id"]
             logger.info(
@@ -479,7 +457,6 @@ async def scrape_and_send(page: Page) -> list[dict]:
                 merged = {**lead, **detail}
                 results.append(merged)
     else:
-        # Strategy 2: click each Pendiente row
         logger.info("No lead URLs found — using click-based navigation")
         for i, lead in enumerate(pendiente_leads):
             click_idx = lead.get("_click_index", i)
@@ -493,7 +470,6 @@ async def scrape_and_send(page: Page) -> list[dict]:
                 merged.pop("_click_index", None)
                 results.append(merged)
 
-            # Navigate back to inbox for next lead
             await page.go_back()
             await asyncio.sleep(random.uniform(1.5, 2.5))
             try:
@@ -502,12 +478,5 @@ async def scrape_and_send(page: Page) -> list[dict]:
                 logger.debug("go_back didn't render — navigating directly")
                 await _navigate_spa(page, INTERESADOS_URL)
 
-    if not results:
-        logger.warning("No lead details extracted — nothing to send")
-        return []
-
-    # Step 2: Send to webhook.
-    logger.info("Sending {} Pendiente leads to webhook", len(results))
-    await send_to_webhook(results)
-
+    logger.info("Extracted {} lead details", len(results))
     return results
