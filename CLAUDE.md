@@ -17,14 +17,29 @@ Production-grade Inmuebles24 lead scraper for BYG Real Estate. Runs on Raspberry
 ```
 src/inmobiliaria24/
   __main__.py          # Entry point
-  main.py              # CLI & async orchestrator
-  config.py            # Settings from env vars
-  auth.py              # Playwright auth + session management
+  main.py              # CLI & async orchestrator (dedup, heartbeat, webhook)
+  config.py            # Settings: credentials, proxy, webhook URLs
+  auth.py              # Playwright auth + proxy + session management
   scraper.py           # Lead extraction from Interesados inbox
+  state.py             # Dedup state file (seen lead IDs)
+  webhook.py           # Webhook POST with retry + local fallback
+  heartbeat.py         # Heartbeat POST to n8n monitoring
 tests/
-  test_config.py       # Config validation tests
+  test_config.py       # Config + proxy validation tests
+  test_state.py        # Dedup state tests
+  test_webhook.py      # Webhook retry tests
+  test_heartbeat.py    # Heartbeat tests
+migrations/
+  001_leads.sql        # Leads table DDL
+  002_conversations.sql # Conversations table DDL
+deploy/
+  inmuebles24.service  # systemd service unit
+  inmuebles24.timer    # systemd timer (every 15min, 7am-18pm CDMX)
+  setup-pi.sh          # Raspberry Pi setup script
 docs/superpowers/specs/
   2026-04-06-*.md      # Approved design spec
+docs/superpowers/plans/
+  2026-04-06-*.md      # Implementation plan
 ```
 
 ## Running
@@ -47,6 +62,9 @@ PROXY_HOST=...
 PROXY_PORT=...
 PROXY_USER=...
 PROXY_PASS=...
+WEBHOOK_URL=...          # n8n lead ingestion webhook
+HEARTBEAT_URL=...        # n8n heartbeat monitoring webhook
+STATE_DIR=...            # defaults to ~/.inmuebles24
 ```
 
 ## Key Design Decisions
@@ -66,7 +84,8 @@ PROXY_PASS=...
 
 ## Testing
 ```bash
-pytest tests/ -v
+pip install -e ".[dev]"
+python3 -m pytest tests/ -v
 ```
 
 ## Important
