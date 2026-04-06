@@ -1,0 +1,17 @@
+[Unit]
+Description=Inmuebles24 lead scraper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/inmuebles24
+ExecStart=/home/pi/inmuebles24/.venv/bin/python -m inmobiliaria24
+Environment=DISPLAY=
+TimeoutStartSec=300
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
