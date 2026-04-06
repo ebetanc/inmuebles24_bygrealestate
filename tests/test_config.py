@@ -12,6 +12,13 @@ def clear_env_vars(monkeypatch):
     """Ensure credentials are cleared before each test to prevent .env file bleed-through."""
     monkeypatch.delenv("INMUEBLES24_EMAIL", raising=False)
     monkeypatch.delenv("INMUEBLES24_PASSWORD", raising=False)
+    monkeypatch.delenv("PROXY_HOST", raising=False)
+    monkeypatch.delenv("PROXY_PORT", raising=False)
+    monkeypatch.delenv("PROXY_USER", raising=False)
+    monkeypatch.delenv("PROXY_PASS", raising=False)
+    monkeypatch.delenv("WEBHOOK_URL", raising=False)
+    monkeypatch.delenv("HEARTBEAT_URL", raising=False)
+    monkeypatch.delenv("STATE_DIR", raising=False)
 
 
 def test_load_with_both_vars_set(monkeypatch):
@@ -66,3 +73,70 @@ def test_password_not_in_repr(monkeypatch):
 
     assert "s3cr3tpass" not in repr_output
     assert "s3cr3tpass" not in str_output
+
+
+def test_load_with_proxy_vars(monkeypatch):
+    """Proxy settings are loaded when all proxy vars are set."""
+    monkeypatch.setenv("INMUEBLES24_EMAIL", "a@b.com")
+    monkeypatch.setenv("INMUEBLES24_PASSWORD", "pass")
+    monkeypatch.setenv("PROXY_HOST", "zproxy.lum-superproxy.io")
+    monkeypatch.setenv("PROXY_PORT", "22225")
+    monkeypatch.setenv("PROXY_USER", "brd-customer-123")
+    monkeypatch.setenv("PROXY_PASS", "proxypass")
+
+    settings = Settings.load(env_file="/dev/null")
+
+    assert settings.proxy_host == "zproxy.lum-superproxy.io"
+    assert settings.proxy_port == 22225
+    assert settings.proxy_user == "brd-customer-123"
+    assert settings.proxy_pass == "proxypass"
+    assert settings.proxy_enabled is True
+
+
+def test_load_without_proxy_vars(monkeypatch):
+    """Missing proxy vars result in proxy_enabled=False, no error."""
+    monkeypatch.setenv("INMUEBLES24_EMAIL", "a@b.com")
+    monkeypatch.setenv("INMUEBLES24_PASSWORD", "pass")
+
+    settings = Settings.load(env_file="/dev/null")
+
+    assert settings.proxy_enabled is False
+    assert settings.proxy_host == ""
+
+
+def test_proxy_pass_not_in_repr(monkeypatch):
+    """Proxy password must not appear in repr."""
+    monkeypatch.setenv("INMUEBLES24_EMAIL", "a@b.com")
+    monkeypatch.setenv("INMUEBLES24_PASSWORD", "pass")
+    monkeypatch.setenv("PROXY_HOST", "proxy.example.com")
+    monkeypatch.setenv("PROXY_PORT", "22225")
+    monkeypatch.setenv("PROXY_USER", "user")
+    monkeypatch.setenv("PROXY_PASS", "secretproxy")
+
+    settings = Settings.load(env_file="/dev/null")
+
+    assert "secretproxy" not in repr(settings)
+
+
+def test_load_with_webhook_url(monkeypatch):
+    """Custom webhook URL is loaded from env."""
+    monkeypatch.setenv("INMUEBLES24_EMAIL", "a@b.com")
+    monkeypatch.setenv("INMUEBLES24_PASSWORD", "pass")
+    monkeypatch.setenv("WEBHOOK_URL", "https://my-n8n.example.com/webhook/abc")
+    monkeypatch.setenv("HEARTBEAT_URL", "https://my-n8n.example.com/webhook/hb")
+
+    settings = Settings.load(env_file="/dev/null")
+
+    assert settings.webhook_url == "https://my-n8n.example.com/webhook/abc"
+    assert settings.heartbeat_url == "https://my-n8n.example.com/webhook/hb"
+
+
+def test_load_without_webhook_url_uses_defaults(monkeypatch):
+    """Missing webhook/heartbeat URLs use hardcoded defaults."""
+    monkeypatch.setenv("INMUEBLES24_EMAIL", "a@b.com")
+    monkeypatch.setenv("INMUEBLES24_PASSWORD", "pass")
+
+    settings = Settings.load(env_file="/dev/null")
+
+    assert "n8n.srv856940.hstgr.cloud" in settings.webhook_url
+    assert settings.heartbeat_url == ""
