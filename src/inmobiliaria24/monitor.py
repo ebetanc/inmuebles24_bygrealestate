@@ -75,6 +75,45 @@ async def send_heartbeat(
 
 
 # ---------------------------------------------------------------------------
+# Webhook health check
+# ---------------------------------------------------------------------------
+
+
+async def check_webhook_health(
+    bot_token: str,
+    chat_id: str,
+    health_url: str,
+    *,
+    timeout: float = 10,
+) -> bool:
+    """Probe the webhook server health endpoint.
+
+    Sends a Telegram alert if the server is unreachable or returns non-200.
+    Returns True if an alert was sent (i.e. the server is unhealthy).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(health_url)
+            if resp.status_code == 200:
+                logger.debug("Webhook health OK ({})", health_url)
+                return False
+            logger.warning(
+                "Webhook health check returned HTTP {} ({})",
+                resp.status_code,
+                health_url,
+            )
+    except Exception as exc:
+        logger.warning("Webhook health check failed ({}): {}", health_url, exc)
+
+    return await send_telegram_alert(
+        bot_token,
+        chat_id,
+        f"⚠️ <b>Webhook server unreachable</b>\n\n"
+        f"Health URL: <code>{health_url}</code>",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Stale-run detection
 # ---------------------------------------------------------------------------
 

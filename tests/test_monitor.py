@@ -5,10 +5,12 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from inmobiliaria24.monitor import (
     check_stale_runs,
+    check_webhook_health,
     send_daily_summary,
     send_heartbeat,
 )
@@ -104,3 +106,68 @@ def test_heartbeat_skipped_no_config() -> None:
     """Heartbeat should be skipped (not error) when token is empty."""
     sent = asyncio.run(send_heartbeat("", "", total_leads=0))
     assert sent is False
+
+
+# ---------------------------------------------------------------------------
+# Webhook health check
+# ---------------------------------------------------------------------------
+
+
+def test_webhook_health_ok(_mock_telegram) -> None:
+    """No alert when the webhook returns 200."""
+    mock_resp = AsyncMock()
+    mock_resp.status_code = 200
+    _mock_telegram.get = AsyncMock(return_value=mock_resp)
+
+    sent = asyncio.run(
+        check_webhook_health("tok", "chat", "http://localhost:8000/health")
+    )
+    assert sent is False
+    _mock_telegram.post.assert_not_called()
+
+
+def test_webhook_health_non_200(_mock_telegram) -> None:
+    """Alert should fire when the webhook returns a non-200 status."""
+    mock_resp = AsyncMock()
+    mock_resp.status_code = 503
+    _mock_telegram.get = AsyncMock(return_value=mock_resp)
+
+    sent = asyncio.run(
+        check_webhook_health("tok", "chat", "http://localhost:8000/health")
+    )
+    assert sent is True
+    call_args = _mock_telegram.post.call_args
+    payload = call_args.kwargs.get("json") or call_args[1].get("json")
+    assert "unreachable" in payload["text"]
+
+
+def test_webhook_health_connection_error(_mock_telegram) -> None:
+    """Alert should fire when the health endpoint is unreachable."""
+    _mock_telegram.get = AsyncMock(
+        side_effect=httpx.ConnectError("Connection refused")
+    )
+
+    sent = asyncio.run(
+        check_webhook_health("tok", "chat", "http://localhost:8000/health")
+    )
+    assert sent is True
+    call_args = _mock_telegram.post.call_args
+    payload = call_args.kwargs.get("json") or call_args[1].get("json")
+    assert "unreachable" in payload["text"]
+
+
+def test_webhook_health_no_telegram_config() -> None:
+    """When Telegram is not configured, alert returns False gracefully."""
+    with patch("inmobiliaria24.monitor.httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(
+            side_effect=httpx.ConnectError("Connection refused")
+        )
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_cls.return_value = mock_client
+
+        sent = asyncio.run(
+            check_webhook_health("", "", "http://localhost:8000/health")
+        )
+        assert sent is False

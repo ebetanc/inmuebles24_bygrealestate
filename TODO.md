@@ -53,7 +53,7 @@
 ### CRM-Specific (when keys arrive)
 - [!] Activate HubSpot adapter (blocked: waiting for client CRM decision + keys)
 - [x] Field mapping: Lead model → HubSpot fields (in hubspot.py)
-- [ ] CRM adapter integration tests
+- [x] CRM adapter integration tests (35 tests)
 
 ---
 
@@ -131,15 +131,15 @@
 - [ ] Environment setup on VPS — manual
 
 ### Testing
-- [x] Unit tests: 49 passing (config, state, CRM, parser, conversation store, pipeline, monitor)
-- [ ] Integration test: mock scrape → full pipeline → mock CRM
-- [ ] WhatsApp bot conversation E2E test
+- [x] Unit tests: 112 passing (config, state, CRM, parser, conversation store, pipeline, monitor, E2E)
+- [x] Integration test: mock scrape → full pipeline → mock CRM (11 tests)
+- [x] WhatsApp bot conversation E2E test (13 tests)
 - [ ] End-to-end test on staging
 
 ### Monitoring
 - [ ] Telegram error channel setup — manual
 - [x] Alert: 0 successful runs in 24h
-- [ ] Alert: webhook unreachable
+- [x] Alert: webhook unreachable (`check_webhook_health()`)
 - [x] Daily summary: leads scraped / qualified / pushed
 
 ---

@@ -22,6 +22,9 @@ class Settings:
     telegram_bot_token: str = ""
     telegram_alert_chat_id: str = ""
 
+    # Webhook health-check URL (used by monitor to verify server is up)
+    webhook_health_url: str = "http://localhost:8000/health"
+
     @classmethod
     def load(cls, env_file: str = ".env") -> "Settings":
         """Load settings from environment variables, failing fast on missing values."""
@@ -51,4 +54,7 @@ class Settings:
             webhook_url=os.environ.get("WEBHOOK_URL", "").strip(),
             telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
             telegram_alert_chat_id=os.environ.get("TELEGRAM_ALERT_CHAT_ID", "").strip(),
+            webhook_health_url=os.environ.get(
+                "WEBHOOK_HEALTH_URL", "http://localhost:8000/health"
+            ).strip(),
         )
