@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Inmobiliaria24 scraper every 2 hours during business hours
+
+[Timer]
+# Run every 2 hours from 8am to 10pm (CST/Mexico City)
+OnCalendar=*-*-* 08,10,12,14,16,18,20,22:00:00
+# Randomize start within 5 minutes to avoid exact-second races
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

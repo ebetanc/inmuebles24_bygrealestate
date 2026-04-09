@@ -20,11 +20,57 @@ from playwright.async_api import Page
 from inmobiliaria24.auth import _wait_for_cloudflare
 
 
-WEBHOOK_URL = (
+class SessionStaleError(Exception):
+    """Raised when the browser session has expired and needs re-authentication."""
+
+
+# Default webhook — overridden by WEBHOOK_URL env var in config.
+_DEFAULT_WEBHOOK_URL = (
     "https://n8n.srv856940.hstgr.cloud/webhook/"
     "63340e41-c487-4e66-86fe-c4ff710fbcdd"
 )
 INTERESADOS_URL = "https://www.inmuebles24.com/panel/interesados"
+
+# Retry settings
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 2.0  # seconds, doubles each retry
+
+# Stale session indicators (URL fragments that mean we got logged out).
+_STALE_SESSION_URLS = ("login", "acceso", "ingresar")
+
+
+# ---------------------------------------------------------------------------
+# Screenshot helper — captures on any failure for post-mortem debugging
+# ---------------------------------------------------------------------------
+
+async def _screenshot_on_error(page: Page, label: str) -> str | None:
+    """Capture a full-page screenshot for debugging. Returns the file path or None."""
+    from pathlib import Path
+
+    logs = Path("logs")
+    logs.mkdir(exist_ok=True)
+    from datetime import datetime, timezone
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    filename = f"error_{label}_{ts}.png"
+    filepath = logs / filename
+    try:
+        await page.screenshot(path=str(filepath), full_page=True)
+        logger.info("Error screenshot saved to {}", filepath)
+        return str(filepath)
+    except Exception as e:
+        logger.warning("Failed to capture screenshot: {}", e)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Session staleness detection
+# ---------------------------------------------------------------------------
+
+def _is_session_stale(url: str) -> bool:
+    """Return True if the current URL indicates a logged-out / stale session."""
+    lower = url.lower()
+    return any(frag in lower for frag in _STALE_SESSION_URLS)
 
 
 # ---------------------------------------------------------------------------
@@ -58,11 +104,35 @@ async def _wait_for_spa(page: Page, timeout: int = 60_000) -> None:
     await asyncio.sleep(random.uniform(2.0, 3.5))
 
 
-async def _navigate_spa(page: Page, url: str) -> None:
-    """Navigate to a URL and wait for the SPA to fully render."""
-    await page.goto(url, wait_until="domcontentloaded")
-    await _wait_for_cloudflare(page)
-    await _wait_for_spa(page)
+async def _navigate_spa(
+    page: Page, url: str, *, retries: int = MAX_RETRIES
+) -> None:
+    """Navigate to a URL and wait for the SPA to fully render.
+
+    Retries with exponential backoff on page-load or SPA-render failures.
+    """
+    last_err: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            await page.goto(url, wait_until="domcontentloaded")
+            await _wait_for_cloudflare(page)
+            await _wait_for_spa(page)
+            return
+        except Exception as e:
+            last_err = e
+            if attempt < retries:
+                delay = RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                logger.warning(
+                    "Page load attempt {}/{} failed for {} — retrying in {:.1f}s: {}",
+                    attempt, retries, url, delay, e,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    "Page load failed after {} attempts for {}: {}",
+                    retries, url, e,
+                )
+    raise last_err  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -437,15 +507,33 @@ async def _extract_lead_by_click(
 # ---------------------------------------------------------------------------
 
 
-async def send_to_webhook(leads: list[dict], webhook_url: str = WEBHOOK_URL) -> None:
-    """POST lead data to an n8n webhook."""
+async def send_to_webhook(leads: list[dict], webhook_url: str = "") -> None:
+    """POST lead data to webhook with exponential backoff retry."""
+    url = webhook_url or _DEFAULT_WEBHOOK_URL
+    last_err: Exception | None = None
+
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(webhook_url, json=leads)
-        resp.raise_for_status()
-        logger.info(
-            "Webhook response: {} {}",
-            resp.status_code, resp.reason_phrase,
-        )
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                resp = await client.post(url, json=leads)
+                resp.raise_for_status()
+                logger.info(
+                    "Webhook response: {} {} (attempt {})",
+                    resp.status_code, resp.reason_phrase, attempt,
+                )
+                return
+            except Exception as e:
+                last_err = e
+                if attempt < MAX_RETRIES:
+                    delay = RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                    logger.warning(
+                        "Webhook attempt {}/{} failed: {} — retrying in {:.1f}s",
+                        attempt, MAX_RETRIES, e, delay,
+                    )
+                    await asyncio.sleep(delay)
+
+    logger.error("Webhook failed after {} attempts: {}", MAX_RETRIES, last_err)
+    raise last_err  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -453,10 +541,22 @@ async def send_to_webhook(leads: list[dict], webhook_url: str = WEBHOOK_URL) -> 
 # ---------------------------------------------------------------------------
 
 
-async def scrape_and_send(page: Page) -> list[dict]:
-    """Full flow: Interesados inbox -> detail per Pendiente lead -> webhook."""
+async def scrape_and_send(page: Page, *, webhook_url: str = "") -> list[dict]:
+    """Full flow: Interesados inbox -> detail per Pendiente lead -> webhook.
+
+    Returns all extracted leads (before dedup). Caller handles dedup via StateStore.
+    Includes session staleness detection and screenshot capture on failures.
+    """
     # Step 1: Get Pendiente leads from the inbox.
     pendiente_leads = await extract_leads_list(page)
+
+    # Check for stale session after navigation.
+    if _is_session_stale(page.url):
+        await _screenshot_on_error(page, "stale_session")
+        raise SessionStaleError(
+            f"Session appears stale (url={page.url}). Re-authentication required."
+        )
+
     if not pendiente_leads:
         logger.warning("No Pendiente leads found — nothing to send")
         return []
@@ -474,10 +574,17 @@ async def scrape_and_send(page: Page) -> list[dict]:
                 "Processing lead {}/{}: {} ({})",
                 i + 1, len(pendiente_leads), lead.get("name", "?"), lead_id,
             )
-            detail = await extract_lead_detail(page, lead_id)
-            if detail:
-                merged = {**lead, **detail}
-                results.append(merged)
+            try:
+                detail = await extract_lead_detail(page, lead_id)
+                if detail:
+                    merged = {**lead, **detail}
+                    results.append(merged)
+            except Exception as e:
+                await _screenshot_on_error(page, f"lead_{lead_id}")
+                logger.error(
+                    "Failed to extract detail for lead {} — skipping: {}",
+                    lead_id, e,
+                )
     else:
         # Strategy 2: click each Pendiente row
         logger.info("No lead URLs found — using click-based navigation")
@@ -487,11 +594,15 @@ async def scrape_and_send(page: Page) -> list[dict]:
                 "Clicking lead {}/{}: {}",
                 i + 1, len(pendiente_leads), lead.get("name", "?"),
             )
-            detail = await _extract_lead_by_click(page, click_idx)
-            if detail:
-                merged = {**lead, **detail}
-                merged.pop("_click_index", None)
-                results.append(merged)
+            try:
+                detail = await _extract_lead_by_click(page, click_idx)
+                if detail:
+                    merged = {**lead, **detail}
+                    merged.pop("_click_index", None)
+                    results.append(merged)
+            except Exception as e:
+                await _screenshot_on_error(page, f"click_{click_idx}")
+                logger.error("Failed click-nav for lead index {} — skipping: {}", click_idx, e)
 
             # Navigate back to inbox for next lead
             await page.go_back()
@@ -508,6 +619,6 @@ async def scrape_and_send(page: Page) -> list[dict]:
 
     # Step 2: Send to webhook.
     logger.info("Sending {} Pendiente leads to webhook", len(results))
-    await send_to_webhook(results)
+    await send_to_webhook(results, webhook_url=webhook_url)
 
     return results

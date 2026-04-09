@@ -10,6 +10,7 @@ logs/*
 !logs/.gitkeep
 .session/*
 !.session/.gitkeep
+data/
 *.png
 *.jpg
 .claude/

@@ -1,0 +1,30 @@
+[Unit]
+Description=Inmobiliaria24 Lead Scraper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=inmobiliaria24
+Group=inmobiliaria24
+WorkingDirectory=/opt/inmobiliaria24
+EnvironmentFile=/opt/inmobiliaria24/.env
+ExecStart=/opt/inmobiliaria24/.venv/bin/python -m inmobiliaria24
+
+# Resource limits
+MemoryMax=1G
+TimeoutStartSec=600
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=inmobiliaria24
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/opt/inmobiliaria24/data /opt/inmobiliaria24/logs /opt/inmobiliaria24/.session
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,8 @@
 """CLI entrypoint for the Inmobiliaria24 scraper.
 
-Owns the browser lifecycle: launches Playwright Chromium, delegates
-authentication to auth.py, and coordinates scraper phases (Phase 2+).
+Owns the browser lifecycle: launches real Chrome via CDP, delegates
+authentication to auth.py, runs extraction with deduplication, and
+sends alerts on errors.
 
 Usage:
     python -m inmobiliaria24 [--headful] [--dry-run]
@@ -21,7 +22,9 @@ from playwright.async_api import async_playwright
 
 from inmobiliaria24.auth import AuthenticationError, launch_chrome, load_or_login
 from inmobiliaria24.config import Settings
-from inmobiliaria24.scraper import scrape_and_send
+from inmobiliaria24.monitor import check_stale_runs, send_error_alert, send_heartbeat
+from inmobiliaria24.scraper import SessionStaleError, scrape_and_send
+from inmobiliaria24.state import StateStore
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -37,8 +40,16 @@ logger.add(
     "logs/run.log",
     level="DEBUG",
     rotation="10 MB",
-    retention="14 days",
+    retention="7 days",
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+)
+# Structured JSON log for production monitoring / log aggregation.
+logger.add(
+    "logs/run.json",
+    level="INFO",
+    rotation="10 MB",
+    retention="7 days",
+    serialize=True,
 )
 
 
@@ -76,36 +87,101 @@ def _parse_args() -> argparse.Namespace:
 
 async def async_main(args: argparse.Namespace, settings: Settings) -> int:
     """Run the scraper lifecycle. Returns an integer exit code (0=success, 1=failure)."""
-    async with async_playwright() as pw:
-        context, chrome_proc = await launch_chrome(
-            pw, headless=not args.headful
-        )
-        try:
-            page = await load_or_login(context, settings)
-            if args.dry_run:
-                logger.info("Dry run complete — session is valid, on Mis avisos")
-                print("Dry run complete — session is valid, on Mis avisos")
-                print(f"Final URL: {page.url}")
+    with StateStore(settings.state_db_path) as store:
+        run_id = store.start_run()
+        total = 0
+        new_count = 0
+        status = "ok"
+
+        async with async_playwright() as pw:
+            context, chrome_proc = await launch_chrome(
+                pw, headless=not args.headful
+            )
+            try:
+                page = await load_or_login(context, settings)
+                if args.dry_run:
+                    logger.info("Dry run complete — session is valid, on Mis avisos")
+                    print("Dry run complete — session is valid, on Mis avisos")
+                    print(f"Final URL: {page.url}")
+                    store.finish_run(run_id, status="dry_run")
+                    return 0
+
+                # Scrape all Pendiente leads (with session recovery).
+                try:
+                    all_leads = await scrape_and_send(
+                        page, webhook_url=settings.webhook_url
+                    )
+                except SessionStaleError:
+                    logger.warning("Session stale — re-authenticating and retrying")
+                    from inmobiliaria24.auth import login, navigate_to_avisos
+
+                    await login(page, settings)
+                    await navigate_to_avisos(page)
+                    all_leads = await scrape_and_send(
+                        page, webhook_url=settings.webhook_url
+                    )
+                total = len(all_leads)
+
+                # Dedup: filter to only new leads.
+                new_leads = store.filter_new(all_leads)
+                new_count = len(new_leads)
+
+                # Mark all extracted leads as seen.
+                store.mark_seen(all_leads)
+
+                print(f"Scraped {total} Pendiente leads, {new_count} new")
+                for lead in new_leads:
+                    print(f"  NEW: {lead.get('name', '?')} (lead_id={lead.get('lead_id', '?')})")
+
+                # Send heartbeat.
+                await send_heartbeat(
+                    settings.telegram_bot_token,
+                    settings.telegram_alert_chat_id,
+                    total_leads=total,
+                    new_leads=new_count,
+                )
+
+                store.finish_run(run_id, total=total, new=new_count, status="ok")
+
+                # Check for stale-run condition (alert if no success in 24h).
+                await check_stale_runs(
+                    settings.telegram_bot_token,
+                    settings.telegram_alert_chat_id,
+                    store.last_successful_run(),
+                )
+
                 return 0
 
-            # Scrape Pendiente leads from Interesados inbox.
-            leads = await scrape_and_send(page)
-            print(f"Sent {len(leads)} Pendiente leads to webhook")
-            for lead in leads:
-                print(f"  - {lead.get('name', '?')} (lead_id={lead.get('lead_id', '?')}, listing={lead.get('listing_id', '?')})")
-            return 0
-        except AuthenticationError as e:
-            logger.error("Authentication failed: {}", str(e))
-            print(f"AUTH FAILED: {e}")
-            return 1
-        except Exception as e:
-            logger.exception("Unexpected error: {}", str(e))
-            return 1
-        finally:
-            await context.close()
-            chrome_proc.terminate()
-            chrome_proc.wait(timeout=5)
-            logger.debug("Chrome process terminated")
+            except AuthenticationError as e:
+                status = "auth_error"
+                logger.error("Authentication failed: {}", str(e))
+                print(f"AUTH FAILED: {e}")
+                await send_error_alert(
+                    settings.telegram_bot_token,
+                    settings.telegram_alert_chat_id,
+                    str(e),
+                    context="Authentication phase",
+                )
+                store.finish_run(run_id, status=status)
+                return 1
+
+            except Exception as e:
+                status = "error"
+                logger.exception("Unexpected error: {}", str(e))
+                await send_error_alert(
+                    settings.telegram_bot_token,
+                    settings.telegram_alert_chat_id,
+                    str(e),
+                    context="Scraper run",
+                )
+                store.finish_run(run_id, total=total, new=new_count, status=status)
+                return 1
+
+            finally:
+                await context.close()
+                chrome_proc.terminate()
+                chrome_proc.wait(timeout=5)
+                logger.debug("Chrome process terminated")
 
 
 # ---------------------------------------------------------------------------

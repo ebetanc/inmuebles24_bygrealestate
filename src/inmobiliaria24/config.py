@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 
@@ -8,6 +11,16 @@ from dotenv import load_dotenv
 class Settings:
     email: str
     password: str = field(repr=False)  # never printed in logs or tracebacks
+
+    # Scraper
+    state_db_path: Path = Path("data/state.db")
+
+    # Webhook (interim CRM adapter)
+    webhook_url: str = ""
+
+    # Monitoring — Telegram (errors only)
+    telegram_bot_token: str = ""
+    telegram_alert_chat_id: str = ""
 
     @classmethod
     def load(cls, env_file: str = ".env") -> "Settings":
@@ -29,4 +42,13 @@ class Settings:
                 f"Copy .env.example to .env and fill in your credentials."
             )
 
-        return cls(email=email, password=password)
+        return cls(
+            email=email,
+            password=password,
+            state_db_path=Path(
+                os.environ.get("STATE_DB_PATH", "data/state.db")
+            ),
+            webhook_url=os.environ.get("WEBHOOK_URL", "").strip(),
+            telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
+            telegram_alert_chat_id=os.environ.get("TELEGRAM_ALERT_CHAT_ID", "").strip(),
+        )
