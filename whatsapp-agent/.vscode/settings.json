@@ -1,0 +1,16 @@
+{
+  "files.associations": {
+    "*.sql": "sql"
+  },
+  "[sql]": {
+    "editor.tabSize": 2
+  },
+  "[json]": {
+    "editor.tabSize": 2,
+    "editor.wordWrap": "on"
+  },
+  "files.exclude": {
+    "**/.DS_Store": true,
+    "**/node_modules": true
+  }
+}

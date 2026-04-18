@@ -1,0 +1,25 @@
+Add whatsapp-agent subsystem (WF3: auction subsystem)
+
+Initial scaffolding for the WhatsApp lead-assignment agent. This commit
+adds only the race-critical auction subsystem (WF3) — inbound router,
+lead intake, AI conversation, and handoff workflows come next.
+
+Structure:
+- whatsapp-agent/migrations/     Supabase/Postgres schema (idempotent)
+- whatsapp-agent/workflows/      Three n8n workflow JSON exports
+- whatsapp-agent/scripts/        Migration + DB-check helpers
+- whatsapp-agent/docs/           Architecture, Supabase setup, WF3 testing
+
+Stack: n8n (self-hosted) · Supabase Postgres · Twilio WhatsApp · EasyBroker
+
+Race-safety: the claim query in WF3b uses an atomic
+`UPDATE ... WHERE status='open' RETURNING *`. Postgres MVCC guarantees
+exactly one concurrent caller wins. See docs/wf3-testing.md test 5
+for the two-psql-session proof.
+
+To run:
+  cd whatsapp-agent
+  cp .env.example .env  # fill in DB_URL, Twilio, EasyBroker keys
+  make env-check
+  make migrate
+  # then import workflows/*.json into n8n and follow docs/wf3-testing.md

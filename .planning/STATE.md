@@ -72,7 +72,21 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+**WhatsApp Agent (Phase 5):**
+- [ ] Buy/configure Twilio WhatsApp number (or activate Sandbox for testing)
+- [ ] Stand up n8n with a public URL (cloud or local + tunnel)
+- [ ] Run `whatsapp-agent/` migrations against Supabase (`make migrate-no-seed` for prod)
+- [ ] Add n8n credentials: `Supabase Postgres` (session pooler, port 5432) + `Twilio`
+- [ ] Import WF3a/WF3b/WF3c JSON workflows and activate WF3c (expiry sweeper)
+- [ ] Build WF1 — Inbound Router (Twilio webhook → classify → route)
+- [ ] Build WF2 — Lead Intake (property fetch → conversation creation → call WF3a)
+- [ ] Build WF4 — AI Conversation (LLM Q&A with EasyBroker data, guardrails)
+- [ ] Build WF5 — Human Handoff (contact share + agent summary + mode flip)
+
+**Scraper Pipeline (Phases 2-4):**
+- [ ] Phase 2: Extraction — scout Inmuebles24 selector structure in live browser first
+- [ ] Phase 3: State and Deduplication
+- [ ] Phase 4: Notification
 
 ### Blockers/Concerns
 

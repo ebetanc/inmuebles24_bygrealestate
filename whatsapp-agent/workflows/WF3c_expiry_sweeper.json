@@ -1,0 +1,83 @@
+{
+  "name": "WF3c - Auction Expiry Sweeper",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 1 }] }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH expired AS (\n  UPDATE auctions\n  SET status = 'expired'\n  WHERE status = 'open' AND expires_at <= NOW()\n  RETURNING auction_id, conversation_id, property_id, short_code\n)\nSELECT e.*, conv.lead_phone, conv.lead_name\nFROM expired e\nJOIN conversations conv ON conv.conversation_id = e.conversation_id;",
+        "options": {}
+      },
+      "id": "pg-expire",
+      "name": "Expire Unclaimed Auctions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": { "id": "REPLACE_POSTGRES_CRED_ID", "name": "Supabase Postgres" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "has-expired",
+              "leftValue": "={{ $json.auction_id }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-any-expired",
+      "name": "Any Expired?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_WHATSAPP_FROM }}",
+        "to": "={{ $env.MANAGER_WHATSAPP_TO }}",
+        "toWhatsapp": true,
+        "message": "=⚠️ Lead sin asignar\n\nPropiedad: {{ $json.property_id }}\nLead: {{ $json.lead_name || 'Sin nombre' }} ({{ $json.lead_phone }})\nSubasta: {{ $json.short_code }}\n\nNingún asesor respondió en 5 min. Asignación manual requerida.",
+        "options": {}
+      },
+      "id": "twilio-escalate",
+      "name": "Escalate to Manager",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [900, 200],
+      "credentials": {
+        "twilioApi": { "id": "REPLACE_TWILIO_CRED_ID", "name": "Twilio" }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Every Minute":              { "main": [[{ "node": "Expire Unclaimed Auctions", "type": "main", "index": 0 }]] },
+    "Expire Unclaimed Auctions": { "main": [[{ "node": "Any Expired?", "type": "main", "index": 0 }]] },
+    "Any Expired?": {
+      "main": [
+        [{ "node": "Escalate to Manager", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}

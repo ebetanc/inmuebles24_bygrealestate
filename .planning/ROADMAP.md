@@ -66,14 +66,39 @@ Plans:
   3. A Telegram message can be sent successfully to the configured webhook URL using only a webhook URL in the environment — no other Telegram setup required
 **Plans**: TBD
 
+### Phase 5: WhatsApp Agent
+**Goal**: Full inbound WhatsApp lead handling — routing, intake, AI Q&A, and human handoff — wired to the race-safe auction system (WF3, already built)
+**Depends on**: Phase 4 (lead data available); WF3 auction subsystem (already built in `whatsapp-agent/`)
+**Subphases (n8n workflows):**
+
+- [ ] **5.1 — Twilio Setup**: Buy/configure number, wire Twilio webhook → n8n public URL
+- [ ] **5.2 — WF1 Inbound Router**: Parse Twilio payload, classify sender (new lead / agent claiming / known lead), route to WF2 or WF3b or WF4
+- [ ] **5.3 — WF2 Lead Intake**: Extract property ID from first message, fetch from EasyBroker (or cache), create `conversations` row (`mode='pending_assignment'`), call WF3a
+- [ ] **5.4 — WF4 AI Conversation**: LLM-powered property Q&A scoped to EasyBroker data; guardrails for visits/negotiation/complex questions trigger WF5
+- [ ] **5.5 — WF5 Human Handoff**: Share agent contact with lead, DM conversation summary to agent, flip `mode='human'`; WF1 passes subsequent messages directly
+
+**Already built (in `whatsapp-agent/`):**
+- WF3a Auction Launcher, WF3b Claim Handler, WF3c Expiry Sweeper
+- Full DB schema + migrations (Supabase Postgres)
+- Makefile, seed data, docs
+
+**Stack**: n8n + Supabase Postgres + Twilio WhatsApp API + EasyBroker REST API + Claude/OpenAI (WF4)
+
+**Success Criteria**:
+  1. A WhatsApp message to the Twilio number creates a `conversations` row and fans auction notifications to all on-shift agents
+  2. The first agent to reply `TOMO-<code>` wins atomically — no double-assignments under concurrent load
+  3. The lead receives AI answers to property questions without agent involvement
+  4. When the lead asks about visits or negotiation, the human agent is notified with a conversation summary and the lead gets the agent's contact
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 2/2 | Complete   | 2026-03-11 |
+| 1. Foundation | 2/2 | Complete | 2026-03-11 |
 | 2. Extraction | 0/TBD | Not started | - |
 | 3. State and Deduplication | 0/TBD | Not started | - |
 | 4. Notification | 0/TBD | Not started | - |
+| 5. WhatsApp Agent | 0/5 | Not started (WF3 pre-built) | - |

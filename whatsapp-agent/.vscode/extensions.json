@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "ms-ossdata.vscode-postgresql",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+    "redhat.vscode-yaml",
+    "humao.rest-client",
+    "eamodio.gitlens"
+  ]
+}

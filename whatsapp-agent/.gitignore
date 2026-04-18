@@ -1,0 +1,12 @@
+# whatsapp-agent local ignores
+# These add to the repo root .gitignore rather than replacing it.
+
+.env
+.env.local
+.env.*.local
+
+# n8n local data (if running n8n in this subfolder)
+.n8n/
+
+# Logs specific to this subsystem
+*.log
