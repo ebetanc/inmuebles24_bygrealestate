@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema WhatsApp &mdash; Inmobiliaria24 (v3: Subasta de Leads)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --green: #25D366;
+    --green-dark: #128C7E;
+    --green-light: #DCF8C6;
+    --blue: #3B82F6;
+    --blue-light: #DBEAFE;
+    --orange: #F59E0B;
+    --orange-light: #FEF3C7;
+    --red: #EF4444;
+    --red-light: #FEE2E2;
+    --purple: #8B5CF6;
+    --purple-light: #EDE9FE;
+    --teal: #14B8A6;
+    --teal-light: #CCFBF1;
+    --gray-50: #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-300: #D1D5DB;
+    --gray-400: #9CA3AF;
+    --gray-500: #6B7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    line-height: 1.6;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #075E54 0%, #128C7E 40%, #25D366 100%);
+    color: white;
+    padding: 60px 40px 50px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.07) 0%, transparent 70%);
+  }
+  .hero h1 {
+    font-size: 2.4rem;
+    font-weight: 900;
+    margin-bottom: 12px;
+    position: relative;
+  }
+  .hero p {
+    font-size: 1.1rem;
+    opacity: 0.92;
+    max-width: 750px;
+    margin: 0 auto;
+    position: relative;
+  }
+  .hero .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 20px;
+    padding: 6px 18px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-top: 18px;
+    position: relative;
+  }
+
+  /* ── LAYOUT ── */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  /* ── SECTION HEADERS ── */
+  .section-header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+  .section-header .icon { font-size: 2.5rem; margin-bottom: 8px; }
+  .section-header h2 { font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+  .section-header p { color: var(--gray-500); font-size: 1.02rem; max-width: 650px; margin: 0 auto; }
+
+  /* ── BIG CONCEPT ── */
+  .concept-card {
+    border-radius: 20px;
+    padding: 40px 36px;
+    position: relative;
+    overflow: hidden;
+    border: 2px solid #FDBA74;
+    background: linear-gradient(180deg, #FFF7ED 0%, white 40%);
+    margin-bottom: 40px;
+  }
+  .concept-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 5px;
+    background: linear-gradient(90deg, var(--orange), #F97316, var(--green));
+  }
+  .concept-card h3 { font-size: 1.4rem; font-weight: 800; margin-bottom: 12px; }
+  .concept-card .flow-desc { color: var(--gray-500); font-size: 0.95rem; margin-bottom: 22px; }
+
+  .pipeline-steps {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .pipeline-step {
+    text-align: center;
+    padding: 16px 10px;
+    border-radius: 14px;
+    border: 2px solid;
+    position: relative;
+  }
+  .pipeline-step .ps-num {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    line-height: 30px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 8px;
+  }
+  .pipeline-step .ps-label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .pipeline-step .ps-icon { font-size: 1.4rem; margin-bottom: 6px; display: block; }
+  .pipeline-arrow {
+    position: absolute;
+    right: -18px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.1rem;
+    color: var(--gray-400);
+    z-index: 2;
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 2px;
+    background: linear-gradient(to right, transparent, var(--gray-300), transparent);
+    margin: 50px 0;
+  }
+
+  /* ── SCENARIO ── */
+  .scenario {
+    background: white;
+    border-radius: 20px;
+    padding: 36px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    border: 1px solid var(--gray-200);
+    margin-bottom: 32px;
+  }
+  .scenario h3 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    margin-bottom: 6px;
+  }
+  .scenario .subtitle {
+    color: var(--gray-500);
+    margin-bottom: 20px;
+    font-size: 0.93rem;
+  }
+
+  /* ── FLOW TAG ── */
+  .flow-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 6px;
+    vertical-align: middle;
+  }
+  .flow-tag.lead { background: #FED7AA; color: #9A3412; }
+  .flow-tag.agent { background: #BBF7D0; color: #166534; }
+  .flow-tag.sync { background: #DBEAFE; color: #1E40AF; }
+
+  /* ── WHATSAPP BUBBLES ── */
+  .wa-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .wa-bubble {
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+  .wa-bubble .sender {
+    font-weight: 700;
+    font-size: 0.78rem;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .wa-bubble .time {
+    font-size: 0.7rem;
+    opacity: 0.5;
+    float: right;
+    margin-left: 12px;
+    margin-top: 4px;
+  }
+  .wa-bubble.incoming {
+    background: white;
+    border: 1px solid var(--gray-200);
+    align-self: flex-start;
+    border-top-left-radius: 4px;
+  }
+  .wa-bubble.incoming .sender { color: var(--blue); }
+  .wa-bubble.outgoing {
+    background: var(--green-light);
+    align-self: flex-end;
+    border-top-right-radius: 4px;
+  }
+  .wa-bubble.outgoing .sender { color: var(--green-dark); }
+  .wa-bubble.agent {
+    background: var(--blue-light);
+    align-self: flex-start;
+    border-top-left-radius: 4px;
+  }
+  .wa-bubble.agent .sender { color: var(--blue); }
+  .wa-bubble.system {
+    background: var(--orange-light);
+    align-self: flex-end;
+    border-top-right-radius: 4px;
+    border: 1px solid #FCD34D;
+  }
+  .wa-bubble.system .sender { color: #B45309; }
+  .wa-bubble.scraper {
+    background: #E0E7FF;
+    align-self: flex-end;
+    border-top-right-radius: 4px;
+    border: 1px solid #A5B4FC;
+  }
+  .wa-bubble.scraper .sender { color: #4338CA; }
+
+  /* ── INFO BOX ── */
+  .info-box {
+    display: flex;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: 10px;
+    margin-top: 14px;
+    font-size: 0.88rem;
+  }
+  .info-box .info-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+  .info-box.green { background: #ECFDF5; border: 1px solid #A7F3D0; }
+  .info-box.blue { background: var(--blue-light); border: 1px solid #93C5FD; }
+  .info-box.orange { background: var(--orange-light); border: 1px solid #FCD34D; }
+  .info-box.red { background: var(--red-light); border: 1px solid #FCA5A5; }
+  .info-box.purple { background: var(--purple-light); border: 1px solid #C4B5FD; }
+  .info-box.teal { background: var(--teal-light); border: 1px solid #5EEAD4; }
+  .info-box ul { padding-left: 18px; margin-top: 4px; }
+  .info-box li { margin-bottom: 3px; }
+
+  /* ── BRANCHES ── */
+  .branch-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 16px;
+  }
+  .branch {
+    border-radius: 12px;
+    padding: 20px;
+    border: 2px solid;
+  }
+  .branch.success { background: #F0FDF4; border-color: #86EFAC; }
+  .branch.fail { background: #FFF7ED; border-color: #FDBA74; }
+  .branch h4 { font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .branch p, .branch li { font-size: 0.88rem; color: var(--gray-700); }
+  .branch ul { padding-left: 18px; margin-top: 6px; }
+
+  /* ── MASTER DIAGRAM ── */
+  .master-diagram {
+    background: white;
+    border-radius: 20px;
+    padding: 40px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border: 1px solid var(--gray-200);
+    margin-bottom: 40px;
+    overflow-x: auto;
+  }
+  .master-diagram h3 { text-align: center; font-size: 1.2rem; margin-bottom: 30px; color: var(--gray-700); }
+
+  .diagram-flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+
+  .d-node {
+    padding: 14px 24px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    border: 2px solid;
+    width: 100%;
+    max-width: 420px;
+  }
+  .d-node.orange { background: #FEF3C7; border-color: #FCD34D; color: #92400E; }
+  .d-node.green { background: #D1FAE5; border-color: #6EE7B7; color: #065F46; }
+  .d-node.blue { background: #DBEAFE; border-color: #93C5FD; color: #1E40AF; }
+  .d-node.purple { background: #EDE9FE; border-color: #C4B5FD; color: #5B21B6; }
+  .d-node.red { background: #FEE2E2; border-color: #FCA5A5; color: #991B1B; }
+  .d-node.teal { background: #CCFBF1; border-color: #5EEAD4; color: #115E59; }
+  .d-node.indigo { background: #E0E7FF; border-color: #A5B4FC; color: #3730A3; }
+  .d-arrow {
+    text-align: center;
+    font-size: 1.2rem;
+    color: var(--gray-400);
+    margin: 6px 0;
+  }
+  .d-label {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--gray-500);
+    font-style: italic;
+    margin: -2px 0 6px;
+  }
+
+  .d-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    max-width: 420px;
+  }
+  .d-split .d-node { font-size: 0.78rem; padding: 10px 12px; }
+
+  /* ── PARALLEL BOX ── */
+  .parallel-box {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0;
+    width: 100%;
+    max-width: 420px;
+    align-items: center;
+  }
+  .parallel-box .d-node { width: 100%; max-width: none; }
+  .parallel-box .plus {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--gray-400);
+    padding: 0 12px;
+  }
+
+  /* ── FEATURES ── */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .feature {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    background: var(--gray-50);
+    border-radius: 12px;
+    border: 1px solid var(--gray-200);
+  }
+  .feature .feat-icon { font-size: 1.4rem; flex-shrink: 0; }
+  .feature h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 3px; }
+  .feature p { font-size: 0.82rem; color: var(--gray-500); }
+
+  /* ── TIMELINE ── */
+  .timeline {
+    position: relative;
+    padding-left: 60px;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 27px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 3px;
+    background: linear-gradient(to bottom, var(--orange), var(--green), var(--blue), var(--purple));
+  }
+
+  .step {
+    position: relative;
+    margin-bottom: 28px;
+  }
+  .step:last-child { margin-bottom: 0; }
+  .step-number {
+    position: absolute;
+    left: -60px;
+    top: 0;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: white;
+    z-index: 2;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .step-content {
+    background: white;
+    border-radius: 16px;
+    padding: 22px 26px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid var(--gray-200);
+    position: relative;
+  }
+  .step-content::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 16px;
+    border: 10px solid transparent;
+    border-right-color: var(--gray-200);
+    border-left: none;
+  }
+  .step-content::after {
+    content: '';
+    position: absolute;
+    left: -9px;
+    top: 16px;
+    border: 10px solid transparent;
+    border-right-color: white;
+    border-left: none;
+  }
+  .step-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .step-desc {
+    color: var(--gray-500);
+    font-size: 0.92rem;
+  }
+
+  /* ── COMPARISON TABLE ── */
+  .comparison {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--gray-200);
+    margin-top: 20px;
+    font-size: 0.88rem;
+  }
+  .comparison th {
+    background: var(--gray-900);
+    color: white;
+    padding: 14px 18px;
+    text-align: left;
+    font-weight: 600;
+  }
+  .comparison td {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .comparison tr:last-child td { border-bottom: none; }
+  .comparison tr:nth-child(even) td { background: var(--gray-50); }
+  .comparison .highlight { font-weight: 600; color: var(--green-dark); }
+
+  /* ── FOOTER ── */
+  .footer {
+    text-align: center;
+    padding: 40px;
+    color: var(--gray-500);
+    font-size: 0.85rem;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .pipeline-steps { grid-template-columns: 1fr; }
+    .pipeline-arrow { display: none; }
+    .branch-container { grid-template-columns: 1fr; }
+    .features { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 1.8rem; }
+    .container { padding: 24px 16px; }
+    .scenario { padding: 24px; }
+    .parallel-box { grid-template-columns: 1fr; }
+    .parallel-box .plus { text-align: center; padding: 4px 0; }
+    .d-split { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ HERO ═══════════════════════════════════════════ -->
+<div class="hero">
+  <h1>Sistema de Subasta de Leads por WhatsApp</h1>
+  <p>Un scraper detecta leads nuevos en Inmuebles24 cada 15 minutos. Simult&aacute;neamente los env&iacute;a a EasyBroker y lanza una subasta al equipo. El primer asesor que responda se queda con el lead.</p>
+  <div class="badge">Inmobiliaria24 &mdash; Scraping + Subasta + EasyBroker</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ CONCEPT ═══════════════════════════════════════ -->
+<div class="container">
+
+  <div class="section-header">
+    <div class="icon">&#128161;</div>
+    <h2>El Concepto: Asignaci&oacute;n R&aacute;pida de Leads</h2>
+    <p>Las propiedades las publica el cliente. Los leads que llegan se detectan autom&aacute;ticamente, se registran en EasyBroker, y se subastan al equipo en segundos.</p>
+  </div>
+
+  <div class="concept-card">
+    <h3>&#9889; Un solo flujo, tres acciones simult&aacute;neas</h3>
+    <p class="flow-desc">Cuando el scraper detecta un lead nuevo en el inbox de Inmuebles24, se disparan tres cosas al mismo tiempo:</p>
+
+    <div class="pipeline-steps">
+      <div class="pipeline-step" style="border-color:#A5B4FC; background:#EEF2FF;">
+        <span class="ps-icon">&#128375;</span>
+        <span class="ps-num" style="background:#6366F1;">1</span>
+        <span class="ps-label">Scraper detecta lead nuevo</span>
+        <span class="pipeline-arrow">&#8594;</span>
+      </div>
+      <div class="pipeline-step" style="border-color:#5EEAD4; background:#F0FDFA;">
+        <span class="ps-icon">&#128230;</span>
+        <span class="ps-num" style="background:#14B8A6;">2</span>
+        <span class="ps-label">Se crea en EasyBroker</span>
+        <span class="pipeline-arrow">&#8594;</span>
+      </div>
+      <div class="pipeline-step" style="border-color:#FCD34D; background:#FFFBEB;">
+        <span class="ps-icon">&#128227;</span>
+        <span class="ps-num" style="background:#F59E0B;">3</span>
+        <span class="ps-label">Subasta TOMO al equipo</span>
+        <span class="pipeline-arrow">&#8594;</span>
+      </div>
+      <div class="pipeline-step" style="border-color:#86EFAC; background:#F0FDF4;">
+        <span class="ps-icon">&#128274;</span>
+        <span class="ps-num" style="background:#22C55E;">4</span>
+        <span class="ps-label">Asesor reclama el lead</span>
+        <span class="pipeline-arrow">&#8594;</span>
+      </div>
+      <div class="pipeline-step" style="border-color:#93C5FD; background:#EFF6FF;">
+        <span class="ps-icon">&#128260;</span>
+        <span class="ps-num" style="background:#3B82F6;">5</span>
+        <span class="ps-label">Se actualiza EasyBroker</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ══════════════════════════════════════ MASTER DIAGRAM ════════════════════════════════════ -->
+  <div class="master-diagram">
+    <h3>Diagrama General &mdash; Flujo Completo de un Lead</h3>
+    <div class="diagram-flow">
+
+      <div class="d-node indigo">&#128375; Scraper revisa inbox de Inmuebles24 (cada 15 min)</div>
+      <div class="d-arrow">&#8595;</div>
+      <div class="d-label">lead nuevo detectado</div>
+
+      <div class="d-node teal">&#128269; Identificar propiedad asociada al lead</div>
+      <div class="d-arrow">&#8595;</div>
+      <div class="d-label">datos del lead + propiedad</div>
+
+      <div class="parallel-box">
+        <div class="d-node teal" style="font-size:0.8rem;">&#128230; Crear contacto en EasyBroker</div>
+        <div class="plus">+</div>
+        <div class="d-node orange" style="font-size:0.8rem;">&#128227; Subasta TOMO-XXXX al equipo</div>
+      </div>
+      <div class="d-arrow">&#8595;</div>
+      <div class="d-label">&#191;qui&eacute;n responde primero?</div>
+
+      <div class="d-node blue">&#128274; TOMO-XXXX &mdash; Primer respuesta gana</div>
+      <div class="d-arrow">&#8595;</div>
+
+      <div class="d-split">
+        <div class="d-node green">&#9989; Asesor asignado al lead</div>
+        <div class="d-node red">&#9888;&#65039; Nadie reclam&oacute; &#8594; Manager</div>
+      </div>
+      <div class="d-arrow">&#8595;</div>
+
+      <div class="d-node blue">&#128260; Actualizar asignaci&oacute;n en EasyBroker</div>
+      <div class="d-arrow">&#8595;</div>
+
+      <div class="d-node green">&#128172; Asesor da seguimiento al lead</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ PASO A PASO ═══════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128293;</div>
+    <h2>Paso a Paso: C&oacute;mo Funciona</h2>
+    <p>Desde que el scraper detecta un lead nuevo hasta que un asesor lo tiene asignado en EasyBroker.</p>
+  </div>
+
+  <!-- PASO 1 -->
+  <div class="scenario">
+    <span class="flow-tag lead">Paso 1</span>
+    <h3>&#128375; El scraper detecta un lead nuevo</h3>
+    <p class="subtitle">Cada 15 minutos, el scraper revisa el inbox de Inmuebles24 buscando mensajes nuevos de personas interesadas en propiedades.</p>
+
+    <div class="info-box teal">
+      <span class="info-icon">&#128375;</span>
+      <div><strong>El scraper autom&aacute;ticamente:</strong>
+        <ul>
+          <li>Entra al inbox de Inmuebles24 y revisa mensajes nuevos</li>
+          <li>Extrae los datos del lead: <strong>nombre, tel&eacute;fono, email, mensaje, propiedad que le interesa</strong></li>
+          <li>Compara con leads que ya fueron procesados para no duplicar</li>
+          <li>Corre <strong>cada 15 minutos</strong>, 24/7, en un servidor dedicado</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="info-box green">
+      <span class="info-icon">&#9201;</span>
+      <div><strong>Antes vs. Ahora:</strong> Antes alguien ten&iacute;a que revisar el inbox manualmente. Ahora el sistema lo detecta en <strong>m&aacute;ximo 15 minutos</strong> y lo asigna autom&aacute;ticamente.</div>
+    </div>
+  </div>
+
+  <!-- PASO 2 -->
+  <div class="scenario">
+    <span class="flow-tag sync">Paso 2</span>
+    <h3>&#128230; Se registra el lead en EasyBroker</h3>
+    <p class="subtitle">De forma simult&aacute;nea a la subasta, el lead se crea como contacto en EasyBroker asociado a la propiedad que le interesa.</p>
+
+    <div class="info-box blue">
+      <span class="info-icon">&#128230;</span>
+      <div><strong>Datos que se registran en EasyBroker:</strong>
+        <ul>
+          <li>Nombre completo del lead</li>
+          <li>Tel&eacute;fono y email</li>
+          <li>Propiedad por la que pregunt&oacute;</li>
+          <li>Mensaje original que envi&oacute;</li>
+          <li>Fecha y hora de contacto</li>
+          <li>Estado: <strong>Pendiente de asignaci&oacute;n</strong></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="info-box green">
+      <span class="info-icon">&#128279;</span>
+      <div><strong>Vinculaci&oacute;n:</strong> El lead queda asociado a la propiedad que el cliente ya public&oacute; en EasyBroker. As&iacute;, cuando se asigne un asesor, todo queda conectado: lead &#8594; propiedad &#8594; asesor.</div>
+    </div>
+  </div>
+
+  <!-- PASO 3 -->
+  <div class="scenario">
+    <span class="flow-tag lead">Paso 3</span>
+    <h3>&#128227; Subasta: notificaci&oacute;n a todos los asesores</h3>
+    <p class="subtitle">Al mismo tiempo que se crea en EasyBroker, se env&iacute;a una notificaci&oacute;n por WhatsApp a todos los asesores en turno.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble system">
+        <span class="sender">&#128227; Notificaci&oacute;n para cada asesor en turno</span>
+        &#128100; <strong>Nuevo lead disponible</strong><br><br>
+        &#128100; Mar&iacute;a Garc&iacute;a<br>
+        &#128241; 55 1234 5678<br>
+        &#127968; Propiedad: Depto. en Polanco &mdash; $4,500,000 MXN<br>
+        &#128172; <em>"Hola, me interesa este departamento. &iquest;Est&aacute; disponible?"</em><br><br>
+        Responde <strong>TOMO-LK92</strong> para que te lo asignen.<br>
+        <em>(Expira en 5 min)</em>
+        <span class="time">09:15 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box orange">
+      <span class="info-icon">&#9201;</span>
+      <div><strong>Reglas de la subasta:</strong>
+        <ul>
+          <li>Todos los asesores <strong>en turno</strong> reciben la notificaci&oacute;n al mismo tiempo</li>
+          <li>El c&oacute;digo <strong>TOMO-LK92</strong> es &uacute;nico por cada lead</li>
+          <li>Tienen <strong>5 minutos</strong> para responder</li>
+          <li>Solo el <strong>primero que conteste</strong> gana</li>
+          <li>Es imposible que dos asesores reclamen el mismo lead (bloqueo de base de datos)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- PASO 4 -->
+  <div class="scenario">
+    <span class="flow-tag agent">Paso 4</span>
+    <h3>&#128274; Un asesor reclama el lead</h3>
+    <p class="subtitle">El asesor responde con el c&oacute;digo desde su WhatsApp personal.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble agent">
+        <span class="sender">&#128188; Yolanda</span>
+        TOMO-LK92
+        <span class="time">09:16 AM</span>
+      </div>
+    </div>
+
+    <div class="branch-container">
+      <div class="branch success">
+        <h4>&#9989; Yolanda gana (fue la primera)</h4>
+        <div class="wa-messages" style="margin-top:10px;">
+          <div class="wa-bubble outgoing" style="max-width:100%; font-size:0.82rem;">
+            <span class="sender">&#9989; Sistema</span>
+            &#9989; <strong>Lead asignado</strong><br><br>
+            &#128100; Mar&iacute;a Garc&iacute;a<br>
+            &#128241; 55 1234 5678<br>
+            &#127968; Depto. Polanco &mdash; $4,500,000 MXN<br>
+            &#128172; <em>"Hola, me interesa este departamento. &iquest;Est&aacute; disponible?"</em><br><br>
+            Ya eres la asesora de este lead. Comun&iacute;cate con Mar&iacute;a lo antes posible.<br><br>
+            El lead ya est&aacute; actualizado en EasyBroker con tu nombre.
+          </div>
+        </div>
+      </div>
+      <div class="branch fail">
+        <h4>&#128164; Los dem&aacute;s asesores</h4>
+        <div class="wa-messages" style="margin-top:10px;">
+          <div class="wa-bubble outgoing" style="max-width:100%; font-size:0.82rem;">
+            <span class="sender">Sistema</span>
+            Este lead ya fue tomado por otro asesor. &iexcl;El siguiente puede ser tuyo! &#128170;
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-box green" style="margin-top:16px;">
+      <span class="info-icon">&#128260;</span>
+      <div><strong>Actualizaci&oacute;n autom&aacute;tica en EasyBroker:</strong> Al momento que Yolanda reclama el lead, el sistema actualiza EasyBroker instant&aacute;neamente: el contacto pasa de "Pendiente" a <strong>asignado a Yolanda</strong>. Todo queda sincronizado sin intervenci&oacute;n manual.</div>
+    </div>
+  </div>
+
+  <!-- PASO 5 -->
+  <div class="scenario">
+    <span class="flow-tag agent">Paso 5</span>
+    <h3>&#128172; El asesor da seguimiento al lead</h3>
+    <p class="subtitle">El asesor ya tiene toda la informaci&oacute;n del lead y se pone en contacto para dar seguimiento a la propiedad.</p>
+
+    <div class="info-box blue">
+      <span class="info-icon">&#128100;</span>
+      <div><strong>Lo que tiene el asesor:</strong>
+        <ul>
+          <li>Nombre y tel&eacute;fono del lead</li>
+          <li>La propiedad que le interes&oacute;</li>
+          <li>El mensaje original que envi&oacute; el lead</li>
+          <li>Todo registrado en EasyBroker para dar seguimiento</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="info-box purple">
+      <span class="info-icon">&#127919;</span>
+      <div><strong>Objetivo cumplido:</strong> El lead que antes se quedaba horas sin atender en el inbox, ahora tiene un asesor asignado en <strong>menos de 1 minuto</strong> desde que se detect&oacute;.</div>
+    </div>
+  </div>
+
+  <!-- TIMEOUT -->
+  <div class="scenario" style="border: 2px dashed #FCD34D; background: #FFFBEB;">
+    <span class="flow-tag lead">Caso alterno</span>
+    <h3>&#9888;&#65039; Si nadie reclama en 5 minutos</h3>
+    <p class="subtitle">El sistema escala al manager para asignaci&oacute;n manual.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble system">
+        <span class="sender">&#9888;&#65039; Alerta al Manager</span>
+        &#9888;&#65039; <strong>Lead sin asesor</strong><br><br>
+        &#128100; Mar&iacute;a Garc&iacute;a<br>
+        &#128241; 55 1234 5678<br>
+        &#127968; Depto. Polanco &mdash; $4,500,000 MXN<br>
+        C&oacute;digo: LK92<br><br>
+        Ning&uacute;n asesor respondi&oacute; en 5 min.<br>
+        <strong>Asignaci&oacute;n manual requerida.</strong>
+        <span class="time">09:20 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box red">
+      <span class="info-icon">&#128680;</span>
+      <div><strong>El lead no se pierde.</strong> Ya est&aacute; registrado en EasyBroker. El manager recibe la alerta y puede asignar manualmente desde la app o responder al sistema.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ EDGE CASES ═══════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128300;</div>
+    <h2>Casos Especiales</h2>
+    <p>&iquest;Qu&eacute; pasa en situaciones no est&aacute;ndar?</p>
+  </div>
+
+  <div class="scenario">
+    <h3>&iquest;Qu&eacute; pasa si llegan muchos leads al mismo tiempo?</h3>
+    <p class="subtitle">Por ejemplo, 5 leads nuevos en una sola corrida del scraper.</p>
+    <div class="info-box teal">
+      <span class="info-icon">&#128202;</span>
+      <div>Se lanza <strong>una subasta independiente por cada lead</strong>. Cada uno tiene su propio c&oacute;digo TOMO. Un asesor puede reclamar m&uacute;ltiples leads respondiendo a cada c&oacute;digo. Los leads se env&iacute;an con segundos de diferencia para que los asesores puedan elegir.</div>
+    </div>
+  </div>
+
+  <div class="scenario">
+    <h3>&iquest;Puede un asesor tener m&uacute;ltiples leads asignados?</h3>
+    <div class="info-box green">
+      <span class="info-icon">&#9989;</span>
+      <div><strong>S&iacute;.</strong> Cada asesor puede reclamar y dar seguimiento a m&uacute;ltiples leads. Todos quedan registrados en EasyBroker bajo su nombre para seguimiento ordenado.</div>
+    </div>
+  </div>
+
+  <div class="scenario">
+    <h3>&iquest;Qu&eacute; pasa si un lead pregunta por una propiedad que no est&aacute; en EasyBroker?</h3>
+    <div class="info-box orange">
+      <span class="info-icon">&#9888;&#65039;</span>
+      <div>El lead <strong>se subasta de todas formas</strong>. El asesor que lo reclame recibe la informaci&oacute;n del mensaje original y puede dar seguimiento. Opcionalmente, se puede alertar al manager para que verifique la propiedad.</div>
+    </div>
+  </div>
+
+  <div class="scenario">
+    <h3>&iquest;Qu&eacute; pasa si el mismo lead escribe m&aacute;s de una vez?</h3>
+    <div class="info-box blue">
+      <span class="info-icon">&#128269;</span>
+      <div>El scraper detecta leads duplicados por <strong>tel&eacute;fono o email</strong>. Si ya fue procesado anteriormente, <strong>no se vuelve a subastar</strong>. Si es un mensaje nuevo del mismo lead, se agrega como nota al contacto existente en EasyBroker.</div>
+    </div>
+  </div>
+
+  <div class="scenario">
+    <h3>&iquest;Los asesores necesitan una app especial?</h3>
+    <div class="info-box green">
+      <span class="info-icon">&#128241;</span>
+      <div><strong>No.</strong> Todo funciona desde WhatsApp. Los asesores reciben notificaciones y responden TOMO desde su WhatsApp normal. EasyBroker lo usan como ya lo hacen para dar seguimiento. <strong>Cero apps nuevas.</strong></div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ VENTAJAS ═════════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#127942;</div>
+    <h2>Ventajas del Sistema</h2>
+    <p>Por qu&eacute; este proceso es m&aacute;s eficiente que hacerlo manual.</p>
+  </div>
+
+  <div class="features" style="margin-bottom:50px;">
+    <div class="feature" style="border-color:#6EE7B7; background:#F0FDF4;">
+      <div class="feat-icon">&#9889;</div>
+      <div>
+        <h4>Velocidad</h4>
+        <p>De detectar el lead a tener asesor asignado en <strong>menos de 1 minuto</strong>. Antes pod&iacute;an pasar horas.</p>
+      </div>
+    </div>
+    <div class="feature" style="border-color:#93C5FD; background:#EFF6FF;">
+      <div class="feat-icon">&#128260;</div>
+      <div>
+        <h4>Sincronizaci&oacute;n total</h4>
+        <p>EasyBroker siempre est&aacute; actualizado. El lead, la propiedad y el asesor quedan vinculados autom&aacute;ticamente.</p>
+      </div>
+    </div>
+    <div class="feature" style="border-color:#FCD34D; background:#FFFBEB;">
+      <div class="feat-icon">&#9878;&#65039;</div>
+      <div>
+        <h4>Justicia</h4>
+        <p>Todos los asesores en turno compiten en igualdad. El m&aacute;s r&aacute;pido gana. Sin favoritismos.</p>
+      </div>
+    </div>
+    <div class="feature" style="border-color:#C4B5FD; background:#FAF5FF;">
+      <div class="feat-icon">&#128274;</div>
+      <div>
+        <h4>Sin duplicados</h4>
+        <p>Es imposible que dos asesores reclamen el mismo lead. El bloqueo es a nivel de base de datos.</p>
+      </div>
+    </div>
+    <div class="feature" style="border-color:#FCA5A5; background:#FEF2F2;">
+      <div class="feat-icon">&#128680;</div>
+      <div>
+        <h4>Sin leads perdidos</h4>
+        <p>Si nadie reclama, el manager recibe alerta. El lead ya est&aacute; en EasyBroker. Nunca se pierde.</p>
+      </div>
+    </div>
+    <div class="feature" style="border-color:#5EEAD4; background:#F0FDFA;">
+      <div class="feat-icon">&#128241;</div>
+      <div>
+        <h4>Cero apps nuevas</h4>
+        <p>Los asesores solo usan WhatsApp (que ya tienen) y EasyBroker (que ya usan). Nada que instalar.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ RESUMEN TIMELINE ════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#127912;</div>
+    <h2>Resumen Visual: El Flujo Completo</h2>
+  </div>
+
+  <div style="max-width:600px; margin:0 auto 50px;">
+    <div class="timeline">
+      <div class="step">
+        <div class="step-number" style="background:#6366F1; font-size:1.1rem;">1</div>
+        <div class="step-content">
+          <div class="step-title">&#128375; Scraper cada 15 min</div>
+          <div class="step-desc">Detecta leads nuevos en el inbox de Inmuebles24</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number" style="background:#14B8A6; font-size:1.1rem;">2</div>
+        <div class="step-content">
+          <div class="step-title">&#128230; Registro en EasyBroker</div>
+          <div class="step-desc">Se crea el contacto con datos del lead y propiedad asociada</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number" style="background:var(--orange); font-size:1.1rem;">3</div>
+        <div class="step-content">
+          <div class="step-title">&#128227; Subasta por WhatsApp</div>
+          <div class="step-desc">Notificaci&oacute;n a todos los asesores en turno: TOMO-XXXX</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number" style="background:#22C55E; font-size:1.1rem;">4</div>
+        <div class="step-content">
+          <div class="step-title">&#128274; Primer asesor reclama</div>
+          <div class="step-desc">Responde TOMO-XXXX y se le asigna el lead</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number" style="background:var(--blue); font-size:1.1rem;">5</div>
+        <div class="step-content">
+          <div class="step-title">&#128260; EasyBroker actualizado</div>
+          <div class="step-desc">Lead asignado al asesor ganador autom&aacute;ticamente</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number" style="background:var(--purple); font-size:1.1rem;">6</div>
+        <div class="step-content">
+          <div class="step-title">&#128172; Seguimiento</div>
+          <div class="step-desc">El asesor contacta al lead y da seguimiento desde EasyBroker</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ WHAT NEEDS TO BE BUILT ════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128736;&#65039;</div>
+    <h2>Resumen T&eacute;cnico: &iquest;Qu&eacute; se necesita construir?</h2>
+    <p>Lo que ya existe y lo que falta.</p>
+  </div>
+
+  <table class="comparison">
+    <tr>
+      <th>Componente</th>
+      <th>Estado</th>
+      <th>Detalle</th>
+    </tr>
+    <tr>
+      <td><strong>Scraper de leads</strong></td>
+      <td>&#128994; Existe</td>
+      <td class="highlight">Ya funciona: revisa el inbox de Inmuebles24, extrae datos del lead y propiedad</td>
+    </tr>
+    <tr>
+      <td><strong>Subasta TOMO</strong></td>
+      <td>&#128994; Existe</td>
+      <td class="highlight">Ya funciona: env&iacute;o simult&aacute;neo, primer respuesta gana, bloqueo at&oacute;mico, expiry timer</td>
+    </tr>
+    <tr>
+      <td><strong>Router de WhatsApp</strong></td>
+      <td>&#128994; Existe</td>
+      <td class="highlight">Ya funciona: recibe mensajes de asesores, clasifica respuestas TOMO</td>
+    </tr>
+    <tr>
+      <td><strong>Escalaci&oacute;n a manager</strong></td>
+      <td>&#128994; Existe</td>
+      <td class="highlight">Ya funciona: alerta cuando nadie reclama en 5 min</td>
+    </tr>
+    <tr>
+      <td><strong>Integraci&oacute;n EasyBroker API</strong></td>
+      <td>&#128308; Nuevo</td>
+      <td>Crear contacto (lead) y actualizar asignaci&oacute;n de asesor v&iacute;a API de EasyBroker</td>
+    </tr>
+    <tr>
+      <td><strong>Webhook scraper &#8594; n8n</strong></td>
+      <td>&#128308; Nuevo</td>
+      <td>Cuando el scraper detecta lead nuevo, notificar a n8n para disparar la subasta</td>
+    </tr>
+    <tr>
+      <td><strong>Cambio de trigger</strong></td>
+      <td>&#128992; Adaptar</td>
+      <td>Cambiar el trigger de la subasta: de "nuevo lead en DB" a "webhook del scraper"</td>
+    </tr>
+    <tr>
+      <td><strong>Base de datos</strong></td>
+      <td>&#128992; Adaptar</td>
+      <td>Agregar campo <strong>easybroker_contact_id</strong> para vincular lead con EasyBroker</td>
+    </tr>
+  </table>
+
+  <div class="info-box green" style="margin-top:24px;">
+    <span class="info-icon">&#128161;</span>
+    <div><strong>Conclusi&oacute;n:</strong> El <strong>80% del sistema ya est&aacute; construido</strong>. El scraper y la mec&aacute;nica de subasta ya funcionan. Lo que falta es: (1) la integraci&oacute;n con la API de EasyBroker para registrar leads y asignar asesores, y (2) conectar el scraper con el sistema de subasta v&iacute;a webhook.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ FOOTER ══════════════════════════════════════ -->
+<div class="footer">
+  Inmobiliaria24 &mdash; Sistema de Subasta de Leads por WhatsApp<br>
+  Scraping autom&aacute;tico + Subasta TOMO + Sincronizaci&oacute;n con EasyBroker
+</div>
+
+</body>
+</html>
