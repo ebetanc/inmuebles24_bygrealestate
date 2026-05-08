@@ -1,0 +1,388 @@
+{
+  "name": "WF4 - AI Conversation (Evolution + OpenRouter)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "ab766bae-3c2c-4092-8413-4e3fb0fce194",
+      "name": "When Called by WF1",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "notes": "Input from WF1 (lead with mode=ai):\n{\n  conversation_id: UUID,\n  phone: '5215512345678',\n  pushName: 'Maria',\n  text: 'Cuantas recamaras tiene?',\n  messageId: '3EB0A0...',\n  current_property: 'EB-12345',\n  assigned_agent_id: 'agent_yolanda'\n}"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Update last_message_at and log the inbound message.\nUPDATE conversations SET last_message_at = NOW() WHERE conversation_id = $1::uuid;\n\nUPDATE messages\nSET conversation_id = $1::uuid, sender_type = 'lead'\nWHERE msg_external_id = $2;",
+        "options": {
+          "queryReplacement": "={{ $json.conversation_id }},={{ $json.messageId }}"
+        }
+      },
+      "id": "3f988639-0d24-4267-8544-a8e0be50eb58",
+      "name": "Update Conversation Timestamp",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        420,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Fetch property data from cache or listings.\nSELECT\n  COALESCE(pc.payload, '{}'::jsonb) AS property_data,\n  l.title, l.price, l.currency, l.location, l.property_type,\n  l.operation_type, l.bedrooms, l.bathrooms, l.area_m2,\n  l.description, l.url\nFROM (SELECT $1 AS prop_id) AS input\nLEFT JOIN properties_cache pc ON pc.property_id = input.prop_id\nLEFT JOIN listings l ON l.listing_hash = input.prop_id OR l.url ILIKE '%' || input.prop_id || '%'\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $json.current_property || 'unknown' }}"
+        }
+      },
+      "id": "92cdf4b3-0065-45ef-940b-b0bac41a0b3a",
+      "name": "Fetch Property Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        640,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Fetch last 20 messages for conversation context.\nSELECT direction, sender_type, body, created_at\nFROM messages\nWHERE conversation_id = $1::uuid\n  AND body IS NOT NULL\n  AND body != ''\nORDER BY created_at DESC\nLIMIT 20;",
+        "options": {
+          "queryReplacement": "={{ $('When Called by WF1').first().json.conversation_id }}"
+        }
+      },
+      "id": "640d47ea-905c-437e-9ce8-bf081be2356a",
+      "name": "Fetch Conversation History",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        640,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the OpenRouter API request with property context + conversation history.\nconst trigger = $('When Called by WF1').first().json;\nconst propertyRow = $('Fetch Property Data').first().json;\nconst historyItems = $('Fetch Conversation History').all();\n\n// Build property context from DB data or cache\nlet propData = {};\ntry {\n  propData = typeof propertyRow.property_data === 'string'\n    ? JSON.parse(propertyRow.property_data)\n    : (propertyRow.property_data || {});\n} catch(e) { propData = {}; }\n\n// Merge direct columns with cache payload\nconst property = {\n  title: propertyRow.title || propData.title || 'No disponible',\n  price: propertyRow.price || propData.price || 'No disponible',\n  currency: propertyRow.currency || propData.currency || 'MXN',\n  location: propertyRow.location || propData.location || 'No disponible',\n  property_type: propertyRow.property_type || propData.property_type || 'No especificado',\n  operation_type: propertyRow.operation_type || propData.operation_type || 'No especificado',\n  bedrooms: propertyRow.bedrooms || propData.bedrooms || 'No disponible',\n  bathrooms: propertyRow.bathrooms || propData.bathrooms || 'No disponible',\n  area_m2: propertyRow.area_m2 || propData.area_m2 || 'No disponible',\n  description: propertyRow.description || propData.description || '',\n  url: propertyRow.url || propData.url || ''\n};\n\n// System prompt\nconst systemPrompt = `You are a friendly, bilingual (Spanish/English) real estate assistant for a brokerage in Mexico City. You help potential buyers/renters learn about properties.\n\nCurrent property:\n- Title: ${property.title}\n- Price: ${property.price} ${property.currency}\n- Location: ${property.location}\n- Type: ${property.property_type} (${property.operation_type})\n- Bedrooms: ${property.bedrooms}\n- Bathrooms: ${property.bathrooms}\n- Area: ${property.area_m2} m2\n- Description: ${property.description}\n- Link: ${property.url}\n\nRules:\n1. Answer using ONLY the property info above. Don't invent details.\n2. If asked about info you don't have, say you'll check with the agent.\n3. If the lead asks to schedule a visit, negotiate price, discuss financing, or anything that requires human judgment, start your response with [HANDOFF] and explain you'll connect them with an agent.\n4. If the lead explicitly asks to talk to a human/agent, start your response with [HANDOFF].\n5. Keep responses under 300 characters (WhatsApp readability).\n6. Be warm, professional, concise.\n7. Respond in the SAME LANGUAGE the lead uses (Spanish or English).\n8. Never reveal you are an AI unless directly asked.`;\n\n// Build conversation messages from history (reverse to chronological order)\nconst chatMessages = [{ role: 'system', content: systemPrompt }];\n\nconst history = historyItems\n  .map(i => i.json)\n  .filter(m => m.body && m.body.trim())\n  .reverse(); // DB returns DESC, we need ASC\n\nfor (const msg of history) {\n  if (msg.sender_type === 'lead') {\n    chatMessages.push({ role: 'user', content: msg.body });\n  } else if (msg.sender_type === 'ai') {\n    chatMessages.push({ role: 'assistant', content: msg.body });\n  }\n  // Skip system/agent messages in LLM context\n}\n\n// Add the current message\nchatMessages.push({ role: 'user', content: trigger.text });\n\nreturn [{\n  json: {\n    chatMessages,\n    conversation_id: trigger.conversation_id,\n    phone: trigger.phone,\n    assigned_agent_id: trigger.assigned_agent_id,\n    current_property: trigger.current_property\n  }\n}];"
+      },
+      "id": "104979e4-2b1e-4105-8783-fe1432fc8344",
+      "name": "Build LLM Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"{{ $env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4' }}\",\n  \"messages\": {{ JSON.stringify($json.chatMessages) }},\n  \"max_tokens\": 500,\n  \"temperature\": 0.7\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "f4e9b2c1-aff4-4a90-9bbc-805f2cbecbd6",
+      "name": "Call OpenRouter LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse LLM response and check for handoff triggers.\nconst llmResponse = $input.first().json;\nconst context = $('Build LLM Prompt').first().json;\n\nlet aiText = '';\ntry {\n  aiText = llmResponse.choices[0].message.content || '';\n} catch(e) {\n  aiText = 'Lo siento, tuve un problema tecnico. Por favor intenta de nuevo.';\n}\n\n// Check for handoff trigger\nconst needsHandoff = aiText.startsWith('[HANDOFF]');\n\n// Clean the handoff tag from the response\nconst cleanText = aiText.replace(/^\\[HANDOFF\\]\\s*/i, '');\n\nreturn [{\n  json: {\n    ai_response: cleanText,\n    needs_handoff: needsHandoff,\n    conversation_id: context.conversation_id,\n    phone: context.phone,\n    assigned_agent_id: context.assigned_agent_id,\n    current_property: context.current_property\n  }\n}];"
+      },
+      "id": "552e31b0-0865-4cbf-bd5b-44b8119f4323",
+      "name": "Parse LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.phone }}\",\n  \"text\": {{ JSON.stringify($json.ai_response) }},\n  \"delay\": 2000\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "060310b2-90b0-4aa2-ae4c-680ffbd4f547",
+      "name": "Send AI Response via Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nVALUES ($1::uuid, 'outbound', 'ai', $2, $3, $4::jsonb);",
+        "options": {
+          "queryReplacement": "={{ $json.conversation_id }},={{ $json.phone }},={{ $json.ai_response }},={{ JSON.stringify({ purpose: 'ai_response', needs_handoff: $json.needs_handoff }) }}"
+        }
+      },
+      "id": "bca5bb88-fc35-4023-b6fa-90099cc8bb05",
+      "name": "Log AI Response",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "722c301a-ae10-472c-a487-09490e0018a3",
+              "leftValue": "={{ $json.needs_handoff }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "fda7c09f-da0c-4ac8-805d-e53e5dd5c130",
+      "name": "Needs Handoff?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2040,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "={{ $env.WF5_WORKFLOW_ID }}",
+        "options": {}
+      },
+      "id": "7ad65aeb-48a1-4aa6-9ccc-8f678a31afec",
+      "name": "Call WF5: Human Handoff",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2260,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8d306c23-a0f5-4a07-8cae-ec9f38b9b7a8",
+      "name": "End (AI handled)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2260,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "When Called by WF1": {
+      "main": [
+        [
+          {
+            "node": "Update Conversation Timestamp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Conversation Timestamp": {
+      "main": [
+        [
+          {
+            "node": "Fetch Property Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Conversation History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Property Data": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Conversation History": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LLM Prompt": {
+      "main": [
+        [
+          {
+            "node": "Call OpenRouter LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenRouter LLM": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LLM Response": {
+      "main": [
+        [
+          {
+            "node": "Send AI Response via Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send AI Response via Evolution": {
+      "main": [
+        [
+          {
+            "node": "Log AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log AI Response": {
+      "main": [
+        [
+          {
+            "node": "Needs Handoff?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Handoff?": {
+      "main": [
+        [
+          {
+            "node": "Call WF5: Human Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "End (AI handled)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true
+  }
+}

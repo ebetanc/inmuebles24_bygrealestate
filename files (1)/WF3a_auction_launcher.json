@@ -1,0 +1,190 @@
+{
+  "name": "WF3a - Auction Launcher",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "trigger-wf3a",
+      "name": "When Called by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Input shape expected from WF2:\n{\n  conversation_id: UUID,\n  lead_phone: '+5215512345678',   // no 'whatsapp:' prefix\n  lead_name: 'María García',\n  property_id: 'EB-12345',\n  property_title: 'Depto. Bosques de las Lomas',\n  property_price: '$1,000,883 MXN',\n  assigned_agent_id: 'agent_yolanda' | null\n}"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Create auction row. short_code is a 4-char claim token extracted from the UUID.\n-- expires_at is 5 minutes from now; tune as you learn what's realistic.\nWITH new_auction AS (\n  INSERT INTO auctions (\n    conversation_id,\n    property_id,\n    short_code,\n    expires_at\n  ) VALUES (\n    $1::uuid,\n    $2,\n    UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 4)),\n    NOW() + INTERVAL '5 minutes'\n  )\n  RETURNING auction_id, short_code, expires_at\n)\nSELECT * FROM new_auction;",
+        "options": {
+          "queryReplacement": "={{ $json.conversation_id }},={{ $json.property_id }}"
+        }
+      },
+      "id": "pg-create-auction",
+      "name": "Create Auction Row",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - App State"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-auction-and-lead",
+      "name": "Merge Auction + Lead Context",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [680, 300],
+      "notes": "Combines the freshly-created auction (auction_id, short_code) with the original trigger payload (property_title, lead_name, etc.) so the next node has everything in one item."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Fetch the pool: on-shift AND available, plus the assigned agent (if any),\n-- deduplicated. The assigned agent is always included even if off-shift —\n-- the client explicitly wants them to get a chance to claim their own lead.\nSELECT DISTINCT\n  a.agent_id,\n  a.name,\n  a.whatsapp_number\nFROM agents a\nWHERE (a.on_shift = true AND a.is_available = true)\n   OR a.agent_id = $1;",
+        "options": {
+          "queryReplacement": "={{ $json.assigned_agent_id || '__none__' }}"
+        }
+      },
+      "id": "pg-fetch-pool",
+      "name": "Fetch Notification Pool",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [900, 300],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - App State"
+        }
+      },
+      "notes": "Each output item = one agent to notify. Downstream Twilio node will run once per item."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the WhatsApp message body for each agent.\n// We need the auction context from the earlier merge AND the agent from this step.\n// In n8n, earlier-step data is accessed via $('Node Name').first().\n\nconst auctionCtx = $('Merge Auction + Lead Context').first().json;\nconst agents = $input.all();\n\nreturn agents.map(item => {\n  const agent = item.json;\n  const body = [\n    `🏠 Nuevo lead para ${auctionCtx.property_title}`,\n    `💰 ${auctionCtx.property_price}`,\n    `👤 Lead: ${auctionCtx.lead_name || 'Sin nombre'}`,\n    ``,\n    `Responde *TOMO-${auctionCtx.short_code}* para asignártelo.`,\n    `(Expira en 5 min)`\n  ].join('\\n');\n\n  return {\n    json: {\n      agent_id: agent.agent_id,\n      agent_name: agent.name,\n      to_phone: `whatsapp:${agent.whatsapp_number}`,\n      body,\n      auction_id: auctionCtx.auction_id,\n      short_code: auctionCtx.short_code,\n      conversation_id: auctionCtx.conversation_id\n    }\n  };\n});"
+      },
+      "id": "build-messages",
+      "name": "Build Fan-out Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $env.TWILIO_WHATSAPP_FROM }}",
+        "to": "={{ $json.to_phone }}",
+        "toWhatsapp": true,
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "twilio-send",
+      "name": "Send via Twilio WhatsApp",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "twilioApi": {
+          "id": "REPLACE_WITH_TWILIO_CREDENTIAL_ID",
+          "name": "Twilio"
+        }
+      },
+      "continueOnFail": true,
+      "notes": "TWILIO_WHATSAPP_FROM env var should be 'whatsapp:+14155238886' (your Twilio WA sender, incl. the prefix).\n\ncontinueOnFail = true so that a single agent's message failure (e.g. they've blocked the bot) does NOT abort the whole fan-out."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Log every outbound notification for audit.\nINSERT INTO messages (\n  conversation_id,\n  direction,\n  sender_type,\n  recipient_phone,\n  body,\n  twilio_sid,\n  metadata\n) VALUES (\n  $1::uuid,\n  'outbound',\n  'system',\n  $2,\n  $3,\n  $4,\n  $5::jsonb\n);",
+        "options": {
+          "queryReplacement": "={{ $json.conversation_id }},={{ $json.to_phone }},={{ $json.body }},={{ $('Send via Twilio WhatsApp').item.json.sid || null }},={{ JSON.stringify({ purpose: 'auction_notify', auction_id: $json.auction_id, agent_id: $json.agent_id }) }}"
+        }
+      },
+      "id": "pg-log-outbound",
+      "name": "Log Outbound Message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1560, 300],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - App State"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate results for return value.\n// We want to record on the auction row which agents were actually notified.\nconst items = $input.all();\nconst notifiedAgents = items\n  .filter(i => i.json.agent_id)\n  .map(i => i.json.agent_id);\n\nreturn [{\n  json: {\n    auction_id: items[0]?.json?.auction_id,\n    conversation_id: items[0]?.json?.conversation_id,\n    short_code: items[0]?.json?.short_code,\n    notified_agents: notifiedAgents,\n    notified_count: notifiedAgents.length\n  }\n}];"
+      },
+      "id": "aggregate",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE auctions\nSET notified_agents = $1::text[]\nWHERE auction_id = $2::uuid;",
+        "options": {
+          "queryReplacement": "={{ '{' + $json.notified_agents.join(',') + '}' }},={{ $json.auction_id }}"
+        }
+      },
+      "id": "pg-record-notified",
+      "name": "Record Notified Agents",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2000, 300],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - App State"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Called by Another Workflow": {
+      "main": [[{ "node": "Create Auction Row", "type": "main", "index": 0 }]]
+    },
+    "Create Auction Row": {
+      "main": [[
+        { "node": "Merge Auction + Lead Context", "type": "main", "index": 0 }
+      ]]
+    },
+    "When Called by Another Workflow ": {
+      "main": [[]]
+    },
+    "Merge Auction + Lead Context": {
+      "main": [[{ "node": "Fetch Notification Pool", "type": "main", "index": 0 }]]
+    },
+    "Fetch Notification Pool": {
+      "main": [[{ "node": "Build Fan-out Messages", "type": "main", "index": 0 }]]
+    },
+    "Build Fan-out Messages": {
+      "main": [[{ "node": "Send via Twilio WhatsApp", "type": "main", "index": 0 }]]
+    },
+    "Send via Twilio WhatsApp": {
+      "main": [[{ "node": "Log Outbound Message", "type": "main", "index": 0 }]]
+    },
+    "Log Outbound Message": {
+      "main": [[{ "node": "Aggregate Results", "type": "main", "index": 0 }]]
+    },
+    "Aggregate Results": {
+      "main": [[{ "node": "Record Notified Agents", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true
+  }
+}

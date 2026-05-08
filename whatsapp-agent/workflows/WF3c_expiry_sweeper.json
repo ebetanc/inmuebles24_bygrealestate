@@ -1,15 +1,25 @@
 {
-  "name": "WF3c - Auction Expiry Sweeper",
+  "name": "WF3c - Auction Expiry Sweeper (Evolution)",
   "nodes": [
     {
       "parameters": {
-        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 1 }] }
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
       },
-      "id": "schedule-trigger",
+      "id": "38f75920-a753-410b-a9b3-c2f04daefb9a",
       "name": "Every Minute",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -17,67 +27,122 @@
         "query": "WITH expired AS (\n  UPDATE auctions\n  SET status = 'expired'\n  WHERE status = 'open' AND expires_at <= NOW()\n  RETURNING auction_id, conversation_id, property_id, short_code\n)\nSELECT e.*, conv.lead_phone, conv.lead_name\nFROM expired e\nJOIN conversations conv ON conv.conversation_id = e.conversation_id;",
         "options": {}
       },
-      "id": "pg-expire",
+      "id": "4907bdf7-6514-4c5e-b147-3cecbfee7398",
       "name": "Expire Unclaimed Auctions",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [460, 300],
+      "position": [
+        460,
+        300
+      ],
       "credentials": {
-        "postgres": { "id": "REPLACE_POSTGRES_CRED_ID", "name": "Supabase Postgres" }
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
       }
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
           "conditions": [
             {
-              "id": "has-expired",
+              "id": "5be14f2d-6c1b-4965-9e61-402136262cfc",
               "leftValue": "={{ $json.auction_id }}",
               "rightValue": "",
-              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "if-any-expired",
+      "id": "c9629494-520c-4b4d-a8e4-fc40170a7e98",
       "name": "Any Expired?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
-        "resource": "sms",
-        "operation": "send",
-        "from": "={{ $env.TWILIO_WHATSAPP_FROM }}",
-        "to": "={{ $env.MANAGER_WHATSAPP_TO }}",
-        "toWhatsapp": true,
-        "message": "=⚠️ Lead sin asignar\n\nPropiedad: {{ $json.property_id }}\nLead: {{ $json.lead_name || 'Sin nombre' }} ({{ $json.lead_phone }})\nSubasta: {{ $json.short_code }}\n\nNingún asesor respondió en 5 min. Asignación manual requerida.",
-        "options": {}
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $env.MANAGER_PHONE }}\",\n  \"text\": \"\\u26A0\\uFE0F Lead sin asignar\\n\\nPropiedad: {{ $json.property_id }}\\nLead: {{ $json.lead_name || 'Sin nombre' }} ({{ $json.lead_phone }})\\nSubasta: {{ $json.short_code }}\\n\\nNingun asesor respondio en 5 min. Asignacion manual requerida.\"\n}",
+        "options": {
+          "timeout": 10000
+        }
       },
-      "id": "twilio-escalate",
-      "name": "Escalate to Manager",
-      "type": "n8n-nodes-base.twilio",
-      "typeVersion": 1,
-      "position": [900, 200],
-      "credentials": {
-        "twilioApi": { "id": "REPLACE_TWILIO_CRED_ID", "name": "Twilio" }
-      },
+      "id": "bc828cbe-0205-481f-81d8-b1b75cdbc20e",
+      "name": "Escalate to Manager via Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        200
+      ],
       "continueOnFail": true
     }
   ],
   "connections": {
-    "Every Minute":              { "main": [[{ "node": "Expire Unclaimed Auctions", "type": "main", "index": 0 }]] },
-    "Expire Unclaimed Auctions": { "main": [[{ "node": "Any Expired?", "type": "main", "index": 0 }]] },
+    "Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Expire Unclaimed Auctions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expire Unclaimed Auctions": {
+      "main": [
+        [
+          {
+            "node": "Any Expired?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Any Expired?": {
       "main": [
-        [{ "node": "Escalate to Manager", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Escalate to Manager via Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     }
   },
-  "settings": { "executionOrder": "v1" }
+  "settings": {
+    "executionOrder": "v1"
+  }
 }

@@ -1,0 +1,1937 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>n8n Workflow Blueprint — BYG Real Estate v5</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --bg: #F8FAFC;
+    --card: #FFFFFF;
+    --text: #1E293B;
+    --text-light: #64748B;
+    --border: #E2E8F0;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06);
+    --shadow-lg: 0 4px 12px rgba(0,0,0,0.08);
+    --radius: 12px;
+    /* Node type colors */
+    --c-webhook: #22C55E;
+    --c-code: #F97316;
+    --c-postgres: #3B82F6;
+    --c-if: #A855F7;
+    --c-switch: #A855F7;
+    --c-http: #14B8A6;
+    --c-exec-wf: #6366F1;
+    --c-schedule: #F59E0B;
+    --c-noop: #94A3B8;
+    --c-sheets: #16A34A;
+    --c-merge: #06B6D4;
+    --c-set: #EC4899;
+    --c-split: #EAB308;
+    /* Workflow section tints */
+    --wf1-tint: rgba(34,197,94,0.03);
+    --wf2-tint: rgba(59,130,246,0.03);
+    --wf3a-tint: rgba(245,158,11,0.03);
+    --wf3b-tint: rgba(239,68,68,0.03);
+    --wf3c-tint: rgba(168,85,247,0.03);
+    --wf4-tint: rgba(99,102,241,0.03);
+    --wf5-tint: rgba(236,72,153,0.03);
+    --wf6-tint: rgba(22,163,74,0.03);
+    --wf7-tint: rgba(234,179,8,0.03);
+    --wf10-tint: rgba(20,184,166,0.03);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #334155 100%);
+    color: white;
+    padding: 40px 24px 48px;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+  .header p {
+    font-size: 14px;
+    color: rgba(255,255,255,0.55);
+    font-weight: 400;
+  }
+  .header .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 100px;
+    padding: 5px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+  }
+
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 24px 60px;
+  }
+
+  /* ── NAV ── */
+  .nav-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(248,250,252,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .nav-bar a {
+    display: inline-block;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-light);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .nav-bar a:hover {
+    background: rgba(59,130,246,0.08);
+    color: #2563EB;
+  }
+
+  /* ── OVERVIEW SECTION ── */
+  .overview {
+    margin: 32px 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    box-shadow: var(--shadow);
+  }
+  .overview h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+  }
+  .overview-graph {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+  .ov-node {
+    background: #F1F5F9;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px;
+    text-align: center;
+    min-width: 120px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .ov-node:hover {
+    border-color: #3B82F6;
+    box-shadow: 0 2px 8px rgba(59,130,246,0.15);
+  }
+  .ov-node .ov-id {
+    font-size: 11px;
+    font-weight: 700;
+    color: white;
+    background: #334155;
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+  }
+  .ov-node .ov-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-light);
+    line-height: 1.3;
+  }
+  .ov-node .ov-trigger {
+    font-size: 10px;
+    color: #94A3B8;
+    margin-top: 2px;
+  }
+  .ov-connections {
+    font-size: 12px;
+    color: var(--text-light);
+    text-align: center;
+    line-height: 2;
+  }
+  .ov-connections .arrow {
+    color: #6366F1;
+    font-weight: 700;
+  }
+
+  /* ── LEGEND ── */
+  .legend-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    padding: 16px 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 24px;
+    box-shadow: var(--shadow);
+  }
+  .legend-bar .legend-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    width: 100%;
+    margin-bottom: 2px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .legend-line {
+    width: 20px;
+    height: 2px;
+    flex-shrink: 0;
+  }
+  .legend-line.dashed {
+    border-top: 2px dashed #6366F1;
+    height: 0;
+  }
+  .legend-line.solid {
+    background: #334155;
+  }
+
+  /* ── DB SIDEBAR ── */
+  .db-sidebar {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow);
+  }
+  .db-sidebar h3 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+  .db-tables {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+  }
+  .db-table {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    border-left: 3px solid var(--c-postgres);
+  }
+  .db-table .tbl-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--c-postgres);
+    font-family: 'Inter', monospace;
+    margin-bottom: 4px;
+  }
+  .db-table .tbl-cols {
+    font-size: 10px;
+    color: var(--text-light);
+    line-height: 1.6;
+    font-family: 'Inter', monospace;
+  }
+
+  /* ── WORKFLOW SECTION ── */
+  .wf-section {
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .wf-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: #F8FAFC;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+  }
+  .wf-header:hover {
+    background: #F1F5F9;
+  }
+  .wf-header .wf-arrow {
+    font-size: 12px;
+    color: var(--text-light);
+    transition: transform 0.3s;
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+  }
+  .wf-section.collapsed .wf-arrow {
+    transform: rotate(-90deg);
+  }
+  .wf-header .wf-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: white;
+    padding: 2px 10px;
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+  .wf-header .wf-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .wf-header .wf-trigger-info {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-light);
+    margin-left: auto;
+    flex-shrink: 0;
+    background: rgba(0,0,0,0.04);
+    padding: 3px 10px;
+    border-radius: 5px;
+  }
+  .wf-body {
+    padding: 20px;
+    overflow-x: auto;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+  }
+  .wf-section.collapsed .wf-body {
+    max-height: 0;
+    padding: 0 20px;
+    overflow: hidden;
+  }
+  .wf-desc {
+    font-size: 12px;
+    color: var(--text-light);
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: #FAFBFC;
+    border-radius: 8px;
+    border-left: 3px solid #CBD5E1;
+    line-height: 1.6;
+  }
+
+  /* ── NODE PIPELINE ── */
+  .pipeline {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    min-width: max-content;
+    padding: 8px 0;
+  }
+  .pipeline-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Node */
+  .node {
+    background: white;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-width: 180px;
+    max-width: 220px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border-left: 4px solid #94A3B8;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .node .n-name {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+    margin-bottom: 3px;
+    word-break: break-word;
+  }
+  .node .n-type {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #94A3B8;
+    margin-bottom: 4px;
+  }
+  .node .n-desc {
+    font-size: 10px;
+    color: var(--text-light);
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
+  /* Node type colors */
+  .node.t-webhook    { border-left-color: var(--c-webhook); }
+  .node.t-code       { border-left-color: var(--c-code); }
+  .node.t-postgres   { border-left-color: var(--c-postgres); }
+  .node.t-if         { border-left-color: var(--c-if); }
+  .node.t-switch     { border-left-color: var(--c-switch); }
+  .node.t-http       { border-left-color: var(--c-http); }
+  .node.t-exec-wf    { border-left-color: var(--c-exec-wf); }
+  .node.t-schedule   { border-left-color: var(--c-schedule); }
+  .node.t-noop       { border-left-color: var(--c-noop); }
+  .node.t-sheets     { border-left-color: var(--c-sheets); }
+  .node.t-merge      { border-left-color: var(--c-merge); }
+  .node.t-set        { border-left-color: var(--c-set); }
+  .node.t-split      { border-left-color: var(--c-split); }
+  .node.t-trigger    { border-left-color: var(--c-exec-wf); }
+
+  .node .n-type-icon {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+    margin-right: 3px;
+    vertical-align: middle;
+  }
+  .node.t-webhook .n-type-icon    { background: var(--c-webhook); }
+  .node.t-code .n-type-icon       { background: var(--c-code); }
+  .node.t-postgres .n-type-icon   { background: var(--c-postgres); }
+  .node.t-if .n-type-icon         { background: var(--c-if); }
+  .node.t-switch .n-type-icon     { background: var(--c-switch); }
+  .node.t-http .n-type-icon       { background: var(--c-http); }
+  .node.t-exec-wf .n-type-icon    { background: var(--c-exec-wf); }
+  .node.t-schedule .n-type-icon   { background: var(--c-schedule); }
+  .node.t-noop .n-type-icon       { background: var(--c-noop); }
+  .node.t-sheets .n-type-icon     { background: var(--c-sheets); }
+  .node.t-merge .n-type-icon      { background: var(--c-merge); }
+  .node.t-set .n-type-icon        { background: var(--c-set); }
+  .node.t-split .n-type-icon      { background: var(--c-split); }
+  .node.t-trigger .n-type-icon    { background: var(--c-exec-wf); }
+
+  /* Connector arrow */
+  .conn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .conn::before {
+    content: '';
+    width: 24px;
+    height: 2px;
+    background: #CBD5E1;
+  }
+  .conn::after {
+    content: '';
+    position: absolute;
+    right: 4px;
+    width: 0;
+    height: 0;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 6px solid #CBD5E1;
+  }
+  .conn.dashed::before {
+    background: none;
+    border-top: 2px dashed #6366F1;
+    height: 0;
+  }
+  .conn.dashed::after {
+    border-left-color: #6366F1;
+  }
+
+  /* Branch container */
+  .branch-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: relative;
+  }
+  .branch-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+  .branch-label {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: white;
+    margin-right: 4px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .branch-label.true  { background: #22C55E; }
+  .branch-label.false { background: #EF4444; }
+  .branch-label.out   { background: #6366F1; }
+  .branch-label.done  { background: #F59E0B; }
+  .branch-label.loop  { background: #8B5CF6; }
+  .branch-label.fallback { background: #94A3B8; }
+
+  /* Parallel indicator */
+  .parallel-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-left: 2px solid #06B6D4;
+    padding-left: 8px;
+    margin-left: 4px;
+    position: relative;
+  }
+  .parallel-group::before {
+    content: 'PARALLEL';
+    position: absolute;
+    top: -8px;
+    left: -2px;
+    font-size: 8px;
+    font-weight: 700;
+    color: #06B6D4;
+    letter-spacing: 0.5px;
+  }
+  .parallel-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* Section backgrounds */
+  .wf-section[data-wf="wf1"]  .wf-body { background: var(--wf1-tint); }
+  .wf-section[data-wf="wf2"]  .wf-body { background: var(--wf2-tint); }
+  .wf-section[data-wf="wf3a"] .wf-body { background: var(--wf3a-tint); }
+  .wf-section[data-wf="wf3b"] .wf-body { background: var(--wf3b-tint); }
+  .wf-section[data-wf="wf3c"] .wf-body { background: var(--wf3c-tint); }
+  .wf-section[data-wf="wf4"]  .wf-body { background: var(--wf4-tint); }
+  .wf-section[data-wf="wf5"]  .wf-body { background: var(--wf5-tint); }
+  .wf-section[data-wf="wf6"]  .wf-body { background: var(--wf6-tint); }
+  .wf-section[data-wf="wf7"]  .wf-body { background: var(--wf7-tint); }
+  .wf-section[data-wf="wf10"] .wf-body { background: var(--wf10-tint); }
+
+  /* Badge colors per WF */
+  .bg-wf1  { background: #22C55E; }
+  .bg-wf2  { background: #3B82F6; }
+  .bg-wf3a { background: #F59E0B; }
+  .bg-wf3b { background: #EF4444; }
+  .bg-wf3c { background: #A855F7; }
+  .bg-wf4  { background: #6366F1; }
+  .bg-wf5  { background: #EC4899; }
+  .bg-wf6  { background: #16A34A; }
+  .bg-wf7  { background: #EAB308; }
+  .bg-wf10 { background: #14B8A6; }
+
+  /* Expand/Collapse All */
+  .controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .controls button {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    color: var(--text-light);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .controls button:hover {
+    background: #F1F5F9;
+    color: var(--text);
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 32px 24px;
+    color: var(--text-light);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+
+  /* Loop arrow */
+  .loop-indicator {
+    font-size: 9px;
+    font-weight: 700;
+    color: #8B5CF6;
+    text-align: center;
+    padding: 2px 6px;
+    border: 1px dashed #8B5CF6;
+    border-radius: 4px;
+    margin-top: 2px;
+    display: inline-block;
+  }
+
+  /* Scrollbar styling */
+  .wf-body::-webkit-scrollbar { height: 6px; }
+  .wf-body::-webkit-scrollbar-track { background: transparent; }
+  .wf-body::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+
+  @media (max-width: 768px) {
+    .header h1 { font-size: 22px; }
+    .node { min-width: 150px; max-width: 180px; }
+    .nav-bar { padding: 8px 12px; }
+    .db-tables { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════ HEADER ════════════════ -->
+<header class="header">
+  <div class="badge">DOCUMENTO TECNICO &mdash; REFERENCIA n8n</div>
+  <h1>Blueprint de Workflows n8n v5</h1>
+  <p>BYG Real Estate &mdash; Sistema de Leads 24/7 &mdash; 10 workflows, nodo por nodo</p>
+</header>
+
+<!-- ════════════════ NAV ════════════════ -->
+<nav class="nav-bar">
+  <a href="#overview">Vista General</a>
+  <a href="#legend-section">Leyenda</a>
+  <a href="#db-section">Tablas DB</a>
+  <a href="#wf1">WF1 Router</a>
+  <a href="#wf2">WF2 Intake</a>
+  <a href="#wf3a">WF3a Auction</a>
+  <a href="#wf3b">WF3b Claim</a>
+  <a href="#wf3c">WF3c Sweeper</a>
+  <a href="#wf4">WF4 AI</a>
+  <a href="#wf5">WF5 Handoff</a>
+  <a href="#wf6">WF6 Schedule</a>
+  <a href="#wf7">WF7 Morning</a>
+  <a href="#wf10">WF10 Scraper</a>
+</nav>
+
+<div class="container">
+
+<!-- ════════════════ OVERVIEW ════════════════ -->
+<section class="overview" id="overview">
+  <h2>Mapa del Sistema &mdash; Interconexiones entre Workflows</h2>
+  <div class="overview-graph">
+    <a class="ov-node" href="#wf1">
+      <div class="ov-id">WF1</div>
+      <div class="ov-name">Inbound Router</div>
+      <div class="ov-trigger">Webhook /evolution-webhook</div>
+    </a>
+    <a class="ov-node" href="#wf2">
+      <div class="ov-id">WF2</div>
+      <div class="ov-name">Lead Intake</div>
+      <div class="ov-trigger">Llamado por WF1</div>
+    </a>
+    <a class="ov-node" href="#wf3a">
+      <div class="ov-id">WF3a</div>
+      <div class="ov-name">Auction Launcher</div>
+      <div class="ov-trigger">Llamado por WF2/WF7/WF10</div>
+    </a>
+    <a class="ov-node" href="#wf3b">
+      <div class="ov-id">WF3b</div>
+      <div class="ov-name">Claim Handler</div>
+      <div class="ov-trigger">Llamado por WF1</div>
+    </a>
+    <a class="ov-node" href="#wf3c">
+      <div class="ov-id">WF3c</div>
+      <div class="ov-name">Expiry Sweeper</div>
+      <div class="ov-trigger">Schedule cada 1 min</div>
+    </a>
+    <a class="ov-node" href="#wf4">
+      <div class="ov-id">WF4</div>
+      <div class="ov-name">AI Conversation</div>
+      <div class="ov-trigger">Llamado por WF1/WF2</div>
+    </a>
+    <a class="ov-node" href="#wf5">
+      <div class="ov-id">WF5</div>
+      <div class="ov-name">Human Handoff</div>
+      <div class="ov-trigger">Llamado por WF4</div>
+    </a>
+    <a class="ov-node" href="#wf6">
+      <div class="ov-id">WF6</div>
+      <div class="ov-name">Guard Schedule</div>
+      <div class="ov-trigger">Cron 0 5,19 * * *</div>
+    </a>
+    <a class="ov-node" href="#wf7">
+      <div class="ov-id">WF7</div>
+      <div class="ov-name">Morning Report</div>
+      <div class="ov-trigger">Cron 8:00/8:05 AM</div>
+    </a>
+    <a class="ov-node" href="#wf10">
+      <div class="ov-id">WF10</div>
+      <div class="ov-name">Scraper Intake</div>
+      <div class="ov-trigger">Webhook /scraper-leads</div>
+    </a>
+  </div>
+  <div class="ov-connections">
+    <strong>Llamadas entre workflows:</strong><br>
+    WF1 <span class="arrow">--&gt;</span> WF2 (new_lead) &nbsp;|&nbsp;
+    WF1 <span class="arrow">--&gt;</span> WF3b (agent_claim) &nbsp;|&nbsp;
+    WF1 <span class="arrow">--&gt;</span> WF4 (ai_conversation)<br>
+    WF2 <span class="arrow">--&gt;</span> WF3a (dia) &nbsp;|&nbsp;
+    WF2 <span class="arrow">--&gt;</span> WF4 (noche)<br>
+    WF4 <span class="arrow">--&gt;</span> WF5 (handoff detectado)<br>
+    WF7 <span class="arrow">--&gt;</span> WF3a (procesar cola nocturna 8:05 AM)<br>
+    WF10 <span class="arrow">--&gt;</span> WF3a (dia, subasta TOMO)
+  </div>
+</section>
+
+<!-- ════════════════ LEGEND ════════════════ -->
+<section id="legend-section">
+  <div class="legend-bar">
+    <div class="legend-title">Leyenda &mdash; Colores de Nodo por Tipo</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-webhook)"></div>Webhook</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-code)"></div>Code</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-postgres)"></div>Postgres</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-if)"></div>IF / Switch</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-http)"></div>HTTP Request</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-exec-wf)"></div>Execute Workflow</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-schedule)"></div>Schedule Trigger</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-noop)"></div>NoOp</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-sheets)"></div>Google Sheets</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-merge)"></div>Merge</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-set)"></div>Set</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--c-split)"></div>SplitInBatches</div>
+  </div>
+  <div class="legend-bar">
+    <div class="legend-title">Leyenda &mdash; Conexiones</div>
+    <div class="legend-item"><div class="legend-line solid"></div>Flujo de datos</div>
+    <div class="legend-item"><div class="legend-line dashed"></div>Llamada a otro workflow</div>
+    <div class="legend-item"><span class="branch-label true" style="font-size:9px;">TRUE</span> Rama verdadera (IF)</div>
+    <div class="legend-item"><span class="branch-label false" style="font-size:9px;">FALSE</span> Rama falsa (IF)</div>
+    <div class="legend-item"><span class="branch-label out" style="font-size:9px;">OUTPUT</span> Salida nombrada (Switch)</div>
+    <div class="legend-item"><span class="branch-label fallback" style="font-size:9px;">FALLBACK</span> Salida por defecto</div>
+    <div class="legend-item"><span class="branch-label loop" style="font-size:9px;">LOOP</span> Retorno de bucle</div>
+  </div>
+</section>
+
+<!-- ════════════════ DB TABLES ════════════════ -->
+<section id="db-section">
+  <div class="db-sidebar">
+    <h3>Tablas de Base de Datos (Postgres/Supabase)</h3>
+    <div class="db-tables">
+      <div class="db-table">
+        <div class="tbl-name">conversations</div>
+        <div class="tbl-cols">conversation_id (UUID PK), lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during, assigned_agent_id, last_message_at, created_at</div>
+      </div>
+      <div class="db-table">
+        <div class="tbl-name">messages</div>
+        <div class="tbl-cols">message_id (PK), conversation_id (FK), direction, sender_type, recipient_phone, body, msg_external_id (UNIQUE), metadata (JSONB), created_at</div>
+      </div>
+      <div class="db-table">
+        <div class="tbl-name">auctions</div>
+        <div class="tbl-cols">auction_id (UUID PK), conversation_id (FK), property_id, short_code, status, winner_agent_id, notified_agents (TEXT[]), expires_at, claimed_at, created_at</div>
+      </div>
+      <div class="db-table">
+        <div class="tbl-name">agents</div>
+        <div class="tbl-cols">agent_id (PK), name, whatsapp_number, easybroker_email, on_shift, shift_slot, is_active</div>
+      </div>
+      <div class="db-table">
+        <div class="tbl-name">agent_schedule</div>
+        <div class="tbl-cols">id (PK), schedule_date, shift, agent_id (FK), UNIQUE(date,shift,agent)</div>
+      </div>
+      <div class="db-table">
+        <div class="tbl-name">night_queue</div>
+        <div class="tbl-cols">id (PK), conversation_id (FK), source, lead_phone, lead_name, lead_email, property_id, temperature, bot_summary, processed, processed_at, queued_at</div>
+      </div>
+      <div class="db-table">
+        <div class="tbl-name">properties_cache</div>
+        <div class="tbl-cols">property_id (PK), payload (JSONB), fetched_at</div>
+      </div>
+      <div class="db-table">
+        <div class="tbl-name">listings</div>
+        <div class="tbl-cols">id (PK), listing_hash, title, price, price_numeric, currency, location, property_type, operation_type, bedrooms, bathrooms, area_m2, description, url, image_url, is_active, last_seen_at</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ CONTROLS ════════════════ -->
+<div class="controls">
+  <button onclick="expandAll()">Expandir todos</button>
+  <button onclick="collapseAll()">Colapsar todos</button>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  WF1 — INBOUND ROUTER                                       ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="wf-section" data-wf="wf1" id="wf1">
+  <div class="wf-header" onclick="toggleWF(this)">
+    <span class="wf-arrow">&#x25BC;</span>
+    <span class="wf-badge bg-wf1">WF1</span>
+    <span class="wf-title">Inbound Router (Evolution)</span>
+    <span class="wf-trigger-info">Webhook POST /evolution-webhook</span>
+  </div>
+  <div class="wf-body">
+    <div class="wf-desc">
+      <strong>Punto de entrada principal.</strong> Recibe todos los webhooks de Evolution API (WhatsApp), parsea el payload, deduplica mensajes, clasifica al remitente (lead vs agente) y enruta al workflow correspondiente. 6 salidas posibles: new_lead, agent_claim, ai_conversation, human_forward, pending, fallback.
+    </div>
+
+    <!-- Main pipeline -->
+    <div class="pipeline">
+      <div class="node t-webhook">
+        <div class="n-name">Evolution Webhook</div>
+        <div class="n-type"><span class="n-type-icon"></span>Webhook</div>
+        <div class="n-desc">POST /evolution-webhook. Recibe eventos MESSAGES_UPSERT de Evolution API.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Parse Evolution Payload</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">Extrae phone, text, pushName, messageId. Filtra: solo messages.upsert, fromMe=false, no grupos.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-if">
+        <div class="n-name">Valid Message?</div>
+        <div class="n-type"><span class="n-type-icon"></span>IF</div>
+        <div class="n-desc">_action == "process"</div>
+      </div>
+      <div class="conn"></div>
+
+      <!-- Branch: TRUE path continues, FALSE goes to End -->
+      <div class="branch-group">
+        <!-- TRUE -->
+        <div class="branch-row">
+          <span class="branch-label true">TRUE</span>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Dedup + Classify Sender</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">INSERT messages ON CONFLICT (dedup) + classify_sender($phone). Retorna is_agent, conv_mode, etc.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-code">
+            <div class="n-name">Classify &amp; Route</div>
+            <div class="n-type"><span class="n-type-icon"></span>Code</div>
+            <div class="n-desc">Determina ruta: TOMO-XXXX=agent_claim, sin conv=new_lead, mode=ai/human/pending, dedup check.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-switch">
+            <div class="n-name">Route Message</div>
+            <div class="n-type"><span class="n-type-icon"></span>Switch</div>
+            <div class="n-desc">route == ? (6 salidas)</div>
+          </div>
+          <div class="conn"></div>
+          <!-- Switch outputs -->
+          <div class="branch-group">
+            <div class="branch-row">
+              <span class="branch-label out">new_lead</span>
+              <div class="conn dashed"></div>
+              <div class="node t-exec-wf">
+                <div class="n-name">Call WF2: Lead Intake</div>
+                <div class="n-type"><span class="n-type-icon"></span>Execute Workflow</div>
+                <div class="n-desc">Pasa {phone, pushName, text, messageId} a WF2.</div>
+              </div>
+            </div>
+            <div class="branch-row">
+              <span class="branch-label out">agent_claim</span>
+              <div class="conn dashed"></div>
+              <div class="node t-exec-wf">
+                <div class="n-name">Call WF3b: Claim Handler</div>
+                <div class="n-type"><span class="n-type-icon"></span>Execute Workflow</div>
+                <div class="n-desc">Pasa {agent_id, agent_name, short_code, ...} a WF3b.</div>
+              </div>
+            </div>
+            <div class="branch-row">
+              <span class="branch-label out">ai_conversation</span>
+              <div class="conn dashed"></div>
+              <div class="node t-exec-wf">
+                <div class="n-name">Call WF4: AI Conversation</div>
+                <div class="n-type"><span class="n-type-icon"></span>Execute Workflow</div>
+                <div class="n-desc">Pasa {conversation_id, phone, text, current_property, ...} a WF4.</div>
+              </div>
+            </div>
+            <div class="branch-row">
+              <span class="branch-label out">human_fwd</span>
+              <div class="conn"></div>
+              <div class="node t-code">
+                <div class="n-name">Build Forward Message</div>
+                <div class="n-type"><span class="n-type-icon"></span>Code</div>
+                <div class="n-desc">Formatea "Mensaje de {pushName}: {text}" para el agente asignado.</div>
+              </div>
+              <div class="conn"></div>
+              <div class="node t-http">
+                <div class="n-name">Send Forward via Evolution</div>
+                <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+                <div class="n-desc">POST /message/sendText al agente asignado.</div>
+              </div>
+            </div>
+            <div class="branch-row">
+              <span class="branch-label out">pending</span>
+              <div class="conn"></div>
+              <div class="node t-http">
+                <div class="n-name">Send Pending Message</div>
+                <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+                <div class="n-desc">"Estamos buscando un asesor disponible para atenderte."</div>
+              </div>
+            </div>
+            <div class="branch-row">
+              <span class="branch-label fallback">fallback</span>
+              <div class="conn"></div>
+              <div class="node t-noop">
+                <div class="n-name">End (Fallback)</div>
+                <div class="n-type"><span class="n-type-icon"></span>NoOp</div>
+                <div class="n-desc">Sin accion.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- FALSE -->
+        <div class="branch-row">
+          <span class="branch-label false">FALSE</span>
+          <div class="conn"></div>
+          <div class="node t-noop">
+            <div class="n-name">End (Ignored)</div>
+            <div class="n-type"><span class="n-type-icon"></span>NoOp</div>
+            <div class="n-desc">Mensaje no valido (grupo, fromMe, tipo no soportado).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  WF2 — LEAD INTAKE                                          ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="wf-section" data-wf="wf2" id="wf2">
+  <div class="wf-header" onclick="toggleWF(this)">
+    <span class="wf-arrow">&#x25BC;</span>
+    <span class="wf-badge bg-wf2">WF2</span>
+    <span class="wf-title">Lead Intake (Evolution)</span>
+    <span class="wf-trigger-info">executeWorkflowTrigger (desde WF1)</span>
+  </div>
+  <div class="wf-body">
+    <div class="wf-desc">
+      <strong>Procesamiento de leads nuevos por WhatsApp.</strong> Extrae contexto de propiedad del mensaje, crea la conversacion en DB, busca propiedad en listings, y bifurca: de dia lanza subasta TOMO, de noche entra a cola + bot AI.
+      <br><strong>Input:</strong> {phone, pushName, text, messageId}
+    </div>
+
+    <div class="pipeline">
+      <div class="node t-trigger">
+        <div class="n-name">When Called by WF1</div>
+        <div class="n-type"><span class="n-type-icon"></span>Workflow Trigger</div>
+        <div class="n-desc">Input: phone, pushName, text, messageId.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Extract Property Context</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">Regex: EB-ID, URLs, keywords de busqueda. Extrae extracted_property_id, search_terms.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Create Conversation</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">INSERT conversations. mode=pending_assignment (dia) o night_queued (noche) via is_daytime().</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Link Message to Conversation</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">UPDATE messages SET conversation_id WHERE msg_external_id.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Find Matching Property</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">SELECT listings WHERE listing_hash, title ILIKE, location ILIKE. LIMIT 1.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Prepare Auction Data</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">Merge property + conv data. Prepara cache_payload, property_title, property_price.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-if">
+        <div class="n-name">Day or Night?</div>
+        <div class="n-type"><span class="n-type-icon"></span>IF</div>
+        <div class="n-desc">is_day == true</div>
+      </div>
+      <div class="conn"></div>
+
+      <div class="branch-group">
+        <!-- DAY (true) -->
+        <div class="branch-row">
+          <span class="branch-label true">DIA</span>
+          <div class="conn"></div>
+          <div class="parallel-group">
+            <div class="parallel-row">
+              <div class="node t-postgres">
+                <div class="n-name">Cache Property (Day)</div>
+                <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+                <div class="n-desc">INSERT properties_cache ON CONFLICT UPDATE.</div>
+              </div>
+            </div>
+            <div class="parallel-row">
+              <div class="node t-http">
+                <div class="n-name">Send Day Ack</div>
+                <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+                <div class="n-desc">"Gracias por tu interes. Estamos asignando un asesor..."</div>
+              </div>
+            </div>
+            <div class="parallel-row">
+              <div class="node t-exec-wf">
+                <div class="n-name">Call WF3a: Auction</div>
+                <div class="n-type"><span class="n-type-icon"></span>Execute Workflow</div>
+                <div class="n-desc">Lanza subasta TOMO con datos del lead + propiedad.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- NIGHT (false) -->
+        <div class="branch-row">
+          <span class="branch-label false">NOCHE</span>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Cache Property (Night)</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">INSERT properties_cache ON CONFLICT UPDATE.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Insert Night Queue</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">INSERT night_queue (conversation_id, source, lead_phone, ...).</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Switch to AI Mode</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">UPDATE conversations SET mode='ai'.</div>
+          </div>
+          <div class="conn dashed"></div>
+          <div class="node t-exec-wf">
+            <div class="n-name">Call WF4: AI Night Bot</div>
+            <div class="n-type"><span class="n-type-icon"></span>Execute Workflow</div>
+            <div class="n-desc">Inicia conversacion AI nocturna. Envia saludo con info de propiedad.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  WF3a — AUCTION LAUNCHER                                    ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="wf-section" data-wf="wf3a" id="wf3a">
+  <div class="wf-header" onclick="toggleWF(this)">
+    <span class="wf-arrow">&#x25BC;</span>
+    <span class="wf-badge bg-wf3a">WF3a</span>
+    <span class="wf-title">Auction Launcher (Evolution)</span>
+    <span class="wf-trigger-info">executeWorkflowTrigger (desde WF2/WF7/WF10)</span>
+  </div>
+  <div class="wf-body">
+    <div class="wf-desc">
+      <strong>Lanza la subasta TOMO.</strong> Crea el registro de subasta con short_code de 4 caracteres, busca agentes en turno (+ manager + asignado), formatea mensajes fan-out, envia a todos via Evolution, registra resultados.
+      <br><strong>Input:</strong> {conversation_id, lead_phone, lead_name, property_id, property_title, property_price, assigned_agent_id}
+    </div>
+
+    <div class="pipeline">
+      <div class="node t-trigger">
+        <div class="n-name">When Called by WF2</div>
+        <div class="n-type"><span class="n-type-icon"></span>Workflow Trigger</div>
+        <div class="n-desc">Input: conversation_id, lead_phone, lead_name, property_*, assigned_agent_id.</div>
+      </div>
+      <div class="conn"></div>
+
+      <div class="parallel-group">
+        <div class="parallel-row">
+          <div class="node t-postgres">
+            <div class="n-name">Create Auction Row</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">INSERT auctions. short_code=UPPER(SUBSTR(gen_random_uuid())), expires_at=NOW()+5min.</div>
+          </div>
+        </div>
+        <div class="parallel-row" style="align-items:flex-end;">
+          <div style="font-size:9px;color:#06B6D4;padding:2px 4px;">(trigger data pasa directo al Merge input 2)</div>
+        </div>
+      </div>
+
+      <div class="conn"></div>
+      <div class="node t-merge">
+        <div class="n-name">Merge Auction + Lead Context</div>
+        <div class="n-type"><span class="n-type-icon"></span>Merge</div>
+        <div class="n-desc">combineByPosition: auction_id, short_code + lead/property data.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Fetch Agent Pool</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">get_on_shift_agents() UNION agent_manager UNION assigned_agent. Retorna array de agentes.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Build Fan-out Messages</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">Para cada agente: "Nuevo lead para {property}\n{price}\nLead: {name}\nResponde TOMO-{code}"</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-http">
+        <div class="n-name">Send via Evolution</div>
+        <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+        <div class="n-desc">POST /message/sendText para cada agente. delay=1200ms.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Log Outbound Message</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">INSERT messages (direction=outbound, sender_type=system, purpose=auction_notify).</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Aggregate Results</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">Recopila lista de agent_ids notificados + conteo.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Record Notified Agents</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">UPDATE auctions SET notified_agents = {array}.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  WF3b — CLAIM HANDLER                                       ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="wf-section" data-wf="wf3b" id="wf3b">
+  <div class="wf-header" onclick="toggleWF(this)">
+    <span class="wf-arrow">&#x25BC;</span>
+    <span class="wf-badge bg-wf3b">WF3b</span>
+    <span class="wf-title">Claim Handler (Evolution)</span>
+    <span class="wf-trigger-info">executeWorkflowTrigger (desde WF1)</span>
+  </div>
+  <div class="wf-body">
+    <div class="wf-desc">
+      <strong>Procesa respuestas TOMO-XXXX de agentes.</strong> Claim atomico (first-reply-wins), asigna conversacion al ganador, notifica al ganador + lead + perdedores. Si llego tarde, envia mensaje "Too Late".
+      <br><strong>Input:</strong> {agent_id, agent_name, agent_phone, short_code, raw_message, messageId}
+    </div>
+
+    <div class="pipeline">
+      <div class="node t-trigger">
+        <div class="n-name">When Called by WF1</div>
+        <div class="n-type"><span class="n-type-icon"></span>Workflow Trigger</div>
+        <div class="n-desc">Input: agent_id, agent_name, agent_phone, short_code.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Atomic Claim (WHERE status=open)</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">UPDATE auctions SET status='claimed' WHERE short_code AND status='open' AND expires_at>NOW(). ATOMICO: first-reply-wins.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-if">
+        <div class="n-name">Did This Agent Win?</div>
+        <div class="n-type"><span class="n-type-icon"></span>IF</div>
+        <div class="n-desc">auction_id notEmpty</div>
+      </div>
+      <div class="conn"></div>
+
+      <div class="branch-group">
+        <!-- WIN (true) -->
+        <div class="branch-row">
+          <span class="branch-label true">WIN</span>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Assign Conversation to Winner</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">UPDATE conversations SET assigned_agent_id, mode='ai'.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-code">
+            <div class="n-name">Build Winner/Lead/Loser Messages</div>
+            <div class="n-type"><span class="n-type-icon"></span>Code</div>
+            <div class="n-desc">3 tipos: winner_confirmation, lead_greeting, loser_notification (por cada agente notificado).</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-if">
+            <div class="n-name">Needs Phone Lookup?</div>
+            <div class="n-type"><span class="n-type-icon"></span>IF</div>
+            <div class="n-desc">purpose == "loser_notification"</div>
+          </div>
+          <div class="conn"></div>
+          <div class="branch-group">
+            <div class="branch-row">
+              <span class="branch-label true">LOSER</span>
+              <div class="conn"></div>
+              <div class="node t-postgres">
+                <div class="n-name">Lookup Loser Agent Phone</div>
+                <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+                <div class="n-desc">SELECT whatsapp_number FROM agents WHERE agent_id.</div>
+              </div>
+              <div class="conn"></div>
+              <div class="node t-set">
+                <div class="n-name">Set Loser Payload</div>
+                <div class="n-type"><span class="n-type-icon"></span>Set</div>
+                <div class="n-desc">number=whatsapp_number, text, purpose=loser_notification.</div>
+              </div>
+            </div>
+            <div class="branch-row">
+              <span class="branch-label false">OTHER</span>
+              <div style="font-size:9px;color:var(--text-light);padding:0 8px;">(winner/lead messages pasan directo)</div>
+            </div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-merge">
+            <div class="n-name">Merge All Outbound</div>
+            <div class="n-type"><span class="n-type-icon"></span>Merge</div>
+            <div class="n-desc">combineAll: winner + lead + losers.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-http">
+            <div class="n-name">Send All via Evolution</div>
+            <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+            <div class="n-desc">POST /message/sendText para cada destinatario.</div>
+          </div>
+        </div>
+        <!-- LOSE (false) -->
+        <div class="branch-row">
+          <span class="branch-label false">LATE</span>
+          <div class="conn"></div>
+          <div class="node t-code">
+            <div class="n-name">Build 'Too Late' Message</div>
+            <div class="n-type"><span class="n-type-icon"></span>Code</div>
+            <div class="n-desc">"No pude asignarte el lead. Otro asesor lo tomo primero o expiro."</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-http">
+            <div class="n-name">Send 'Too Late' via Evolution</div>
+            <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+            <div class="n-desc">POST /message/sendText al agente que llego tarde.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  WF3c — EXPIRY SWEEPER                                      ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="wf-section" data-wf="wf3c" id="wf3c">
+  <div class="wf-header" onclick="toggleWF(this)">
+    <span class="wf-arrow">&#x25BC;</span>
+    <span class="wf-badge bg-wf3c">WF3c</span>
+    <span class="wf-title">Auction Expiry Sweeper (Evolution)</span>
+    <span class="wf-trigger-info">Schedule: cada 1 minuto</span>
+  </div>
+  <div class="wf-body">
+    <div class="wf-desc">
+      <strong>Limpieza de subastas expiradas.</strong> Cada minuto busca subastas abiertas cuyo tiempo expiro (5 min), las marca como 'expired', y alerta al manager para asignacion manual.
+    </div>
+
+    <div class="pipeline">
+      <div class="node t-schedule">
+        <div class="n-name">Every Minute</div>
+        <div class="n-type"><span class="n-type-icon"></span>Schedule Trigger</div>
+        <div class="n-desc">Intervalo: cada 1 minuto.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Expire Unclaimed Auctions</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">UPDATE auctions SET status='expired' WHERE status='open' AND expires_at &lt;= NOW(). JOIN conversations.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-if">
+        <div class="n-name">Any Expired?</div>
+        <div class="n-type"><span class="n-type-icon"></span>IF</div>
+        <div class="n-desc">auction_id notEmpty</div>
+      </div>
+      <div class="conn"></div>
+      <div class="branch-group">
+        <div class="branch-row">
+          <span class="branch-label true">TRUE</span>
+          <div class="conn"></div>
+          <div class="node t-http">
+            <div class="n-name">Escalate to Manager via Evolution</div>
+            <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+            <div class="n-desc">"Lead sin asignar. Propiedad: {id}. Ningun asesor respondio en 5 min. Asignacion manual requerida."</div>
+          </div>
+        </div>
+        <div class="branch-row">
+          <span class="branch-label false">FALSE</span>
+          <div style="font-size:10px;color:var(--text-light);padding:0 8px;">No hay subastas expiradas. Fin.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  WF4 — AI CONVERSATION                                      ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="wf-section" data-wf="wf4" id="wf4">
+  <div class="wf-header" onclick="toggleWF(this)">
+    <span class="wf-arrow">&#x25BC;</span>
+    <span class="wf-badge bg-wf4">WF4</span>
+    <span class="wf-title">AI Conversation (Evolution + OpenRouter)</span>
+    <span class="wf-trigger-info">executeWorkflowTrigger (desde WF1/WF2)</span>
+  </div>
+  <div class="wf-body">
+    <div class="wf-desc">
+      <strong>Conversacion con inteligencia artificial.</strong> Construye prompt con datos de propiedad + historial, llama a OpenRouter LLM, envia respuesta, detecta [HANDOFF] para escalacion humana.
+      <br><strong>Input:</strong> {conversation_id, phone, pushName, text, messageId, current_property, assigned_agent_id}
+    </div>
+
+    <div class="pipeline">
+      <div class="node t-trigger">
+        <div class="n-name">When Called by WF1</div>
+        <div class="n-type"><span class="n-type-icon"></span>Workflow Trigger</div>
+        <div class="n-desc">Input: conversation_id, phone, text, current_property, assigned_agent_id.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Update Conversation Timestamp</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">UPDATE conversations SET last_message_at + UPDATE messages SET conversation_id.</div>
+      </div>
+      <div class="conn"></div>
+
+      <div class="parallel-group">
+        <div class="parallel-row">
+          <div class="node t-postgres">
+            <div class="n-name">Fetch Property Data</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">JOIN properties_cache + listings. Retorna titulo, precio, ubicacion, recamaras, etc.</div>
+          </div>
+        </div>
+        <div class="parallel-row">
+          <div class="node t-postgres">
+            <div class="n-name">Fetch Conversation History</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">SELECT last 20 messages WHERE conversation_id ORDER BY created_at DESC.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Build LLM Prompt</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">System prompt bilingue con datos de propiedad + reglas ([HANDOFF], &lt;300 chars). Historial como mensajes OpenAI.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-http">
+        <div class="n-name">Call OpenRouter LLM</div>
+        <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+        <div class="n-desc">POST openrouter.ai/api/v1/chat/completions. model=$env.OPENROUTER_MODEL. timeout=30s.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Parse LLM Response</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">Extrae choices[0].message.content. Detecta prefijo [HANDOFF]. Limpia texto.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-http">
+        <div class="n-name">Send AI Response via Evolution</div>
+        <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+        <div class="n-desc">POST /message/sendText al lead. delay=2000ms.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Log AI Response</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">INSERT messages (sender_type='ai', metadata={purpose:'ai_response', needs_handoff}).</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-if">
+        <div class="n-name">Needs Handoff?</div>
+        <div class="n-type"><span class="n-type-icon"></span>IF</div>
+        <div class="n-desc">needs_handoff == true</div>
+      </div>
+      <div class="conn"></div>
+      <div class="branch-group">
+        <div class="branch-row">
+          <span class="branch-label true">HANDOFF</span>
+          <div class="conn dashed"></div>
+          <div class="node t-exec-wf">
+            <div class="n-name">Call WF5: Human Handoff</div>
+            <div class="n-type"><span class="n-type-icon"></span>Execute Workflow</div>
+            <div class="n-desc">Escala a agente humano via WF5.</div>
+          </div>
+        </div>
+        <div class="branch-row">
+          <span class="branch-label false">NO</span>
+          <div class="conn"></div>
+          <div class="node t-noop">
+            <div class="n-name">End (AI handled)</div>
+            <div class="n-type"><span class="n-type-icon"></span>NoOp</div>
+            <div class="n-desc">AI manejo la respuesta. Fin.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  WF5 — HUMAN HANDOFF                                        ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="wf-section" data-wf="wf5" id="wf5">
+  <div class="wf-header" onclick="toggleWF(this)">
+    <span class="wf-arrow">&#x25BC;</span>
+    <span class="wf-badge bg-wf5">WF5</span>
+    <span class="wf-title">Human Handoff (Evolution)</span>
+    <span class="wf-trigger-info">executeWorkflowTrigger (desde WF4)</span>
+  </div>
+  <div class="wf-body">
+    <div class="wf-desc">
+      <strong>Escalacion a agente humano.</strong> Cambia modo a 'human', busca agente asignado, construye resumen de conversacion, notifica al agente con contexto completo, avisa al lead que se conecta con humano.
+      <br><strong>Input:</strong> {conversation_id, phone, assigned_agent_id, current_property}
+    </div>
+
+    <div class="pipeline">
+      <div class="node t-trigger">
+        <div class="n-name">When Called by WF4</div>
+        <div class="n-type"><span class="n-type-icon"></span>Workflow Trigger</div>
+        <div class="n-desc">Input: conversation_id, phone, assigned_agent_id, current_property.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Switch to Human Mode</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">UPDATE conversations SET mode='human'. RETURNING all conv data.</div>
+      </div>
+      <div class="conn"></div>
+
+      <div class="parallel-group">
+        <div class="parallel-row">
+          <div class="node t-postgres">
+            <div class="n-name">Fetch Agent Details</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">SELECT agent_id, name, whatsapp_number, easybroker_email FROM agents.</div>
+          </div>
+        </div>
+        <div class="parallel-row">
+          <div class="node t-postgres">
+            <div class="n-name">Fetch Recent Messages</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">SELECT last 10 messages para resumen de conversacion.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Build Handoff Messages</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">2 mensajes: agente recibe alerta + resumen. Lead recibe "Te conecto con {agent_name}".</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-http">
+        <div class="n-name">Send Handoff Messages via Evolution</div>
+        <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+        <div class="n-desc">POST /message/sendText para agente y lead. delay=1500ms.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Log Handoff Messages</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">INSERT messages (sender_type='system', metadata={purpose:'handoff'}).</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  WF6 — GUARD SCHEDULE SYNC                                  ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="wf-section" data-wf="wf6" id="wf6">
+  <div class="wf-header" onclick="toggleWF(this)">
+    <span class="wf-arrow">&#x25BC;</span>
+    <span class="wf-badge bg-wf6">WF6</span>
+    <span class="wf-title">Guard Schedule Sync (Google Sheets)</span>
+    <span class="wf-trigger-info">Cron: 0 5,19 * * * (medianoche + 2PM CDMX)</span>
+  </div>
+  <div class="wf-body">
+    <div class="wf-desc">
+      <strong>Sincronizacion de guardias.</strong> Lee Google Sheets con el calendario de agentes, parsea la fecha de hoy, mapea nombres a agent_ids (NAME_TO_ID: Lupita, Paty, Yol, Gina, Carol, Moni), limpia agenda anterior, inserta nuevas entradas, activa turno actual.
+    </div>
+
+    <div class="pipeline">
+      <div class="node t-schedule">
+        <div class="n-name">Schedule (Midnight + 2PM CDMX)</div>
+        <div class="n-type"><span class="n-type-icon"></span>Schedule Trigger</div>
+        <div class="n-desc">Cron: 0 5,19 * * * (UTC). Equivale a medianoche y 2PM hora CDMX.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-sheets">
+        <div class="n-name">Read Guard Schedule</div>
+        <div class="n-type"><span class="n-type-icon"></span>Google Sheets</div>
+        <div class="n-desc">Lee hoja "Guardias" con columnas: Fecha, Manana 1, Manana 2, Tarde 1, Tarde 2.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Parse Today Schedule</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">NAME_TO_ID mapping. Parsea fechas (YYYY-MM-DD, DD/MM/YYYY, serial). Extrae morning/afternoon agents.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-if">
+        <div class="n-name">Has Schedule?</div>
+        <div class="n-type"><span class="n-type-icon"></span>IF</div>
+        <div class="n-desc">_action == "sync"</div>
+      </div>
+      <div class="conn"></div>
+
+      <div class="branch-group">
+        <div class="branch-row">
+          <span class="branch-label true">SYNC</span>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Clear Today Schedule</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">DELETE agent_schedule WHERE date. UPDATE agents SET on_shift=false (excepto manager).</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-code">
+            <div class="n-name">Split Entries</div>
+            <div class="n-type"><span class="n-type-icon"></span>Code</div>
+            <div class="n-desc">Split array de schedule entries en items individuales.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Insert Schedule Entry</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">INSERT agent_schedule (date, shift, agent_id) ON CONFLICT DO NOTHING.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Activate Current Shift Agents</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">UPDATE agents SET on_shift=true WHERE current_shift() matches schedule.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-code">
+            <div class="n-name">Summary</div>
+            <div class="n-type"><span class="n-type-icon"></span>Code</div>
+            <div class="n-desc">Resumen: fecha, total agendados, agentes activados, status.</div>
+          </div>
+        </div>
+        <div class="branch-row">
+          <span class="branch-label false">NO HAY</span>
+          <div class="conn"></div>
+          <div class="node t-noop">
+            <div class="n-name">No Schedule Found</div>
+            <div class="n-type"><span class="n-type-icon"></span>NoOp</div>
+            <div class="n-desc">No se encontro agenda para hoy en Google Sheets.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  WF7 — MORNING REPORT & NIGHT QUEUE PROCESSING              ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="wf-section" data-wf="wf7" id="wf7">
+  <div class="wf-header" onclick="toggleWF(this)">
+    <span class="wf-arrow">&#x25BC;</span>
+    <span class="wf-badge bg-wf7">WF7</span>
+    <span class="wf-title">Morning Report &amp; Night Queue Processing</span>
+    <span class="wf-trigger-info">Cron: 8:00 AM + 8:05 AM CDMX</span>
+  </div>
+  <div class="wf-body">
+    <div class="wf-desc">
+      <strong>Workflow con 2 triggers independientes.</strong>
+      <br><strong>Parte A (8:00 AM):</strong> Genera reporte matutino con estadisticas nocturnas y lo envia al manager.
+      <br><strong>Parte B (8:05 AM):</strong> Procesa cada lead de la cola nocturna lanzando subasta TOMO via WF3a.
+    </div>
+
+    <!-- Part A - Report -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#EAB308;margin-bottom:10px;padding:6px 12px;background:rgba(234,179,8,0.06);border-radius:6px;display:inline-block;">PARTE A &mdash; Reporte Matutino (8:00 AM)</div>
+      <div class="pipeline">
+        <div class="node t-schedule">
+          <div class="n-name">Trigger 8:00 AM CDMX (Report)</div>
+          <div class="n-type"><span class="n-type-icon"></span>Schedule Trigger</div>
+          <div class="n-desc">Cron: 0 13 * * * (13:00 UTC = 8:00 AM CDMX CDT).</div>
+        </div>
+        <div class="conn"></div>
+
+        <div class="parallel-group">
+          <div class="parallel-row">
+            <div class="node t-postgres">
+              <div class="n-name">Fetch Pending Night Queue</div>
+              <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+              <div class="n-desc">SELECT night_queue WHERE processed=FALSE. Incluye temperature, bot_summary.</div>
+            </div>
+          </div>
+          <div class="parallel-row">
+            <div class="node t-postgres">
+              <div class="n-name">Fetch Night Stats</div>
+              <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+              <div class="n-desc">COUNT conversations by source WHERE arrived_during='night' AND today.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="conn"></div>
+        <div class="node t-code">
+          <div class="n-name">Build Morning Report</div>
+          <div class="n-type"><span class="n-type-icon"></span>Code</div>
+          <div class="n-desc">REPORTE MATUTINO: header, desglose por fuente (I24/EB/WA), detalle por lead (nombre, tel, propiedad, temperatura, resumen bot).</div>
+        </div>
+        <div class="conn"></div>
+        <div class="node t-postgres">
+          <div class="n-name">Get Manager Phone</div>
+          <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+          <div class="n-desc">SELECT whatsapp_number FROM agents WHERE agent_id='agent_manager'.</div>
+        </div>
+        <div class="conn"></div>
+        <div class="node t-http">
+          <div class="n-name">Send Report to Manager</div>
+          <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+          <div class="n-desc">POST /message/sendText con reporte completo al manager.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Part B - Process Queue -->
+    <div>
+      <div style="font-size:13px;font-weight:700;color:#EAB308;margin-bottom:10px;padding:6px 12px;background:rgba(234,179,8,0.06);border-radius:6px;display:inline-block;">PARTE B &mdash; Procesar Cola Nocturna (8:05 AM)</div>
+      <div class="pipeline">
+        <div class="node t-schedule">
+          <div class="n-name">Trigger 8:05 AM CDMX (Process Queue)</div>
+          <div class="n-type"><span class="n-type-icon"></span>Schedule Trigger</div>
+          <div class="n-desc">Cron: 5 13 * * * (13:05 UTC = 8:05 AM CDMX CDT).</div>
+        </div>
+        <div class="conn"></div>
+        <div class="node t-postgres">
+          <div class="n-name">Fetch Queue for Processing</div>
+          <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+          <div class="n-desc">SELECT night_queue + conversations JOIN WHERE processed=FALSE ORDER BY queued_at.</div>
+        </div>
+        <div class="conn"></div>
+        <div class="node t-if">
+          <div class="n-name">Has Pending Leads?</div>
+          <div class="n-type"><span class="n-type-icon"></span>IF</div>
+          <div class="n-desc">input.length &gt; 0</div>
+        </div>
+        <div class="conn"></div>
+
+        <div class="branch-group">
+          <!-- Has leads -->
+          <div class="branch-row">
+            <span class="branch-label true">HAY</span>
+            <div class="conn"></div>
+            <div class="node t-code">
+              <div class="n-name">Add Count to Items</div>
+              <div class="n-type"><span class="n-type-icon"></span>Code</div>
+              <div class="n-desc">Agrega _total_queue_count a cada item antes del batch.</div>
+            </div>
+            <div class="conn"></div>
+            <div class="node t-split">
+              <div class="n-name">Process One by One</div>
+              <div class="n-type"><span class="n-type-icon"></span>SplitInBatches</div>
+              <div class="n-desc">batchSize=1. Procesa secuencialmente.</div>
+            </div>
+            <div class="conn"></div>
+
+            <div class="branch-group">
+              <!-- Loop body -->
+              <div class="branch-row">
+                <span class="branch-label out">BATCH</span>
+                <div class="conn"></div>
+                <div class="node t-postgres">
+                  <div class="n-name">Update Conversation Mode</div>
+                  <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+                  <div class="n-desc">SET mode='pending_assignment' WHERE mode='night_queued'.</div>
+                </div>
+                <div class="conn dashed"></div>
+                <div class="node t-exec-wf">
+                  <div class="n-name">Call WF3a: Auction Launcher</div>
+                  <div class="n-type"><span class="n-type-icon"></span>Execute Workflow</div>
+                  <div class="n-desc">Lanza subasta TOMO para este lead.</div>
+                </div>
+                <div class="conn"></div>
+                <div class="node t-postgres">
+                  <div class="n-name">Mark Queue Item Processed</div>
+                  <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+                  <div class="n-desc">SET processed=TRUE, processed_at=NOW().</div>
+                </div>
+                <div style="font-size:9px;color:#8B5CF6;padding:2px 6px;border:1px dashed #8B5CF6;border-radius:4px;margin-left:6px;display:flex;align-items:center;">LOOP &rarr; Process One by One</div>
+              </div>
+              <!-- Done branch -->
+              <div class="branch-row">
+                <span class="branch-label done">DONE</span>
+                <div class="conn"></div>
+                <div class="node t-code">
+                  <div class="n-name">Build Confirmation Message</div>
+                  <div class="n-type"><span class="n-type-icon"></span>Code</div>
+                  <div class="n-desc">"Se procesaron X leads de la cola nocturna."</div>
+                </div>
+                <div class="conn"></div>
+                <div class="node t-postgres">
+                  <div class="n-name">Get Manager Phone (B)</div>
+                  <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+                  <div class="n-desc">SELECT whatsapp_number FROM agents WHERE agent_manager.</div>
+                </div>
+                <div class="conn"></div>
+                <div class="node t-http">
+                  <div class="n-name">Send Confirmation to Manager</div>
+                  <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+                  <div class="n-desc">Notifica al manager que se procesaron todos los leads nocturnos.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- No leads -->
+          <div class="branch-row">
+            <span class="branch-label false">VACIO</span>
+            <div class="conn"></div>
+            <div class="node t-noop">
+              <div class="n-name">No Pending Leads (Skip)</div>
+              <div class="n-type"><span class="n-type-icon"></span>NoOp</div>
+              <div class="n-desc">Cola vacia. Nada que procesar.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗ -->
+<!-- ║  WF10 — SCRAPER LEAD INTAKE                                 ║ -->
+<!-- ╚══════════════════════════════════════════════════════════════╝ -->
+<div class="wf-section" data-wf="wf10" id="wf10">
+  <div class="wf-header" onclick="toggleWF(this)">
+    <span class="wf-arrow">&#x25BC;</span>
+    <span class="wf-badge bg-wf10">WF10</span>
+    <span class="wf-title">Scraper Lead Intake</span>
+    <span class="wf-trigger-info">Webhook POST /scraper-leads</span>
+  </div>
+  <div class="wf-body">
+    <div class="wf-desc">
+      <strong>Ingesta de leads del scraper de Inmuebles24.</strong> Recibe array JSON de leads, normaliza datos, detecta leads recurrentes (misma propiedad vs nueva), enruta a subasta TOMO (dia), cola nocturna (noche), o notificacion directa al agente (recurrente).
+    </div>
+
+    <div class="pipeline">
+      <div class="node t-webhook">
+        <div class="n-name">Scraper Webhook</div>
+        <div class="n-type"><span class="n-type-icon"></span>Webhook</div>
+        <div class="n-desc">POST /scraper-leads. Recibe array JSON del scraper Python de Inmuebles24.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Split &amp; Normalize Leads</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">Split array. Normaliza: phone (solo digitos), email, name, listing_id, property_title, price, source.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-postgres">
+        <div class="n-name">Check Returning Lead + Time</div>
+        <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+        <div class="n-desc">find_returning_lead($phone, $email, $listing_id) + is_daytime() + current_shift(). Retorna: same_property, existing_conv_id, is_day.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-code">
+        <div class="n-name">Route Decision</div>
+        <div class="n-type"><span class="n-type-icon"></span>Code</div>
+        <div class="n-desc">Logica: no phone=skip, returning+same=returning_same, day=day_auction, night=night_queue.</div>
+      </div>
+      <div class="conn"></div>
+      <div class="node t-switch">
+        <div class="n-name">Route</div>
+        <div class="n-type"><span class="n-type-icon"></span>Switch</div>
+        <div class="n-desc">route == ? (3 salidas + fallback)</div>
+      </div>
+      <div class="conn"></div>
+
+      <div class="branch-group">
+        <!-- returning_same -->
+        <div class="branch-row">
+          <span class="branch-label out" style="font-size:8px;">returning</span>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Update Existing Conversation</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">UPDATE conversations SET last_message_at=NOW() WHERE conversation_id.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-code">
+            <div class="n-name">Prepare Agent Notification</div>
+            <div class="n-type"><span class="n-type-icon"></span>Code</div>
+            <div class="n-desc">"Lead recurrente: {name} volvio a preguntar por {property}."</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Get Agent Phone</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">SELECT whatsapp_number FROM agents WHERE agent_id.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-http">
+            <div class="n-name">Notify Agent (Returning)</div>
+            <div class="n-type"><span class="n-type-icon"></span>HTTP Request</div>
+            <div class="n-desc">POST /message/sendText al agente asignado.</div>
+          </div>
+        </div>
+
+        <!-- day_auction -->
+        <div class="branch-row">
+          <span class="branch-label out" style="font-size:8px;">day_auction</span>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Create Day Conversation</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">INSERT conversations (mode='pending_assignment', arrived_during='day', source).</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-code">
+            <div class="n-name">Prepare Auction Data</div>
+            <div class="n-type"><span class="n-type-icon"></span>Code</div>
+            <div class="n-desc">Merge conversation data + scraper property data + cache payload.</div>
+          </div>
+          <div class="conn"></div>
+          <div class="parallel-group">
+            <div class="parallel-row">
+              <div class="node t-postgres">
+                <div class="n-name">Cache Property</div>
+                <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+                <div class="n-desc">INSERT properties_cache ON CONFLICT UPDATE.</div>
+              </div>
+            </div>
+            <div class="parallel-row">
+              <div class="node t-exec-wf">
+                <div class="n-name">Call WF3a: TOMO Auction</div>
+                <div class="n-type"><span class="n-type-icon"></span>Execute Workflow</div>
+                <div class="n-desc">Lanza subasta TOMO para el lead del scraper.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- night_queue -->
+        <div class="branch-row">
+          <span class="branch-label out" style="font-size:8px;">night_queue</span>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Create Night Conversation</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">INSERT conversations (mode='night_queued', arrived_during='night').</div>
+          </div>
+          <div class="conn"></div>
+          <div class="node t-postgres">
+            <div class="n-name">Insert Night Queue</div>
+            <div class="n-type"><span class="n-type-icon"></span>Postgres</div>
+            <div class="n-desc">INSERT night_queue. Se procesara a las 8:05 AM por WF7.</div>
+          </div>
+        </div>
+
+        <!-- fallback -->
+        <div class="branch-row">
+          <span class="branch-label fallback">fallback</span>
+          <div class="conn"></div>
+          <div class="node t-noop">
+            <div class="n-name">End (Skip/Fallback)</div>
+            <div class="n-type"><span class="n-type-icon"></span>NoOp</div>
+            <div class="n-desc">Lead sin telefono o ruta desconocida.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<footer>
+  <strong>Blueprint de Workflows n8n v5</strong> &mdash; BYG Real Estate<br>
+  10 workflows &middot; n8n + Evolution API + Supabase/Postgres + OpenRouter LLM + Google Sheets<br>
+  <span style="opacity:0.6;">Documento generado: Mayo 2026</span>
+</footer>
+
+<script>
+// Toggle individual workflow section
+function toggleWF(headerEl) {
+  const section = headerEl.parentElement;
+  section.classList.toggle('collapsed');
+}
+
+// Expand all
+function expandAll() {
+  document.querySelectorAll('.wf-section').forEach(s => s.classList.remove('collapsed'));
+}
+
+// Collapse all
+function collapseAll() {
+  document.querySelectorAll('.wf-section').forEach(s => s.classList.add('collapsed'));
+}
+
+// Smooth scroll for nav links
+document.querySelectorAll('.nav-bar a').forEach(link => {
+  link.addEventListener('click', function(e) {
+    e.preventDefault();
+    const target = document.querySelector(this.getAttribute('href'));
+    if (target) {
+      // Expand if collapsed
+      if (target.classList.contains('collapsed')) {
+        target.classList.remove('collapsed');
+      }
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+// Overview nodes click to scroll
+document.querySelectorAll('.ov-node').forEach(node => {
+  node.addEventListener('click', function(e) {
+    e.preventDefault();
+    const target = document.querySelector(this.getAttribute('href'));
+    if (target) {
+      if (target.classList.contains('collapsed')) {
+        target.classList.remove('collapsed');
+      }
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,514 @@
+{
+  "name": "WF7 - Morning Report & Night Queue Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 13 * * *"
+            }
+          ]
+        }
+      },
+      "id": "wf7-0001-4000-8000-000000000001",
+      "name": "Trigger 8:00 AM CDMX (Report)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 200],
+      "notes": "Fires at 8:00 AM CDMX = 13:00 UTC (CDT, Mar-Nov).\nAdjust for CST (Nov-Mar): change to 0 14 * * *\nGenerates the morning report and sends it to the manager."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "5 13 * * *"
+            }
+          ]
+        }
+      },
+      "id": "wf7-0002-4000-8000-000000000002",
+      "name": "Trigger 8:05 AM CDMX (Process Queue)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 700],
+      "notes": "Fires at 8:05 AM CDMX = 13:05 UTC (CDT, Mar-Nov).\nAdjust for CST (Nov-Mar): change to 5 14 * * *\nProcesses each pending night_queue lead via TOMO auction."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  nq.id,\n  nq.conversation_id,\n  nq.source,\n  nq.lead_phone,\n  nq.lead_name,\n  nq.property_id,\n  nq.lead_email,\n  nq.temperature,\n  nq.bot_summary,\n  nq.queued_at\nFROM night_queue nq\nWHERE nq.processed = FALSE\nORDER BY nq.queued_at;",
+        "options": {}
+      },
+      "id": "wf7-0003-4000-8000-000000000003",
+      "name": "Fetch Pending Night Queue",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 200],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  COUNT(*) AS total_night_conversations,\n  COUNT(*) FILTER (WHERE source = 'inmuebles24') AS from_inmuebles24,\n  COUNT(*) FILTER (WHERE source = 'easybroker') AS from_easybroker,\n  COUNT(*) FILTER (WHERE source = 'whatsapp_direct') AS from_whatsapp_direct\nFROM conversations\nWHERE arrived_during = 'night'\n  AND created_at >= (NOW() AT TIME ZONE 'America/Mexico_City')::date;",
+        "options": {}
+      },
+      "id": "wf7-0004-4000-8000-000000000004",
+      "name": "Fetch Night Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 400],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the morning report message for the manager.\n// Inputs: night_queue leads + night conversation stats.\n\nconst queueItems = $('Fetch Pending Night Queue').all().map(i => i.json);\nconst stats = $('Fetch Night Stats').first().json;\n\nconst totalQueued = queueItems.length;\nconst totalConvs = parseInt(stats.total_night_conversations || 0);\nconst fromInmuebles = parseInt(stats.from_inmuebles24 || 0);\nconst fromEasyBroker = parseInt(stats.from_easybroker || 0);\nconst fromWhatsApp = parseInt(stats.from_whatsapp_direct || 0);\n\n// Build header\nconst lines = [];\nlines.push('===========================');\nlines.push('REPORTE MATUTINO');\nlines.push(new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));\nlines.push('===========================');\nlines.push('');\n\n// Night stats summary\nlines.push(`Conversaciones nocturnas: ${totalConvs}`);\nlines.push(`Leads en cola pendiente: ${totalQueued}`);\nlines.push('');\n\nif (totalConvs > 0 || totalQueued > 0) {\n  lines.push('--- Desglose por fuente ---');\n  if (fromInmuebles > 0) lines.push(`  Inmuebles24: ${fromInmuebles}`);\n  if (fromEasyBroker > 0) lines.push(`  EasyBroker: ${fromEasyBroker}`);\n  if (fromWhatsApp > 0) lines.push(`  WhatsApp directo: ${fromWhatsApp}`);\n  lines.push('');\n}\n\n// Detail each queued lead\nif (totalQueued > 0) {\n  lines.push('--- Leads en cola ---');\n  lines.push('');\n  queueItems.forEach((lead, idx) => {\n    lines.push(`${idx + 1}. ${lead.lead_name || 'Sin nombre'}`);\n    lines.push(`   Tel: ${lead.lead_phone}`);\n    if (lead.property_id) lines.push(`   Propiedad: ${lead.property_id}`);\n    if (lead.temperature) lines.push(`   Temperatura: ${lead.temperature.toUpperCase()}`);\n    if (lead.source) lines.push(`   Fuente: ${lead.source}`);\n    if (lead.bot_summary) {\n      lines.push(`   Resumen bot: ${lead.bot_summary}`);\n    }\n    lines.push('');\n  });\n} else {\n  lines.push('No hay leads pendientes en la cola nocturna.');\n  lines.push('');\n}\n\nlines.push('El proceso TOMO automatico se ejecutara a las 8:05 AM.');\n\nconst reportText = lines.join('\\n');\n\nreturn [{\n  json: {\n    report_text: reportText,\n    total_queued: totalQueued,\n    total_conversations: totalConvs\n  }\n}];"
+      },
+      "id": "wf7-0005-4000-8000-000000000005",
+      "name": "Build Morning Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT whatsapp_number FROM agents WHERE agent_id = 'agent_manager' LIMIT 1;",
+        "options": {}
+      },
+      "id": "wf7-0006-4000-8000-000000000006",
+      "name": "Get Manager Phone",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [960, 300],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($('Build Morning Report').first().json.report_text) }},\n  \"delay\": 1200\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "wf7-0007-4000-8000-000000000007",
+      "name": "Send Report to Manager",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 300],
+      "continueOnFail": true,
+      "notes": "Sends the formatted morning report to the manager via Evolution API (WhatsApp)."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  nq.id AS queue_id,\n  nq.conversation_id,\n  nq.source,\n  nq.lead_phone,\n  nq.lead_name,\n  nq.property_id,\n  nq.lead_email,\n  nq.temperature,\n  nq.bot_summary,\n  nq.queued_at,\n  c.current_property AS property_title\nFROM night_queue nq\nLEFT JOIN conversations c ON c.conversation_id = nq.conversation_id\nWHERE nq.processed = FALSE\nORDER BY nq.queued_at;",
+        "options": {}
+      },
+      "id": "wf7-0008-4000-8000-000000000008",
+      "name": "Fetch Queue for Processing",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 700],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "cond-has-items",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf7-0009-4000-8000-000000000009",
+      "name": "Has Pending Leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [680, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store total count before splitting into batches.\nconst items = $input.all();\nreturn items.map(item => ({\n  json: {\n    ...item.json,\n    _total_queue_count: items.length\n  }\n}));"
+      },
+      "id": "wf7-0010-4000-8000-000000000010",
+      "name": "Add Count to Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "wf7-0011-4000-8000-000000000011",
+      "name": "Process One by One",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1120, 600]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE conversations\nSET mode = 'pending_assignment'\nWHERE conversation_id = $1::uuid\n  AND mode = 'night_queued'\nRETURNING conversation_id, mode;",
+        "options": {
+          "queryReplacement": "={{ $json.conversation_id }}"
+        }
+      },
+      "id": "wf7-0012-4000-8000-000000000012",
+      "name": "Update Conversation Mode",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1340, 600],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "={{ $env.WF3A_WORKFLOW_ID }}",
+        "options": {}
+      },
+      "id": "wf7-0013-4000-8000-000000000013",
+      "name": "Call WF3a: Auction Launcher",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1560, 600],
+      "notes": "Calls WF3a (Auction Launcher) with the lead data.\nWF3a expects: conversation_id, lead_phone, lead_name, property_id, property_title, property_price, assigned_agent_id"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE night_queue\nSET processed = TRUE,\n    processed_at = NOW()\nWHERE id = $1\nRETURNING id, conversation_id, processed_at;",
+        "options": {
+          "queryReplacement": "={{ $('Process One by One').first().json.queue_id }}"
+        }
+      },
+      "id": "wf7-0014-4000-8000-000000000014",
+      "name": "Mark Queue Item Processed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1780, 600],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Count how many leads were processed.\n// This node runs after the SplitInBatches loop completes (done branch).\nconst allItems = $('Fetch Queue for Processing').all();\nconst total = allItems.length;\n\nreturn [{\n  json: {\n    total_processed: total,\n    message: `Se procesaron ${total} leads de la cola nocturna. Se lanzo subasta TOMO para cada uno.`\n  }\n}];"
+      },
+      "id": "wf7-0015-4000-8000-000000000015",
+      "name": "Build Confirmation Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 900]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT whatsapp_number FROM agents WHERE agent_id = 'agent_manager' LIMIT 1;",
+        "options": {}
+      },
+      "id": "wf7-0016-4000-8000-000000000016",
+      "name": "Get Manager Phone (B)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1560, 900],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($('Build Confirmation Message').first().json.message) }},\n  \"delay\": 1200\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "wf7-0017-4000-8000-000000000017",
+      "name": "Send Confirmation to Manager",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 900],
+      "continueOnFail": true,
+      "notes": "Notifies manager that all night queue leads have been processed via TOMO auctions."
+    },
+    {
+      "parameters": {},
+      "id": "wf7-0018-4000-8000-000000000018",
+      "name": "No Pending Leads (Skip)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 840],
+      "notes": "No leads in the night queue. Nothing to process."
+    }
+  ],
+  "connections": {
+    "Trigger 8:00 AM CDMX (Report)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Night Queue",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Night Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Night Queue": {
+      "main": [
+        [
+          {
+            "node": "Build Morning Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Night Stats": {
+      "main": [
+        [
+          {
+            "node": "Build Morning Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Morning Report": {
+      "main": [
+        [
+          {
+            "node": "Get Manager Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Manager Phone": {
+      "main": [
+        [
+          {
+            "node": "Send Report to Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger 8:05 AM CDMX (Process Queue)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Queue for Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Queue for Processing": {
+      "main": [
+        [
+          {
+            "node": "Has Pending Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Pending Leads?": {
+      "main": [
+        [
+          {
+            "node": "Add Count to Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Pending Leads (Skip)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Count to Items": {
+      "main": [
+        [
+          {
+            "node": "Process One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process One by One": {
+      "main": [
+        [
+          {
+            "node": "Update Conversation Mode",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Confirmation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Conversation Mode": {
+      "main": [
+        [
+          {
+            "node": "Call WF3a: Auction Launcher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF3a: Auction Launcher": {
+      "main": [
+        [
+          {
+            "node": "Mark Queue Item Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Queue Item Processed": {
+      "main": [
+        [
+          {
+            "node": "Process One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Confirmation Message": {
+      "main": [
+        [
+          {
+            "node": "Get Manager Phone (B)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Manager Phone (B)": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation to Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  }
+}

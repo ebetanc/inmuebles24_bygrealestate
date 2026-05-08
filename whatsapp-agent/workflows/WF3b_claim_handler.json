@@ -1,212 +1,420 @@
 {
-  "name": "WF3b - Claim Handler",
+  "name": "WF3b - Claim Handler (Evolution)",
   "nodes": [
     {
-      "parameters": { "inputSource": "passthrough" },
-      "id": "trigger-wf3b",
-      "name": "When Called by WF1 (Inbound Router)",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "0c1952e0-e484-458f-bde6-b65bf77cbbae",
+      "name": "When Called by WF1",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [200, 300],
-      "notes": "Input from WF1 when an agent sends /TOMO-([A-Z0-9]{4})/:\n{\n  agent_id: 'agent_yolanda',\n  agent_name: 'Yolanda',\n  agent_phone: '+5215500000001',\n  short_code: 'AB12',\n  raw_message: 'TOMO-AB12',\n  twilio_sid: 'SM...'\n}"
+      "position": [
+        200,
+        300
+      ],
+      "notes": "Input from WF1 when an agent sends TOMO-XXXX:\n{\n  agent_id: 'agent_yolanda',\n  agent_name: 'Yolanda',\n  agent_phone: '5215500000001',\n  short_code: 'AB12',\n  raw_message: 'TOMO-AB12',\n  messageId: '3EB0A0...'\n}"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- ATOMIC CLAIM: the WHERE status='open' inside the UPDATE is what makes\n-- first-reply-wins correct. Exactly one concurrent caller sees the row as\n-- 'open' and wins; others get 0 rows.\nWITH claim AS (\n  UPDATE auctions\n  SET status='claimed', winner_agent_id=$1, claimed_at=NOW()\n  WHERE short_code=$2 AND status='open' AND expires_at > NOW()\n  RETURNING auction_id, conversation_id, property_id, winner_agent_id, notified_agents\n)\nSELECT c.*, conv.lead_phone, conv.lead_name, pc.payload AS property_payload\nFROM claim c\nJOIN conversations conv ON conv.conversation_id = c.conversation_id\nLEFT JOIN properties_cache pc ON pc.property_id = c.property_id;",
-        "options": { "queryReplacement": "={{ $json.agent_id }},={{ $json.short_code }}" }
+        "query": "-- ATOMIC CLAIM: WHERE status='open' ensures first-reply-wins.\nWITH claim AS (\n  UPDATE auctions\n  SET status='claimed', winner_agent_id=$1, claimed_at=NOW()\n  WHERE short_code=$2 AND status='open' AND expires_at > NOW()\n  RETURNING auction_id, conversation_id, property_id, winner_agent_id, notified_agents\n)\nSELECT c.*, conv.lead_phone, conv.lead_name, pc.payload AS property_payload\nFROM claim c\nJOIN conversations conv ON conv.conversation_id = c.conversation_id\nLEFT JOIN properties_cache pc ON pc.property_id = c.property_id;",
+        "options": {
+          "queryReplacement": "={{ $json.agent_id }},={{ $json.short_code }}"
+        }
       },
-      "id": "pg-atomic-claim",
+      "id": "86c01b28-9da5-4402-aeff-5ae13cf77363",
       "name": "Atomic Claim (WHERE status=open)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [420, 300],
+      "position": [
+        420,
+        300
+      ],
       "credentials": {
-        "postgres": { "id": "REPLACE_POSTGRES_CRED_ID", "name": "Supabase Postgres" }
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
       },
       "alwaysOutputData": true
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
           "conditions": [
             {
-              "id": "is-winner",
+              "id": "60c87d88-e8b4-4580-ba9a-c190d6ae6ee6",
               "leftValue": "={{ $json.auction_id }}",
               "rightValue": "",
-              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "if-winner",
+      "id": "85cb99da-9e47-45f0-96d1-3c34d8286a33",
       "name": "Did This Agent Win?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [640, 300]
+      "position": [
+        640,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "UPDATE conversations\nSET assigned_agent_id=$1, mode='ai'\nWHERE conversation_id=$2::uuid\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
-        "options": { "queryReplacement": "={{ $('When Called by WF1 (Inbound Router)').item.json.agent_id }},={{ $json.conversation_id }}" }
+        "options": {
+          "queryReplacement": "={{ $('When Called by WF1').item.json.agent_id }},={{ $json.conversation_id }}"
+        }
       },
-      "id": "pg-assign-conversation",
+      "id": "03d4ff26-bb45-4baa-96d9-0031c56c877e",
       "name": "Assign Conversation to Winner",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [860, 180],
+      "position": [
+        860,
+        180
+      ],
       "credentials": {
-        "postgres": { "id": "REPLACE_POSTGRES_CRED_ID", "name": "Supabase Postgres" }
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
       }
     },
     {
       "parameters": {
-        "jsCode": "const trigger = $('When Called by WF1 (Inbound Router)').first().json;\nconst claim   = $('Atomic Claim (WHERE status=open)').first().json;\n\nconst winner = {\n  purpose: 'winner_confirmation',\n  to_phone: `whatsapp:${trigger.agent_phone}`,\n  body: [\n    `✅ ¡Asignado! Lead: ${claim.lead_name || 'Sin nombre'}`,\n    `📱 Teléfono del lead: ${claim.lead_phone}`,\n    `🏠 Propiedad: ${claim.property_id}`,\n    ``,\n    `El asistente AI ya está atendiendo sus preguntas. Te contactaremos si requiere tu intervención (visita, negociación, etc.).`\n  ].join('\\n')\n};\n\nconst leadGreeting = {\n  purpose: 'lead_greeting',\n  to_phone: `whatsapp:${claim.lead_phone}`,\n  body: [\n    `¡Hola${claim.lead_name ? ' ' + claim.lead_name.split(' ')[0] : ''}! 👋`,\n    ``,\n    `Soy el asistente de la agencia. Estoy a tus órdenes para contarte sobre la propiedad ${claim.property_id}. ¿Qué te gustaría saber? (recámaras, precio, ubicación, amenidades, etc.)`\n  ].join('\\n')\n};\n\nconst losers = (claim.notified_agents || [])\n  .filter(id => id !== trigger.agent_id)\n  .map(agent_id => ({\n    purpose: 'loser_notification',\n    agent_id,\n    body: `Este lead ya fue tomado por otro asesor. ¡Suerte con el próximo! 💪`\n  }));\n\nreturn [winner, leadGreeting, ...losers].map(m => ({ json: m }));"
+        "jsCode": "const trigger = $('When Called by WF1').first().json;\nconst claim   = $('Atomic Claim (WHERE status=open)').first().json;\n\nconst winner = {\n  purpose: 'winner_confirmation',\n  number: trigger.agent_phone,\n  text: [\n    `\\u2705 Asignado! Lead: ${claim.lead_name || 'Sin nombre'}`,\n    `\\u{1F4F1} Telefono del lead: ${claim.lead_phone}`,\n    `\\u{1F3E0} Propiedad: ${claim.property_id}`,\n    ``,\n    `El asistente AI ya esta atendiendo sus preguntas. Te contactaremos si requiere tu intervencion (visita, negociacion, etc.).`\n  ].join('\\n')\n};\n\nconst leadGreeting = {\n  purpose: 'lead_greeting',\n  number: claim.lead_phone,\n  text: [\n    `Hola${claim.lead_name ? ' ' + claim.lead_name.split(' ')[0] : ''}! \\u{1F44B}`,\n    ``,\n    `Soy el asistente de la agencia. Estoy a tus ordenes para contarte sobre la propiedad. Que te gustaria saber? (precio, ubicacion, recamaras, amenidades, etc.)`,\n    ``,\n    `Hi${claim.lead_name ? ' ' + claim.lead_name.split(' ')[0] : ''}! I'm the agency assistant. I'm here to help you learn about this property. What would you like to know?`\n  ].join('\\n')\n};\n\nconst losers = (claim.notified_agents || [])\n  .filter(id => id !== trigger.agent_id)\n  .map(agent_id => ({\n    purpose: 'loser_notification',\n    agent_id,\n    text: `Este lead ya fue tomado por otro asesor. Suerte con el proximo! \\u{1F4AA}`\n  }));\n\nreturn [winner, leadGreeting, ...losers].map(m => ({ json: m }));"
       },
-      "id": "build-outbound",
+      "id": "9127e6ce-b2ef-4daf-8722-1e1c983af051",
       "name": "Build Winner/Lead/Loser Messages",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1080, 180]
+      "position": [
+        1080,
+        180
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
           "conditions": [
             {
-              "id": "needs-phone-lookup",
+              "id": "f7727c4a-1403-44a9-98be-73f62aa24b68",
               "leftValue": "={{ $json.purpose }}",
               "rightValue": "loser_notification",
-              "operator": { "type": "string", "operation": "equals" }
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "switch-loser-or-direct",
+      "id": "686b0f7f-ae71-4353-9475-bee2a15daba2",
       "name": "Needs Phone Lookup?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1300, 180]
+      "position": [
+        1300,
+        180
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT whatsapp_number FROM agents WHERE agent_id = $1;",
-        "options": { "queryReplacement": "={{ $json.agent_id }}" }
+        "options": {
+          "queryReplacement": "={{ $json.agent_id }}"
+        }
       },
-      "id": "pg-lookup-loser-phone",
+      "id": "7757b98b-9c8b-4a58-a77b-199d8e651637",
       "name": "Lookup Loser Agent Phone",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1520, 80],
+      "position": [
+        1520,
+        80
+      ],
       "credentials": {
-        "postgres": { "id": "REPLACE_POSTGRES_CRED_ID", "name": "Supabase Postgres" }
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
       }
     },
     {
       "parameters": {
         "assignments": {
           "assignments": [
-            { "id": "to_phone", "name": "to_phone", "value": "=whatsapp:{{ $json.whatsapp_number }}", "type": "string" },
-            { "id": "body",     "name": "body",     "value": "={{ $('Build Winner/Lead/Loser Messages').item.json.body }}", "type": "string" },
-            { "id": "purpose",  "name": "purpose",  "value": "loser_notification", "type": "string" }
+            {
+              "id": "number",
+              "name": "number",
+              "value": "={{ $json.whatsapp_number }}",
+              "type": "string"
+            },
+            {
+              "id": "text",
+              "name": "text",
+              "value": "={{ $('Build Winner/Lead/Loser Messages').item.json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "purpose",
+              "name": "purpose",
+              "value": "loser_notification",
+              "type": "string"
+            }
           ]
         },
         "options": {}
       },
-      "id": "set-loser-payload",
+      "id": "2ef0db24-a3cf-42a7-83a0-0646f961ceeb",
       "name": "Set Loser Payload",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [1740, 80]
-    },
-    {
-      "parameters": { "mode": "combine", "combineBy": "combineAll", "options": {} },
-      "id": "merge-all-outbound",
-      "name": "Merge All Outbound",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3.1,
-      "position": [1960, 180]
+      "position": [
+        1740,
+        80
+      ]
     },
     {
       "parameters": {
-        "resource": "sms",
-        "operation": "send",
-        "from": "={{ $env.TWILIO_WHATSAPP_FROM }}",
-        "to": "={{ $json.to_phone }}",
-        "toWhatsapp": true,
-        "message": "={{ $json.body }}",
+        "mode": "combine",
+        "combineBy": "combineAll",
         "options": {}
       },
-      "id": "twilio-send-all",
-      "name": "Send All via Twilio",
-      "type": "n8n-nodes-base.twilio",
-      "typeVersion": 1,
-      "position": [2180, 180],
-      "credentials": {
-        "twilioApi": { "id": "REPLACE_TWILIO_CRED_ID", "name": "Twilio" }
+      "id": "51b5a7db-e1b9-4b46-aee9-825e66f39b46",
+      "name": "Merge All Outbound",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        1960,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.number }}\",\n  \"text\": {{ JSON.stringify($json.text) }},\n  \"delay\": 1200\n}",
+        "options": {
+          "timeout": 15000
+        }
       },
+      "id": "3f795990-1c85-42e6-9b1c-0c3723437d80",
+      "name": "Send All via Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2180,
+        180
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const trigger = $('When Called by WF1 (Inbound Router)').first().json;\nreturn [{\n  json: {\n    to_phone: `whatsapp:${trigger.agent_phone}`,\n    body: `⚠️ No pude asignarte el lead ${trigger.short_code}.\\n\\nPuede que otro asesor lo haya tomado primero, o que la subasta haya expirado. Cuando entre un nuevo lead te avisaremos.`\n  }\n}];"
+        "jsCode": "const trigger = $('When Called by WF1').first().json;\nreturn [{\n  json: {\n    number: trigger.agent_phone,\n    text: `\\u26A0\\uFE0F No pude asignarte el lead ${trigger.short_code}.\\n\\nPuede que otro asesor lo haya tomado primero, o que la subasta haya expirado. Cuando entre un nuevo lead te avisaremos.`\n  }\n}];"
       },
-      "id": "build-too-late",
+      "id": "fd34d5fe-6ba8-45ad-9bcb-520a3a4ade60",
       "name": "Build 'Too Late' Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [860, 420]
+      "position": [
+        860,
+        420
+      ]
     },
     {
       "parameters": {
-        "resource": "sms",
-        "operation": "send",
-        "from": "={{ $env.TWILIO_WHATSAPP_FROM }}",
-        "to": "={{ $json.to_phone }}",
-        "toWhatsapp": true,
-        "message": "={{ $json.body }}",
-        "options": {}
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.number }}\",\n  \"text\": {{ JSON.stringify($json.text) }}\n}",
+        "options": {
+          "timeout": 10000
+        }
       },
-      "id": "twilio-send-too-late",
-      "name": "Send 'Too Late' via Twilio",
-      "type": "n8n-nodes-base.twilio",
-      "typeVersion": 1,
-      "position": [1080, 420],
-      "credentials": {
-        "twilioApi": { "id": "REPLACE_TWILIO_CRED_ID", "name": "Twilio" }
-      },
+      "id": "066de598-a9e9-4a0e-8165-b19a2446f049",
+      "name": "Send 'Too Late' via Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        420
+      ],
       "continueOnFail": true
     }
   ],
   "connections": {
-    "When Called by WF1 (Inbound Router)": { "main": [[{ "node": "Atomic Claim (WHERE status=open)", "type": "main", "index": 0 }]] },
-    "Atomic Claim (WHERE status=open)":    { "main": [[{ "node": "Did This Agent Win?", "type": "main", "index": 0 }]] },
+    "When Called by WF1": {
+      "main": [
+        [
+          {
+            "node": "Atomic Claim (WHERE status=open)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atomic Claim (WHERE status=open)": {
+      "main": [
+        [
+          {
+            "node": "Did This Agent Win?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Did This Agent Win?": {
       "main": [
-        [{ "node": "Assign Conversation to Winner", "type": "main", "index": 0 }],
-        [{ "node": "Build 'Too Late' Message", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Assign Conversation to Winner",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build 'Too Late' Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Assign Conversation to Winner":       { "main": [[{ "node": "Build Winner/Lead/Loser Messages", "type": "main", "index": 0 }]] },
-    "Build Winner/Lead/Loser Messages":    { "main": [[{ "node": "Needs Phone Lookup?", "type": "main", "index": 0 }]] },
+    "Assign Conversation to Winner": {
+      "main": [
+        [
+          {
+            "node": "Build Winner/Lead/Loser Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Winner/Lead/Loser Messages": {
+      "main": [
+        [
+          {
+            "node": "Needs Phone Lookup?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Needs Phone Lookup?": {
       "main": [
-        [{ "node": "Lookup Loser Agent Phone", "type": "main", "index": 0 }],
-        [{ "node": "Merge All Outbound", "type": "main", "index": 1 }]
+        [
+          {
+            "node": "Lookup Loser Agent Phone",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge All Outbound",
+            "type": "main",
+            "index": 1
+          }
+        ]
       ]
     },
-    "Lookup Loser Agent Phone": { "main": [[{ "node": "Set Loser Payload", "type": "main", "index": 0 }]] },
-    "Set Loser Payload":        { "main": [[{ "node": "Merge All Outbound", "type": "main", "index": 0 }]] },
-    "Merge All Outbound":       { "main": [[{ "node": "Send All via Twilio", "type": "main", "index": 0 }]] },
-    "Build 'Too Late' Message": { "main": [[{ "node": "Send 'Too Late' via Twilio", "type": "main", "index": 0 }]] }
+    "Lookup Loser Agent Phone": {
+      "main": [
+        [
+          {
+            "node": "Set Loser Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Loser Payload": {
+      "main": [
+        [
+          {
+            "node": "Merge All Outbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Outbound": {
+      "main": [
+        [
+          {
+            "node": "Send All via Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build 'Too Late' Message": {
+      "main": [
+        [
+          {
+            "node": "Send 'Too Late' via Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1", "saveExecutionProgress": true }
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true
+  }
 }

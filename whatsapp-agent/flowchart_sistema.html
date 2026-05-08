@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Atención WhatsApp — Inmobiliaria24</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  :root {
+    --green: #25D366;
+    --green-dark: #128C7E;
+    --green-light: #DCF8C6;
+    --blue: #3B82F6;
+    --blue-light: #DBEAFE;
+    --orange: #F59E0B;
+    --orange-light: #FEF3C7;
+    --red: #EF4444;
+    --red-light: #FEE2E2;
+    --purple: #8B5CF6;
+    --purple-light: #EDE9FE;
+    --gray-50: #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-300: #D1D5DB;
+    --gray-500: #6B7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    line-height: 1.6;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #075E54 0%, #128C7E 50%, #25D366 100%);
+    color: white;
+    padding: 60px 40px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.08) 0%, transparent 70%);
+  }
+  .hero h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 12px;
+    position: relative;
+  }
+  .hero p {
+    font-size: 1.15rem;
+    opacity: 0.9;
+    max-width: 700px;
+    margin: 0 auto;
+    position: relative;
+  }
+  .hero .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 20px;
+    padding: 6px 18px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-top: 20px;
+    position: relative;
+  }
+
+  /* ── LAYOUT ── */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  /* ── SECTION HEADERS ── */
+  .section-header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .section-header .icon {
+    font-size: 2.5rem;
+    margin-bottom: 8px;
+  }
+  .section-header h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .section-header p {
+    color: var(--gray-500);
+    font-size: 1.05rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* ── OVERVIEW CARDS ── */
+  .overview-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 60px;
+  }
+  .overview-card {
+    background: white;
+    border-radius: 16px;
+    padding: 32px 24px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid var(--gray-200);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .overview-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  }
+  .overview-card .card-icon {
+    font-size: 2.8rem;
+    margin-bottom: 16px;
+  }
+  .overview-card h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .overview-card p {
+    color: var(--gray-500);
+    font-size: 0.92rem;
+  }
+
+  /* ── FLOW SECTION ── */
+  .flow-section {
+    margin-bottom: 60px;
+  }
+
+  /* ── TIMELINE ── */
+  .timeline {
+    position: relative;
+    padding-left: 60px;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 27px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(to bottom, var(--green), var(--blue), var(--purple));
+    border-radius: 3px;
+  }
+
+  .step {
+    position: relative;
+    margin-bottom: 32px;
+  }
+  .step:last-child { margin-bottom: 0; }
+
+  .step-number {
+    position: absolute;
+    left: -60px;
+    top: 0;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: white;
+    z-index: 2;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+
+  .step-content {
+    background: white;
+    border-radius: 16px;
+    padding: 24px 28px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid var(--gray-200);
+    position: relative;
+  }
+  .step-content::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 16px;
+    width: 0;
+    height: 0;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    border-right: 10px solid var(--gray-200);
+  }
+  .step-content::after {
+    content: '';
+    position: absolute;
+    left: -9px;
+    top: 16px;
+    width: 0;
+    height: 0;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    border-right: 10px solid white;
+  }
+
+  .step-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .step-desc {
+    color: var(--gray-500);
+    font-size: 0.95rem;
+    margin-bottom: 14px;
+  }
+
+  /* ── WHATSAPP MESSAGE BUBBLES ── */
+  .wa-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .wa-bubble {
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    position: relative;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+  .wa-bubble .sender {
+    font-weight: 700;
+    font-size: 0.78rem;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .wa-bubble .time {
+    font-size: 0.7rem;
+    opacity: 0.5;
+    float: right;
+    margin-left: 12px;
+    margin-top: 4px;
+  }
+
+  /* Incoming (lead) */
+  .wa-bubble.incoming {
+    background: white;
+    border: 1px solid var(--gray-200);
+    align-self: flex-start;
+    border-top-left-radius: 4px;
+  }
+  .wa-bubble.incoming .sender { color: var(--blue); }
+
+  /* Outgoing (system/bot) */
+  .wa-bubble.outgoing {
+    background: var(--green-light);
+    align-self: flex-end;
+    border-top-right-radius: 4px;
+  }
+  .wa-bubble.outgoing .sender { color: var(--green-dark); }
+
+  /* Agent */
+  .wa-bubble.agent {
+    background: var(--blue-light);
+    align-self: flex-start;
+    border-top-left-radius: 4px;
+  }
+  .wa-bubble.agent .sender { color: var(--blue); }
+
+  /* System alert */
+  .wa-bubble.system {
+    background: var(--orange-light);
+    align-self: flex-end;
+    border-top-right-radius: 4px;
+    border: 1px solid #FCD34D;
+  }
+  .wa-bubble.system .sender { color: #B45309; }
+
+  /* ── INFO BOXES ── */
+  .info-box {
+    display: flex;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: 10px;
+    margin-top: 12px;
+    font-size: 0.88rem;
+  }
+  .info-box .info-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+  .info-box.green { background: #ECFDF5; border: 1px solid #A7F3D0; }
+  .info-box.blue { background: var(--blue-light); border: 1px solid #93C5FD; }
+  .info-box.orange { background: var(--orange-light); border: 1px solid #FCD34D; }
+  .info-box.red { background: var(--red-light); border: 1px solid #FCA5A5; }
+  .info-box.purple { background: var(--purple-light); border: 1px solid #C4B5FD; }
+
+  /* ── BRANCH DIAGRAM ── */
+  .branch-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 16px;
+  }
+  .branch {
+    border-radius: 12px;
+    padding: 20px;
+    border: 2px solid;
+  }
+  .branch.success {
+    background: #F0FDF4;
+    border-color: #86EFAC;
+  }
+  .branch.fail {
+    background: #FFF7ED;
+    border-color: #FDBA74;
+  }
+  .branch h4 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .branch p, .branch li {
+    font-size: 0.88rem;
+    color: var(--gray-700);
+  }
+  .branch ul { padding-left: 18px; margin-top: 6px; }
+  .branch li { margin-bottom: 4px; }
+
+  /* ── ROLE TABS ── */
+  .role-tabs {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 30px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .role-tab {
+    padding: 10px 24px;
+    border-radius: 30px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    border: 2px solid;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .role-tab.lead { background: #ECFDF5; border-color: var(--green); color: var(--green-dark); }
+  .role-tab.agente { background: var(--blue-light); border-color: var(--blue); color: #1D4ED8; }
+  .role-tab.manager { background: var(--orange-light); border-color: var(--orange); color: #B45309; }
+  .role-tab.ai { background: var(--purple-light); border-color: var(--purple); color: #6D28D9; }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 2px;
+    background: linear-gradient(to right, transparent, var(--gray-300), transparent);
+    margin: 60px 0;
+  }
+
+  /* ── SCENARIO SECTION ── */
+  .scenario {
+    background: white;
+    border-radius: 20px;
+    padding: 36px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border: 1px solid var(--gray-200);
+    margin-bottom: 40px;
+  }
+  .scenario h3 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .scenario .subtitle {
+    color: var(--gray-500);
+    margin-bottom: 24px;
+    font-size: 0.95rem;
+  }
+
+  /* ── FEATURE LIST ── */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-top: 24px;
+  }
+  .feature {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    background: var(--gray-50);
+    border-radius: 12px;
+  }
+  .feature .feat-icon { font-size: 1.4rem; flex-shrink: 0; }
+  .feature h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 3px; }
+  .feature p { font-size: 0.82rem; color: var(--gray-500); }
+
+  /* ── FOOTER ── */
+  .footer {
+    text-align: center;
+    padding: 40px;
+    color: var(--gray-500);
+    font-size: 0.85rem;
+  }
+
+  /* ── FULL FLOW DIAGRAM ── */
+  .flow-diagram {
+    background: white;
+    border-radius: 20px;
+    padding: 40px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border: 1px solid var(--gray-200);
+    margin-bottom: 40px;
+    overflow-x: auto;
+  }
+  .flow-diagram h3 {
+    text-align: center;
+    font-size: 1.2rem;
+    margin-bottom: 30px;
+    color: var(--gray-700);
+  }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .flow-node {
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    min-width: 140px;
+    white-space: nowrap;
+  }
+  .flow-node.green-node { background: #D1FAE5; color: #065F46; border: 2px solid #6EE7B7; }
+  .flow-node.blue-node { background: #DBEAFE; color: #1E40AF; border: 2px solid #93C5FD; }
+  .flow-node.purple-node { background: #EDE9FE; color: #5B21B6; border: 2px solid #C4B5FD; }
+  .flow-node.orange-node { background: #FEF3C7; color: #92400E; border: 2px solid #FCD34D; }
+  .flow-node.red-node { background: #FEE2E2; color: #991B1B; border: 2px solid #FCA5A5; }
+  .flow-arrow {
+    font-size: 1.4rem;
+    color: var(--gray-400);
+    margin: 0 6px;
+    flex-shrink: 0;
+  }
+  .flow-arrow.down {
+    display: block;
+    text-align: center;
+    margin: 8px auto;
+    font-size: 1.5rem;
+  }
+  .flow-label {
+    font-size: 0.72rem;
+    color: var(--gray-500);
+    text-align: center;
+    margin-top: -8px;
+    margin-bottom: 8px;
+    font-style: italic;
+  }
+  .flow-branches {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .flow-branch-line {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .overview-grid { grid-template-columns: 1fr; }
+    .branch-container { grid-template-columns: 1fr; }
+    .features { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 1.8rem; }
+    .container { padding: 24px 16px; }
+    .timeline { padding-left: 50px; }
+    .step-number { left: -50px; width: 44px; height: 44px; font-size: 1.2rem; }
+    .scenario { padding: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ HERO ═══════════════════════════════════════════ -->
+<div class="hero">
+  <h1>Sistema de Atención por WhatsApp</h1>
+  <p>Automatización inteligente que recibe leads, los asigna al primer asesor disponible, y los atiende con IA hasta que necesitan atención humana.</p>
+  <div class="badge">Inmobiliaria24 &mdash; Powered by AI + WhatsApp</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ OVERVIEW ═══════════════════════════════════════ -->
+<div class="container">
+
+  <div class="section-header">
+    <div class="icon">&#128640;</div>
+    <h2>¿Qué hace el sistema?</h2>
+    <p>Un flujo automatizado de 7 pasos que va desde el primer mensaje del cliente hasta la atención personalizada por un asesor.</p>
+  </div>
+
+  <div class="overview-grid">
+    <div class="overview-card">
+      <div class="card-icon">&#128241;</div>
+      <h3>Recepción Automática</h3>
+      <p>Cada mensaje que llega al WhatsApp de la empresa se clasifica automáticamente: ¿es un lead nuevo, un asesor reclamando, o una conversación existente?</p>
+    </div>
+    <div class="overview-card">
+      <div class="card-icon">&#9201;</div>
+      <h3>Subasta de 5 Minutos</h3>
+      <p>Cuando llega un lead nuevo, <strong>todos los asesores en turno</strong> reciben una notificación. El primero que responda se lo queda.</p>
+    </div>
+    <div class="overview-card">
+      <div class="card-icon">&#129302;</div>
+      <h3>Asistente IA</h3>
+      <p>Una vez asignado, un asistente con IA atiende las preguntas del lead con información real de la propiedad, 24/7, al instante.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════ ROLES ═══════════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128101;</div>
+    <h2>Personas involucradas</h2>
+    <p>El sistema involucra 4 roles. Cada uno tiene una experiencia diferente.</p>
+  </div>
+
+  <div class="role-tabs">
+    <div class="role-tab lead">&#128100; Lead (Cliente)</div>
+    <div class="role-tab agente">&#128188; Asesor</div>
+    <div class="role-tab manager">&#128081; Manager</div>
+    <div class="role-tab ai">&#129302; Asistente IA</div>
+  </div>
+
+  <div class="features" style="margin-bottom: 60px;">
+    <div class="feature">
+      <div class="feat-icon">&#128100;</div>
+      <div>
+        <h4>Lead (Cliente)</h4>
+        <p>Escribe al WhatsApp, recibe respuesta instantánea, le atiende la IA con datos reales, y cuando necesita algo más complejo, se conecta con un asesor humano.</p>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feat-icon">&#128188;</div>
+      <div>
+        <h4>Asesor</h4>
+        <p>Recibe notificaciones de leads nuevos. Responde "TOMO-XXXX" para reclamar el lead. La IA atiende las preguntas básicas por él. Solo interviene cuando se necesita.</p>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feat-icon">&#128081;</div>
+      <div>
+        <h4>Manager</h4>
+        <p>Si ningún asesor responde en 5 minutos, recibe una alerta para asignar manualmente. Tiene visibilidad de todos los leads.</p>
+      </div>
+    </div>
+    <div class="feature">
+      <div class="feat-icon">&#129302;</div>
+      <div>
+        <h4>Asistente IA</h4>
+        <p>Responde preguntas sobre la propiedad (precio, recámaras, ubicación). Si detecta que el cliente quiere agendar visita o negociar, transfiere al asesor humano.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ FLOW DIAGRAM ═══════════════════════════════════ -->
+  <div class="flow-diagram">
+    <h3>Diagrama General del Flujo</h3>
+
+    <div class="flow-row">
+      <div class="flow-node green-node">&#128241; Mensaje entrante de WhatsApp</div>
+    </div>
+    <div class="flow-arrow down">&#8595;</div>
+
+    <div class="flow-row">
+      <div class="flow-node blue-node">&#128268; WF1: Router — Clasifica el mensaje</div>
+    </div>
+    <div class="flow-arrow down">&#8595;</div>
+    <div class="flow-label">¿Quién envió el mensaje?</div>
+
+    <div class="flow-branches">
+      <div class="flow-branch-line">
+        <div class="flow-node green-node" style="min-width:120px;">Lead nuevo</div>
+        <div class="flow-arrow down">&#8595;</div>
+        <div class="flow-node blue-node">WF2: Intake</div>
+        <div class="flow-arrow down">&#8595;</div>
+        <div class="flow-node orange-node">WF3a: Subasta</div>
+        <div style="font-size:0.75rem; color:#6B7280; margin-top:4px;">Notifica a todos<br>los asesores</div>
+      </div>
+      <div class="flow-branch-line">
+        <div class="flow-node blue-node" style="min-width:120px;">Asesor dice<br>"TOMO-XXXX"</div>
+        <div class="flow-arrow down">&#8595;</div>
+        <div class="flow-node orange-node">WF3b: Claim</div>
+        <div style="font-size:0.75rem; color:#6B7280; margin-top:4px;">Primero en<br>responder gana</div>
+      </div>
+      <div class="flow-branch-line">
+        <div class="flow-node purple-node" style="min-width:120px;">Lead con<br>conversación IA</div>
+        <div class="flow-arrow down">&#8595;</div>
+        <div class="flow-node purple-node">WF4: AI Chat</div>
+        <div style="font-size:0.75rem; color:#6B7280; margin-top:4px;">IA responde con<br>datos de propiedad</div>
+      </div>
+      <div class="flow-branch-line">
+        <div class="flow-node red-node" style="min-width:120px;">Lead en modo<br>humano</div>
+        <div class="flow-arrow down">&#8595;</div>
+        <div class="flow-node red-node">Reenviar al asesor</div>
+        <div style="font-size:0.75rem; color:#6B7280; margin-top:4px;">Relay directo<br>al asesor asignado</div>
+      </div>
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 2px dashed #E5E7EB;">
+      <div class="flow-row">
+        <div class="flow-node orange-node">&#9201; WF3c: Sweeper (cada minuto)</div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-node red-node">Si nadie reclama en 5 min &#8594; Alerta al Manager</div>
+      </div>
+      <div style="margin-top:12px;" class="flow-row">
+        <div class="flow-node purple-node">WF4: Si detecta necesidad compleja</div>
+        <div class="flow-arrow">&#8594;</div>
+        <div class="flow-node red-node">WF5: Handoff &#8594; Conectar con asesor humano</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ SCENARIO 1: LEAD JOURNEY ══════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#127919;</div>
+    <h2>Recorrido Completo del Lead</h2>
+    <p>Veamos paso a paso qué sucede cuando un cliente nuevo escribe al WhatsApp de la empresa.</p>
+  </div>
+
+  <!-- PASO 1 -->
+  <div class="scenario">
+    <h3>Paso 1 — El lead escribe por primera vez</h3>
+    <p class="subtitle">El cliente envía un mensaje al número de WhatsApp de la empresa.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble incoming">
+        <span class="sender">&#128100; María García</span>
+        Hola, me interesa el departamento en Polanco que vi en su página. ¿Está disponible?
+        <span class="time">10:30 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box green">
+      <span class="info-icon">&#9889;</span>
+      <div><strong>¿Qué pasa internamente?</strong><br>
+        El sistema recibe el mensaje, detecta que es un número nuevo (no está en la base de datos), y lo clasifica como <strong>"lead nuevo"</strong>. Busca automáticamente si mencionó alguna propiedad.</div>
+    </div>
+  </div>
+
+  <!-- PASO 2 -->
+  <div class="scenario">
+    <h3>Paso 2 — Respuesta automática instantánea</h3>
+    <p class="subtitle">El lead recibe confirmación en menos de 3 segundos.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble outgoing">
+        <span class="sender">&#129302; Sistema</span>
+        ¡Hola María! Gracias por tu interés. Estamos asignando un asesor para atenderte, en unos momentos te contactamos.
+        <span class="time">10:30 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box blue">
+      <span class="info-icon">&#128203;</span>
+      <div><strong>En paralelo:</strong><br>
+        Se crea la conversación en la base de datos, se identifica la propiedad mencionada, y se lanza la subasta para los asesores.</div>
+    </div>
+  </div>
+
+  <!-- PASO 3 -->
+  <div class="scenario">
+    <h3>Paso 3 — Subasta entre asesores (5 minutos)</h3>
+    <p class="subtitle">Todos los asesores en turno reciben una notificación simultánea a su WhatsApp personal.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble system">
+        <span class="sender">&#128227; Notificación para cada asesor</span>
+        &#127968; Nuevo lead para <strong>Depto. Polanco Premium</strong><br>
+        &#128176; $4,500,000 MXN<br>
+        &#128100; Lead: María García<br><br>
+        Responde <strong>TOMO-AB12</strong> para asignártelo.<br>
+        <em>(Expira en 5 min)</em>
+        <span class="time">10:30 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box orange">
+      <span class="info-icon">&#9201;</span>
+      <div><strong>¡Carrera contra el tiempo!</strong><br>
+        Cada asesor ve el lead con datos de la propiedad. Tienen 5 minutos para responder. El código <strong>TOMO-AB12</strong> es único para esta subasta. Solo el primero que conteste gana el lead.</div>
+    </div>
+  </div>
+
+  <!-- PASO 4A -->
+  <div class="scenario">
+    <h3>Paso 4 — Un asesor reclama el lead</h3>
+    <p class="subtitle">El asesor responde con el código TOMO desde su WhatsApp.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble agent">
+        <span class="sender">&#128188; Yolanda (Asesora)</span>
+        TOMO-AB12
+        <span class="time">10:31 AM</span>
+      </div>
+    </div>
+
+    <div class="branch-container">
+      <div class="branch success">
+        <h4>&#9989; Yolanda gana (fue la primera)</h4>
+        <p>Recibe en su WhatsApp:</p>
+        <div class="wa-messages" style="margin-top:10px;">
+          <div class="wa-bubble outgoing" style="max-width:100%; font-size:0.82rem;">
+            <span class="sender">&#9989; Sistema</span>
+            ¡Asignado! Lead: María García<br>
+            &#128241; Teléfono: 5215512345678<br>
+            &#127968; Propiedad: Depto. Polanco Premium<br><br>
+            El asistente AI ya está atendiendo sus preguntas. Te contactaremos si requiere tu intervención.
+          </div>
+        </div>
+      </div>
+      <div class="branch fail">
+        <h4>&#128164; Los demás asesores</h4>
+        <p>Reciben aviso de que ya fue tomado:</p>
+        <div class="wa-messages" style="margin-top:10px;">
+          <div class="wa-bubble outgoing" style="max-width:100%; font-size:0.82rem;">
+            <span class="sender">Sistema</span>
+            Este lead ya fue tomado por otro asesor. ¡Suerte con el próximo! &#128170;
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-box green" style="margin-top:16px;">
+      <span class="info-icon">&#128274;</span>
+      <div><strong>Asignación atómica:</strong> Es imposible que dos asesores reclamen el mismo lead. El sistema usa un bloqueo a nivel de base de datos que garantiza que solo el primero que responda gane.</div>
+    </div>
+  </div>
+
+  <!-- PASO 4B (alternate) -->
+  <div class="scenario" style="border: 2px dashed #FCD34D; background: #FFFBEB;">
+    <h3>&#9888;&#65039; Escenario alterno — Nadie reclama en 5 minutos</h3>
+    <p class="subtitle">Si ningún asesor responde, el sistema escala al manager.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble system">
+        <span class="sender">&#9888;&#65039; Alerta al Manager</span>
+        &#9888;&#65039; <strong>Lead sin asignar</strong><br><br>
+        Propiedad: Depto. Polanco Premium<br>
+        Lead: María García (5215512345678)<br>
+        Subasta: AB12<br><br>
+        Ningún asesor respondió en 5 min. <strong>Asignación manual requerida.</strong>
+        <span class="time">10:35 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box orange">
+      <span class="info-icon">&#128081;</span>
+      <div><strong>El manager decide:</strong> Puede contactar manualmente al lead o asignar directamente a un asesor. Ningún lead se pierde.</div>
+    </div>
+  </div>
+
+  <!-- PASO 5 -->
+  <div class="scenario">
+    <h3>Paso 5 — El asistente IA atiende al lead</h3>
+    <p class="subtitle">Una vez asignado el asesor, la IA toma el control de la conversación con información real de la propiedad.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble outgoing">
+        <span class="sender">&#129302; Asistente IA</span>
+        ¡Hola María! &#128075;<br><br>
+        Soy el asistente de la agencia. Estoy a tus órdenes para contarte sobre la propiedad. ¿Qué te gustaría saber? (precio, ubicación, recámaras, amenidades, etc.)
+        <span class="time">10:31 AM</span>
+      </div>
+      <div class="wa-bubble incoming">
+        <span class="sender">&#128100; María</span>
+        ¿Cuántas recámaras tiene y cuánto mide?
+        <span class="time">10:32 AM</span>
+      </div>
+      <div class="wa-bubble outgoing">
+        <span class="sender">&#129302; Asistente IA</span>
+        El departamento tiene 3 recámaras y una superficie de 145 m². También cuenta con 2 baños completos, sala-comedor, cocina integral y un balcón con vista al parque. &#127968;
+        <span class="time">10:32 AM</span>
+      </div>
+      <div class="wa-bubble incoming">
+        <span class="sender">&#128100; María</span>
+        ¿Tiene estacionamiento? ¿Acepta crédito Infonavit?
+        <span class="time">10:33 AM</span>
+      </div>
+      <div class="wa-bubble outgoing">
+        <span class="sender">&#129302; Asistente IA</span>
+        Incluye 2 cajones de estacionamiento. Sobre el crédito Infonavit, voy a verificar con el asesor para darte información precisa sobre esquemas de financiamiento.
+        <span class="time">10:33 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box purple">
+      <span class="info-icon">&#129504;</span>
+      <div><strong>La IA es inteligente:</strong>
+        <ul style="margin-top:6px; padding-left:18px;">
+          <li>Solo responde con <strong>datos reales</strong> de la propiedad (nunca inventa)</li>
+          <li>Si no tiene la información, dice que consultará con el asesor</li>
+          <li>Responde en español o inglés según el idioma del cliente</li>
+          <li>Respuestas cortas y amigables (optimizadas para WhatsApp)</li>
+          <li>Disponible <strong>24/7</strong> — responde en segundos</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- PASO 6 -->
+  <div class="scenario">
+    <h3>Paso 6 — Transferencia al asesor humano</h3>
+    <p class="subtitle">Cuando el lead pide algo que requiere atención humana (agendar visita, negociar precio, hablar con alguien), la IA transfiere automáticamente.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble incoming">
+        <span class="sender">&#128100; María</span>
+        Me encanta, ¿puedo ir a verlo mañana?
+        <span class="time">10:35 AM</span>
+      </div>
+      <div class="wa-bubble outgoing">
+        <span class="sender">&#129302; Asistente IA</span>
+        ¡Claro que sí! Te estoy conectando con Yolanda, quien te atenderá personalmente. Se pondrá en contacto contigo en breve.
+        <span class="time">10:35 AM</span>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px; padding: 20px; background: #EFF6FF; border-radius: 12px; border: 2px solid #93C5FD;">
+      <h4 style="margin-bottom:10px;">&#128227; Lo que recibe la asesora Yolanda:</h4>
+      <div class="wa-messages">
+        <div class="wa-bubble system" style="max-width:100%; background: #FEF3C7;">
+          <span class="sender">&#128680; Handoff — Lead requiere atención humana</span>
+          &#128100; Lead: María García<br>
+          &#128241; Teléfono: 5215512345678<br>
+          &#127968; Propiedad: Depto. Polanco Premium<br><br>
+          <strong>Resumen de conversación:</strong><br>
+          <em>Lead: ¿Cuántas recámaras tiene?</em><br>
+          <em>AI: 3 recámaras, 145 m²...</em><br>
+          <em>Lead: ¿Tiene estacionamiento?</em><br>
+          <em>AI: 2 cajones incluidos...</em><br>
+          <em>Lead: ¿Puedo ir a verlo mañana?</em><br><br>
+          El lead necesita hablar contigo directamente. Sus mensajes ahora te llegarán a ti.
+          <span class="time">10:35 AM</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-box green" style="margin-top:16px;">
+      <span class="info-icon">&#128172;</span>
+      <div><strong>Contexto completo:</strong> El asesor recibe un resumen de toda la conversación previa con la IA, para que no tenga que preguntar de nuevo al cliente lo que ya habló.</div>
+    </div>
+  </div>
+
+  <!-- PASO 7 -->
+  <div class="scenario">
+    <h3>Paso 7 — Conversación directa asesor ↔ lead</h3>
+    <p class="subtitle">A partir de este momento, cada mensaje del lead se reenvía directamente al asesor.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble incoming">
+        <span class="sender">&#128100; María</span>
+        ¿Podría ser a las 11 AM?
+        <span class="time">10:36 AM</span>
+      </div>
+    </div>
+
+    <div style="margin: 16px 0; text-align: center; color: var(--gray-500); font-size:0.85rem;">
+      &#128257; El sistema reenvía automáticamente al WhatsApp de Yolanda:
+    </div>
+
+    <div class="wa-messages">
+      <div class="wa-bubble system" style="max-width:100%;">
+        <span class="sender">&#128229; Mensaje reenviado a Yolanda</span>
+        Mensaje de María García (5215512345678):<br><br>
+        ¿Podría ser a las 11 AM?
+        <span class="time">10:36 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box blue">
+      <span class="info-icon">&#128260;</span>
+      <div><strong>Relay transparente:</strong> El sistema actúa como puente. El lead escribe al número de la empresa y Yolanda recibe los mensajes en su WhatsApp personal con los datos del lead.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ TRIGGERS DE HANDOFF ═══════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128260;</div>
+    <h2>¿Cuándo transfiere la IA al asesor?</h2>
+    <p>La IA detecta automáticamente estas situaciones y conecta al cliente con el asesor humano.</p>
+  </div>
+
+  <div class="features" style="margin-bottom: 60px;">
+    <div class="feature" style="border: 1px solid #C4B5FD; background: #FAF5FF;">
+      <div class="feat-icon">&#128197;</div>
+      <div>
+        <h4>Agendar visita</h4>
+        <p>"Quiero ir a ver la propiedad", "¿Puedo agendar una cita?"</p>
+      </div>
+    </div>
+    <div class="feature" style="border: 1px solid #C4B5FD; background: #FAF5FF;">
+      <div class="feat-icon">&#128176;</div>
+      <div>
+        <h4>Negociación de precio</h4>
+        <p>"¿Bajan el precio?", "Ofrezco 4 millones", "¿Hay descuento?"</p>
+      </div>
+    </div>
+    <div class="feature" style="border: 1px solid #C4B5FD; background: #FAF5FF;">
+      <div class="feat-icon">&#127974;</div>
+      <div>
+        <h4>Financiamiento</h4>
+        <p>"¿Aceptan Infonavit?", "Crédito hipotecario", "Enganche"</p>
+      </div>
+    </div>
+    <div class="feature" style="border: 1px solid #C4B5FD; background: #FAF5FF;">
+      <div class="feat-icon">&#128100;</div>
+      <div>
+        <h4>Solicitud directa</h4>
+        <p>"Quiero hablar con alguien", "Pásame con un asesor"</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ GUARANTEES ═══════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128737;&#65039;</div>
+    <h2>Garantías del Sistema</h2>
+    <p>Mecanismos de seguridad integrados para que ningún lead se pierda.</p>
+  </div>
+
+  <div class="features" style="margin-bottom: 40px;">
+    <div class="feature" style="border: 1px solid #A7F3D0;">
+      <div class="feat-icon">&#128274;</div>
+      <div>
+        <h4>Asignación atómica</h4>
+        <p>Es imposible que dos asesores reclamen el mismo lead. El bloqueo es a nivel de base de datos.</p>
+      </div>
+    </div>
+    <div class="feature" style="border: 1px solid #A7F3D0;">
+      <div class="feat-icon">&#9201;</div>
+      <div>
+        <h4>Expiración automática</h4>
+        <p>Si nadie reclama en 5 minutos, se escala al manager. El sistema revisa cada minuto.</p>
+      </div>
+    </div>
+    <div class="feature" style="border: 1px solid #A7F3D0;">
+      <div class="feat-icon">&#128466;</div>
+      <div>
+        <h4>Registro completo</h4>
+        <p>Cada mensaje (entrante, saliente, IA, sistema) queda guardado en la base de datos para auditoría.</p>
+      </div>
+    </div>
+    <div class="feature" style="border: 1px solid #A7F3D0;">
+      <div class="feat-icon">&#128296;</div>
+      <div>
+        <h4>Deduplicación</h4>
+        <p>Si WhatsApp envía el mismo mensaje dos veces, el sistema lo detecta y lo ignora.</p>
+      </div>
+    </div>
+    <div class="feature" style="border: 1px solid #A7F3D0;">
+      <div class="feat-icon">&#127760;</div>
+      <div>
+        <h4>Bilingüe</h4>
+        <p>La IA responde en español o inglés según el idioma del cliente, automáticamente.</p>
+      </div>
+    </div>
+    <div class="feature" style="border: 1px solid #A7F3D0;">
+      <div class="feat-icon">&#128200;</div>
+      <div>
+        <h4>Datos reales</h4>
+        <p>La IA usa datos reales de las propiedades, nunca inventa información.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ RESUMEN VISUAL ═══════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#127912;</div>
+    <h2>Resumen: El Viaje del Lead</h2>
+  </div>
+
+  <div class="timeline" style="margin-bottom:60px;">
+    <div class="step">
+      <div class="step-number" style="background: var(--green);">1</div>
+      <div class="step-content">
+        <div class="step-title">&#128241; Lead escribe al WhatsApp</div>
+        <div class="step-desc">"Hola, me interesa la propiedad en Polanco"</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-number" style="background: var(--green);">2</div>
+      <div class="step-content">
+        <div class="step-title">&#9889; Respuesta automática instantánea</div>
+        <div class="step-desc">"Estamos asignando un asesor para atenderte..."</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-number" style="background: var(--orange);">3</div>
+      <div class="step-content">
+        <div class="step-title">&#128227; Notificación a todos los asesores</div>
+        <div class="step-desc">Subasta de 5 minutos — primero que responda TOMO-XXXX gana</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-number" style="background: var(--blue);">4</div>
+      <div class="step-content">
+        <div class="step-title">&#128188; Asesor reclama el lead</div>
+        <div class="step-desc">Responde TOMO-AB12 desde su WhatsApp. Los demás reciben aviso.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-number" style="background: var(--purple);">5</div>
+      <div class="step-content">
+        <div class="step-title">&#129302; IA atiende preguntas del lead</div>
+        <div class="step-desc">Responde con datos reales: recámaras, precio, ubicación, amenidades... 24/7</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-number" style="background: var(--purple);">6</div>
+      <div class="step-content">
+        <div class="step-title">&#128260; Transferencia automática cuando se necesita</div>
+        <div class="step-desc">Visitas, negociación, financiamiento → conecta con el asesor humano</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-number" style="background: var(--red);">7</div>
+      <div class="step-content">
+        <div class="step-title">&#128172; Asesor toma la conversación</div>
+        <div class="step-desc">Recibe resumen completo + los mensajes del lead en tiempo real</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ FOOTER ═══════════════════════════════════════ -->
+<div class="footer">
+  Inmobiliaria24 — Sistema de Atención WhatsApp<br>
+  Automatización con IA &bull; Asignación justa &bull; Cero leads perdidos
+</div>
+
+</body>
+</html>

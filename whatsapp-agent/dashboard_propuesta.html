@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BYG Real Estate — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #F8FAFC;
+  color: #1E293B;
+  display: flex;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 260px;
+  min-height: 100vh;
+  background: #0F172A;
+  color: #E2E8F0;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
+  transition: transform .3s ease;
+}
+.sidebar-header {
+  padding: 24px 20px 20px;
+  border-bottom: 1px solid #1E293B;
+}
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sidebar-logo .logo-icon {
+  width: 40px; height: 40px;
+  background: linear-gradient(135deg, #3B82F6, #6366F1);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 16px; color: #fff;
+  letter-spacing: -0.5px;
+}
+.sidebar-logo .logo-text {
+  display: flex; flex-direction: column;
+}
+.sidebar-logo .logo-text .brand { font-weight: 700; font-size: 16px; color: #F8FAFC; }
+.sidebar-logo .logo-text .sub { font-size: 11px; color: #64748B; font-weight: 400; letter-spacing: 0.5px; }
+
+.sidebar-nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 2px; }
+.nav-label {
+  font-size: 10px; font-weight: 600; letter-spacing: 1.2px;
+  color: #475569; text-transform: uppercase;
+  padding: 16px 12px 8px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 8px;
+  cursor: pointer; transition: all .15s ease;
+  font-size: 13.5px; font-weight: 500; color: #94A3B8;
+  position: relative;
+}
+.nav-item:hover { background: #1E293B; color: #E2E8F0; }
+.nav-item.active {
+  background: #1D4ED8; color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(29,78,216,.4);
+}
+.nav-item .nav-icon { width: 20px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.nav-item .nav-icon svg { width: 18px; height: 18px; }
+.nav-item .badge {
+  margin-left: auto;
+  background: #EF4444; color: #fff;
+  font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 10px;
+  min-width: 20px; text-align: center;
+}
+.nav-item.active .badge { background: rgba(255,255,255,.25); }
+
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #1E293B;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.sidebar-footer .env-badge {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+  color: #22C55E; background: rgba(34,197,94,.1);
+  padding: 4px 10px; border-radius: 6px;
+  display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+}
+.sidebar-footer .env-badge .dot {
+  width: 6px; height: 6px; background: #22C55E; border-radius: 50%;
+  animation: pulse-dot 2s infinite;
+}
+.sidebar-footer .version { font-size: 11px; color: #475569; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .5; transform: scale(.8); }
+}
+
+/* ===== MAIN ===== */
+.main {
+  margin-left: 260px;
+  flex: 1; display: flex; flex-direction: column; min-height: 100vh;
+}
+
+/* ===== TOP BAR ===== */
+.topbar {
+  height: 64px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 32px;
+  position: sticky; top: 0; z-index: 50;
+}
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.topbar-left .page-title { font-size: 18px; font-weight: 700; color: #0F172A; }
+.topbar-left .live-badge {
+  display: flex; align-items: center; gap: 6px;
+  background: #F0FDF4; border: 1px solid #BBF7D0;
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 12px; font-weight: 600; color: #16A34A;
+}
+.topbar-left .live-badge .live-dot {
+  width: 8px; height: 8px; background: #22C55E; border-radius: 50%;
+  animation: pulse-live 1.5s ease-in-out infinite;
+}
+@keyframes pulse-live {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,.5); }
+  50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+}
+.topbar-right { display: flex; align-items: center; gap: 20px; }
+.topbar-right .clock {
+  font-size: 13px; font-weight: 500; color: #64748B;
+  font-variant-numeric: tabular-nums;
+}
+.topbar-right .avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 14px;
+  cursor: pointer;
+}
+
+/* ===== CONTENT ===== */
+.content { padding: 28px 32px; flex: 1; }
+.page { display: none; }
+.page.active { display: block; animation: fadeIn .25s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ===== KPI CARDS ===== */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.kpi-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 20px;
+  transition: box-shadow .2s, transform .2s;
+}
+.kpi-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,.06);
+  transform: translateY(-1px);
+}
+.kpi-card .kpi-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.kpi-card .kpi-label { font-size: 12px; font-weight: 500; color: #64748B; }
+.kpi-card .kpi-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.kpi-card .kpi-icon svg { width: 16px; height: 16px; }
+.kpi-card .kpi-value { font-size: 28px; font-weight: 800; color: #0F172A; line-height: 1.1; }
+.kpi-card .kpi-change {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11.5px; font-weight: 600; margin-top: 6px;
+  padding: 2px 6px; border-radius: 4px;
+}
+.kpi-card .kpi-change.up { color: #16A34A; background: #F0FDF4; }
+.kpi-card .kpi-change.down { color: #DC2626; background: #FEF2F2; }
+
+/* ===== CARDS / PANELS ===== */
+.card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.card-header {
+  padding: 18px 22px;
+  border-bottom: 1px solid #F1F5F9;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.card-header .card-title { font-size: 15px; font-weight: 700; color: #0F172A; }
+.card-header .card-subtitle { font-size: 12px; color: #94A3B8; font-weight: 400; margin-top: 2px; }
+.card-body { padding: 22px; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 0; }
+@media (max-width: 1100px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* ===== TABLES ===== */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; font-size: 11px; font-weight: 600;
+  color: #64748B; text-transform: uppercase; letter-spacing: .5px;
+  padding: 10px 14px; background: #F8FAFC;
+  border-bottom: 1px solid #E2E8F0;
+}
+tbody td {
+  padding: 12px 14px; font-size: 13px; color: #334155;
+  border-bottom: 1px solid #F1F5F9;
+  vertical-align: middle;
+}
+tbody tr { transition: background .15s; }
+tbody tr:hover { background: #F8FAFC; }
+tbody tr:last-child td { border-bottom: none; }
+
+/* ===== BADGES ===== */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap;
+}
+.badge-green { background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; }
+.badge-yellow { background: #FFFBEB; color: #D97706; border: 1px solid #FDE68A; }
+.badge-red { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
+.badge-purple { background: #F5F3FF; color: #7C3AED; border: 1px solid #DDD6FE; }
+.badge-blue { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
+.badge-gray { background: #F8FAFC; color: #64748B; border: 1px solid #E2E8F0; }
+
+.badge-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+.badge-green .badge-dot { background: #22C55E; }
+.badge-yellow .badge-dot { background: #F59E0B; }
+.badge-red .badge-dot { background: #EF4444; }
+.badge-purple .badge-dot { background: #8B5CF6; }
+.badge-blue .badge-dot { background: #3B82F6; }
+
+/* ===== DONUT CHART ===== */
+.donut-container { display: flex; align-items: center; gap: 32px; justify-content: center; padding: 12px 0; }
+.donut-svg { width: 170px; height: 170px; transform: rotate(-90deg); }
+.donut-svg circle {
+  fill: none; stroke-width: 28; stroke-linecap: round;
+}
+.donut-legend { display: flex; flex-direction: column; gap: 12px; }
+.donut-legend-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.donut-legend-item .legend-color { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+.donut-legend-item .legend-pct { font-weight: 700; color: #0F172A; min-width: 36px; }
+
+/* ===== BAR CHART ===== */
+.bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 180px; padding: 0 4px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.bar-col .bar-wrap { width: 100%; height: 150px; display: flex; align-items: flex-end; justify-content: center; }
+.bar-col .bar {
+  width: 70%; max-width: 28px; border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, #3B82F6, #60A5FA);
+  transition: height .6s ease;
+  position: relative;
+  min-height: 2px;
+}
+.bar-col .bar.night { background: linear-gradient(180deg, #8B5CF6, #A78BFA); }
+.bar-col .bar-label { font-size: 10px; color: #94A3B8; font-weight: 500; }
+.bar-col .bar-value {
+  font-size: 10px; font-weight: 700; color: #475569;
+  position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* ===== AGENT CARDS ===== */
+.agent-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.agent-card {
+  background: #fff; border: 1px solid #E2E8F0; border-radius: 12px;
+  padding: 20px; transition: box-shadow .2s, transform .2s;
+}
+.agent-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.06); transform: translateY(-1px); }
+.agent-card-top { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.agent-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 16px; color: #fff;
+  flex-shrink: 0;
+}
+.agent-info { flex: 1; }
+.agent-info .agent-name { font-size: 15px; font-weight: 700; color: #0F172A; }
+.agent-info .agent-shift { font-size: 12px; color: #64748B; }
+.agent-stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.agent-stat {
+  background: #F8FAFC; border-radius: 8px; padding: 10px 12px;
+}
+.agent-stat .stat-label { font-size: 10.5px; color: #94A3B8; font-weight: 500; text-transform: uppercase; letter-spacing: .4px; }
+.agent-stat .stat-value { font-size: 18px; font-weight: 800; color: #0F172A; margin-top: 2px; }
+
+/* ===== AUCTION TIMELINE ===== */
+.auction-card {
+  background: #fff; border: 1px solid #E2E8F0; border-radius: 12px;
+  padding: 20px; margin-bottom: 14px;
+  transition: box-shadow .2s;
+}
+.auction-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.06); }
+.auction-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.auction-code { font-size: 13px; font-weight: 700; font-family: 'Courier New', monospace; color: #3B82F6; }
+.auction-meta { display: flex; gap: 24px; margin-bottom: 12px; }
+.auction-meta-item { display: flex; flex-direction: column; }
+.auction-meta-item .meta-label { font-size: 10.5px; color: #94A3B8; font-weight: 500; text-transform: uppercase; letter-spacing: .3px; }
+.auction-meta-item .meta-value { font-size: 13px; font-weight: 600; color: #334155; margin-top: 2px; }
+.auction-progress { height: 4px; background: #E2E8F0; border-radius: 2px; overflow: hidden; }
+.auction-progress .fill { height: 100%; border-radius: 2px; transition: width .8s ease; }
+
+/* ===== NIGHT VIEW ===== */
+.night-queue-cards { display: flex; flex-direction: column; gap: 12px; }
+.night-card {
+  background: #fff; border: 1px solid #E2E8F0; border-radius: 12px;
+  padding: 18px 20px; display: flex; align-items: center; gap: 16px;
+}
+.temp-indicator {
+  width: 10px; height: 40px; border-radius: 5px; flex-shrink: 0;
+}
+.temp-hot { background: linear-gradient(180deg, #EF4444, #F97316); }
+.temp-warm { background: linear-gradient(180deg, #F59E0B, #FBBF24); }
+.temp-cold { background: linear-gradient(180deg, #3B82F6, #93C5FD); }
+.night-card-info { flex: 1; }
+.night-card-info .nc-name { font-weight: 700; font-size: 14px; color: #0F172A; }
+.night-card-info .nc-prop { font-size: 12px; color: #64748B; margin-top: 2px; }
+.night-card-info .nc-time { font-size: 11px; color: #94A3B8; margin-top: 4px; }
+.night-card-right { text-align: right; }
+.night-card-right .nc-msgs { font-size: 20px; font-weight: 800; color: #0F172A; }
+.night-card-right .nc-label { font-size: 10px; color: #94A3B8; }
+
+.chat-preview {
+  background: #0F172A; border-radius: 12px; padding: 20px;
+  font-size: 13px; color: #E2E8F0; max-height: 360px; overflow-y: auto;
+}
+.chat-bubble {
+  max-width: 80%; padding: 10px 14px; border-radius: 12px;
+  margin-bottom: 10px; line-height: 1.5;
+}
+.chat-bubble.bot {
+  background: #1E293B; margin-right: auto;
+  border-bottom-left-radius: 4px;
+}
+.chat-bubble.user {
+  background: #1D4ED8; margin-left: auto;
+  border-bottom-right-radius: 4px;
+}
+.chat-bubble .chat-sender {
+  font-size: 10px; font-weight: 600; color: #94A3B8; margin-bottom: 4px;
+  display: flex; align-items: center; gap: 5px;
+}
+.chat-bubble.user .chat-sender { color: #93C5FD; }
+.chat-bubble .chat-time { font-size: 10px; color: #64748B; margin-top: 4px; text-align: right; }
+
+/* ===== CALENDAR ===== */
+.calendar-grid {
+  display: grid; grid-template-columns: auto 1fr 1fr;
+  border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden;
+}
+.cal-header {
+  background: #F8FAFC; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px; color: #64748B;
+  padding: 14px 18px; border-bottom: 1px solid #E2E8F0;
+}
+.cal-cell {
+  padding: 14px 18px; border-bottom: 1px solid #F1F5F9;
+  font-size: 13px; color: #334155;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.cal-cell.day-cell {
+  font-weight: 700; color: #0F172A; background: #FAFBFC;
+  border-right: 1px solid #F1F5F9;
+}
+.cal-cell.today { background: #EFF6FF; }
+.cal-cell .cal-agent {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #F1F5F9; padding: 4px 10px; border-radius: 6px;
+  font-size: 12px; font-weight: 600;
+}
+.cal-cell .cal-agent .cal-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ===== WATERMARK ===== */
+.watermark {
+  position: fixed; bottom: 16px; right: 16px;
+  background: rgba(15,23,42,.75); backdrop-filter: blur(8px);
+  color: #94A3B8; font-size: 11px; font-weight: 500;
+  padding: 8px 16px; border-radius: 8px;
+  z-index: 200; letter-spacing: .3px;
+  border: 1px solid rgba(255,255,255,.05);
+}
+
+/* ===== SECTION HEADERS ===== */
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.section-header h2 { font-size: 16px; font-weight: 700; color: #0F172A; }
+.section-header .section-sub { font-size: 12px; color: #94A3B8; }
+
+/* ===== MISC ===== */
+.mt-20 { margin-top: 20px; }
+.mb-20 { margin-bottom: 20px; }
+.text-center { text-align: center; }
+.flex-center { display: flex; align-items: center; justify-content: center; }
+
+/* Proposed stack banner */
+.stack-banner {
+  background: linear-gradient(135deg, #0F172A, #1E293B);
+  border: 1px solid #334155;
+  border-radius: 12px; padding: 16px 22px;
+  display: flex; align-items: center; gap: 16px; margin-bottom: 24px;
+}
+.stack-banner .stack-icon {
+  width: 40px; height: 40px; background: rgba(59,130,246,.15);
+  border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.stack-banner .stack-icon svg { width: 20px; height: 20px; color: #60A5FA; }
+.stack-banner .stack-text { color: #CBD5E1; font-size: 12.5px; line-height: 1.5; }
+.stack-banner .stack-text strong { color: #F8FAFC; font-weight: 700; }
+.stack-tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.stack-tags .tag {
+  font-size: 10.5px; font-weight: 600; padding: 3px 10px; border-radius: 6px;
+  background: rgba(59,130,246,.1); color: #60A5FA; border: 1px solid rgba(59,130,246,.2);
+}
+
+/* Night summary cards */
+.night-summary {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;
+}
+.night-summary .ns-card {
+  background: linear-gradient(135deg, #1E1B4B, #312E81);
+  border-radius: 12px; padding: 20px; color: #C7D2FE;
+  border: 1px solid #4338CA;
+}
+.night-summary .ns-card .ns-val { font-size: 32px; font-weight: 800; color: #E0E7FF; }
+.night-summary .ns-card .ns-label { font-size: 12px; margin-top: 4px; }
+
+/* Pulse animation for active auctions */
+@keyframes pulse-border {
+  0%, 100% { border-color: #3B82F6; }
+  50% { border-color: #93C5FD; }
+}
+.auction-card.active-auction {
+  border: 2px solid #3B82F6;
+  animation: pulse-border 2s ease-in-out infinite;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-260px); }
+  .main { margin-left: 0; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .night-summary { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">
+      <div class="logo-icon">BYG</div>
+      <div class="logo-text">
+        <span class="brand">BYG Real Estate</span>
+        <span class="sub">Sistema de Leads</span>
+      </div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-label">Principal</div>
+    <div class="nav-item active" data-page="overview">
+      <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z"/></svg></span>
+      Vista General
+    </div>
+    <div class="nav-item" data-page="leads">
+      <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg></span>
+      Leads en Vivo
+      <span class="badge">5</span>
+    </div>
+    <div class="nav-item" data-page="agents">
+      <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/></svg></span>
+      Agentes
+    </div>
+    <div class="nav-item" data-page="auctions">
+      <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg></span>
+      Subastas
+      <span class="badge">2</span>
+    </div>
+    <div class="nav-label">Operaciones</div>
+    <div class="nav-item" data-page="night">
+      <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/></svg></span>
+      Nocturno
+    </div>
+    <div class="nav-item" data-page="calendar">
+      <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg></span>
+      Calendario
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="env-badge"><span class="dot"></span> Conectado — Produccion</div>
+    <div class="version">n8n + Supabase + Evolution API</div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="page-title" id="pageTitle">Vista General</span>
+      <div class="live-badge">
+        <span class="live-dot"></span>
+        En vivo
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="clock" id="clock"></div>
+      <div class="avatar">EB</div>
+    </div>
+  </header>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- ==================== OVERVIEW ==================== -->
+    <div class="page active" id="page-overview">
+      <div class="stack-banner">
+        <div class="stack-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"/></svg>
+        </div>
+        <div>
+          <div class="stack-text">
+            <strong>Stack propuesto:</strong> Next.js 15 + Supabase Realtime + Tailwind CSS + shadcn/ui
+          </div>
+          <div class="stack-tags">
+            <span class="tag">Next.js 15</span>
+            <span class="tag">Supabase Realtime</span>
+            <span class="tag">Tailwind CSS</span>
+            <span class="tag">shadcn/ui</span>
+            <span class="tag">TypeScript</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Leads Hoy</span>
+            <div class="kpi-icon" style="background:#EFF6FF;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#3B82F6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg></div>
+          </div>
+          <div class="kpi-value">24</div>
+          <div class="kpi-change up">+12% vs ayer</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Leads Esta Semana</span>
+            <div class="kpi-icon" style="background:#F0FDF4;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#22C55E"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941"/></svg></div>
+          </div>
+          <div class="kpi-value">142</div>
+          <div class="kpi-change up">+8% vs sem. pasada</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Tiempo Prom. Respuesta</span>
+            <div class="kpi-icon" style="background:#FFFBEB;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#F59E0B"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg></div>
+          </div>
+          <div class="kpi-value">2.3<span style="font-size:16px;font-weight:500;color:#94A3B8;"> min</span></div>
+          <div class="kpi-change up">-18% vs sem. pasada</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Tasa de Asignacion</span>
+            <div class="kpi-icon" style="background:#F0FDF4;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#22C55E"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg></div>
+          </div>
+          <div class="kpi-value">96<span style="font-size:16px;font-weight:500;color:#94A3B8;">%</span></div>
+          <div class="kpi-change up">+2% vs sem. pasada</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Leads Nocturnos</span>
+            <div class="kpi-icon" style="background:#F5F3FF;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#8B5CF6"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z"/></svg></div>
+          </div>
+          <div class="kpi-value">8</div>
+          <div class="kpi-change up">Bot AI activo</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Subastas Activas</span>
+            <div class="kpi-icon" style="background:#FEF2F2;"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#EF4444"><path stroke-linecap="round" stroke-linejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z"/></svg></div>
+          </div>
+          <div class="kpi-value">2</div>
+          <div class="kpi-change down">TOMO activos</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- DONUT -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Leads por Fuente</div>
+              <div class="card-subtitle">Distribucion de hoy</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="donut-container">
+              <svg class="donut-svg" viewBox="0 0 200 200">
+                <circle cx="100" cy="100" r="70" stroke="#E2E8F0" />
+                <circle cx="100" cy="100" r="70" stroke="#3B82F6"
+                  stroke-dasharray="285.88 440" stroke-dashoffset="0" />
+                <circle cx="100" cy="100" r="70" stroke="#8B5CF6"
+                  stroke-dasharray="110 440" stroke-dashoffset="-285.88" />
+                <circle cx="100" cy="100" r="70" stroke="#F59E0B"
+                  stroke-dasharray="44 440" stroke-dashoffset="-395.88" />
+              </svg>
+              <div class="donut-legend">
+                <div class="donut-legend-item">
+                  <div class="legend-color" style="background:#3B82F6;"></div>
+                  <span>Inmuebles24</span>
+                  <span class="legend-pct">65%</span>
+                </div>
+                <div class="donut-legend-item">
+                  <div class="legend-color" style="background:#8B5CF6;"></div>
+                  <span>WhatsApp</span>
+                  <span class="legend-pct">25%</span>
+                </div>
+                <div class="donut-legend-item">
+                  <div class="legend-color" style="background:#F59E0B;"></div>
+                  <span>EasyBroker</span>
+                  <span class="legend-pct">10%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- BAR CHART -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Leads por Hora del Dia</div>
+              <div class="card-subtitle">Ultimas 24 horas</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="bar-chart" id="barChart"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== LEADS EN VIVO ==================== -->
+    <div class="page" id="page-leads">
+      <div class="section-header">
+        <div>
+          <h2>Leads en Vivo</h2>
+          <div class="section-sub">Actualizacion en tiempo real via Supabase Realtime</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding:0;">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Hora</th>
+                  <th>Lead</th>
+                  <th>Propiedad</th>
+                  <th>Fuente</th>
+                  <th>Estado</th>
+                  <th>Agente</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="font-variant-numeric:tabular-nums;font-weight:600;">10:23</td>
+                  <td><strong>Maria Garcia</strong><br><span style="font-size:11px;color:#94A3B8;">+52 55 1234 5678</span></td>
+                  <td>Depto Polanco <span style="color:#3B82F6;font-weight:600;">$3.2M</span></td>
+                  <td><span class="badge badge-blue"><span class="badge-dot"></span>Inmuebles24</span></td>
+                  <td><span class="badge badge-green"><span class="badge-dot"></span>Asignado</span></td>
+                  <td><strong>Lupita</strong></td>
+                </tr>
+                <tr style="background:#FFFBEB;">
+                  <td style="font-variant-numeric:tabular-nums;font-weight:600;">10:18</td>
+                  <td><strong>Juan Lopez</strong><br><span style="font-size:11px;color:#94A3B8;">+52 55 9876 5432</span></td>
+                  <td>Casa Condesa <span style="color:#3B82F6;font-weight:600;">$5.8M</span></td>
+                  <td><span class="badge badge-purple"><span class="badge-dot"></span>WhatsApp</span></td>
+                  <td><span class="badge badge-yellow"><span class="badge-dot"></span>En subasta</span></td>
+                  <td><span style="font-family:monospace;font-weight:700;color:#D97706;">TOMO-A3F2</span></td>
+                </tr>
+                <tr>
+                  <td style="font-variant-numeric:tabular-nums;font-weight:600;">10:15</td>
+                  <td><strong>Ana Torres</strong><br><span style="font-size:11px;color:#94A3B8;">+52 55 5555 1234</span></td>
+                  <td>Depto Roma <span style="color:#3B82F6;font-weight:600;">$2.1M</span></td>
+                  <td><span class="badge badge-blue"><span class="badge-dot"></span>Inmuebles24</span></td>
+                  <td><span class="badge badge-green"><span class="badge-dot"></span>Asignado</span></td>
+                  <td><strong>Paty</strong></td>
+                </tr>
+                <tr>
+                  <td style="font-variant-numeric:tabular-nums;font-weight:600;">09:45</td>
+                  <td><strong>Carlos Ruiz</strong><br><span style="font-size:11px;color:#94A3B8;">+52 55 4321 9876</span></td>
+                  <td>Penthouse Lomas <span style="color:#3B82F6;font-weight:600;">$12M</span></td>
+                  <td><span class="badge badge-yellow"><span class="badge-dot"></span>EasyBroker</span></td>
+                  <td><span class="badge badge-green"><span class="badge-dot"></span>Asignado</span></td>
+                  <td><strong>Yol</strong></td>
+                </tr>
+                <tr>
+                  <td style="font-variant-numeric:tabular-nums;font-weight:600;">09:30</td>
+                  <td><strong>Sofia Mendez</strong><br><span style="font-size:11px;color:#94A3B8;">+52 55 6789 4321</span></td>
+                  <td>Casa San Angel <span style="color:#3B82F6;font-weight:600;">$7.5M</span></td>
+                  <td><span class="badge badge-purple"><span class="badge-dot"></span>WhatsApp</span></td>
+                  <td><span class="badge badge-red"><span class="badge-dot"></span>Expirado</span></td>
+                  <td><span style="color:#EF4444;font-weight:600;">Escalado a Manager</span></td>
+                </tr>
+                <tr>
+                  <td style="font-variant-numeric:tabular-nums;font-weight:600;">09:12</td>
+                  <td><strong>Roberto Diaz</strong><br><span style="font-size:11px;color:#94A3B8;">+52 55 1111 2222</span></td>
+                  <td>Casa Coyoacan <span style="color:#3B82F6;font-weight:600;">$4.5M</span></td>
+                  <td><span class="badge badge-blue"><span class="badge-dot"></span>Inmuebles24</span></td>
+                  <td><span class="badge badge-green"><span class="badge-dot"></span>Asignado</span></td>
+                  <td><strong>Lupita</strong></td>
+                </tr>
+                <tr>
+                  <td style="font-variant-numeric:tabular-nums;font-weight:600;">08:58</td>
+                  <td><strong>Laura Hernandez</strong><br><span style="font-size:11px;color:#94A3B8;">+52 55 3333 4444</span></td>
+                  <td>Depto Napoles <span style="color:#3B82F6;font-weight:600;">$1.8M</span></td>
+                  <td><span class="badge badge-blue"><span class="badge-dot"></span>Inmuebles24</span></td>
+                  <td><span class="badge badge-green"><span class="badge-dot"></span>Asignado</span></td>
+                  <td><strong>Paty</strong></td>
+                </tr>
+                <tr>
+                  <td style="font-variant-numeric:tabular-nums;font-weight:600;">08:31</td>
+                  <td><strong>Fernando Reyes</strong><br><span style="font-size:11px;color:#94A3B8;">+52 55 7777 8888</span></td>
+                  <td>Penthouse Santa Fe <span style="color:#3B82F6;font-weight:600;">$15M</span></td>
+                  <td><span class="badge badge-purple"><span class="badge-dot"></span>WhatsApp</span></td>
+                  <td><span class="badge badge-green"><span class="badge-dot"></span>Asignado</span></td>
+                  <td><strong>Lupita</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== AGENTES ==================== -->
+    <div class="page" id="page-agents">
+      <div class="section-header">
+        <div>
+          <h2>Equipo de Agentes</h2>
+          <div class="section-sub">6 agentes, 2 por turno — rendimiento en tiempo real</div>
+        </div>
+      </div>
+      <div class="agent-grid">
+        <!-- Lupita -->
+        <div class="agent-card">
+          <div class="agent-card-top">
+            <div class="agent-avatar" style="background:linear-gradient(135deg,#3B82F6,#2563EB);">LP</div>
+            <div class="agent-info">
+              <div class="agent-name">Lupita</div>
+              <div class="agent-shift">Turno Manana (8:00 — 14:00)</div>
+            </div>
+            <span class="badge badge-green"><span class="badge-dot"></span>En turno</span>
+          </div>
+          <div class="agent-stats">
+            <div class="agent-stat"><div class="stat-label">Leads Hoy</div><div class="stat-value">5</div></div>
+            <div class="agent-stat"><div class="stat-label">Leads Semana</div><div class="stat-value">28</div></div>
+            <div class="agent-stat"><div class="stat-label">Tiempo Avg Claim</div><div class="stat-value">1.8<span style="font-size:12px;color:#94A3B8;"> min</span></div></div>
+            <div class="agent-stat"><div class="stat-label">Tasa Claim</div><div class="stat-value" style="color:#22C55E;">92%</div></div>
+          </div>
+        </div>
+        <!-- Paty -->
+        <div class="agent-card">
+          <div class="agent-card-top">
+            <div class="agent-avatar" style="background:linear-gradient(135deg,#8B5CF6,#7C3AED);">PT</div>
+            <div class="agent-info">
+              <div class="agent-name">Paty</div>
+              <div class="agent-shift">Turno Manana (8:00 — 14:00)</div>
+            </div>
+            <span class="badge badge-green"><span class="badge-dot"></span>En turno</span>
+          </div>
+          <div class="agent-stats">
+            <div class="agent-stat"><div class="stat-label">Leads Hoy</div><div class="stat-value">4</div></div>
+            <div class="agent-stat"><div class="stat-label">Leads Semana</div><div class="stat-value">25</div></div>
+            <div class="agent-stat"><div class="stat-label">Tiempo Avg Claim</div><div class="stat-value">2.1<span style="font-size:12px;color:#94A3B8;"> min</span></div></div>
+            <div class="agent-stat"><div class="stat-label">Tasa Claim</div><div class="stat-value" style="color:#22C55E;">88%</div></div>
+          </div>
+        </div>
+        <!-- Yol -->
+        <div class="agent-card">
+          <div class="agent-card-top">
+            <div class="agent-avatar" style="background:linear-gradient(135deg,#F59E0B,#D97706);">YL</div>
+            <div class="agent-info">
+              <div class="agent-name">Yol</div>
+              <div class="agent-shift">Turno Tarde (14:00 — 21:00)</div>
+            </div>
+            <span class="badge badge-gray">Fuera de turno</span>
+          </div>
+          <div class="agent-stats">
+            <div class="agent-stat"><div class="stat-label">Leads Hoy</div><div class="stat-value">0</div></div>
+            <div class="agent-stat"><div class="stat-label">Leads Semana</div><div class="stat-value">22</div></div>
+            <div class="agent-stat"><div class="stat-label">Tiempo Avg Claim</div><div class="stat-value">2.5<span style="font-size:12px;color:#94A3B8;"> min</span></div></div>
+            <div class="agent-stat"><div class="stat-label">Tasa Claim</div><div class="stat-value" style="color:#F59E0B;">85%</div></div>
+          </div>
+        </div>
+        <!-- Gina -->
+        <div class="agent-card">
+          <div class="agent-card-top">
+            <div class="agent-avatar" style="background:linear-gradient(135deg,#EC4899,#DB2777);">GN</div>
+            <div class="agent-info">
+              <div class="agent-name">Gina</div>
+              <div class="agent-shift">Turno Tarde (14:00 — 21:00)</div>
+            </div>
+            <span class="badge badge-gray">Fuera de turno</span>
+          </div>
+          <div class="agent-stats">
+            <div class="agent-stat"><div class="stat-label">Leads Hoy</div><div class="stat-value">0</div></div>
+            <div class="agent-stat"><div class="stat-label">Leads Semana</div><div class="stat-value">20</div></div>
+            <div class="agent-stat"><div class="stat-label">Tiempo Avg Claim</div><div class="stat-value">3.0<span style="font-size:12px;color:#94A3B8;"> min</span></div></div>
+            <div class="agent-stat"><div class="stat-label">Tasa Claim</div><div class="stat-value" style="color:#F59E0B;">80%</div></div>
+          </div>
+        </div>
+        <!-- Carol -->
+        <div class="agent-card">
+          <div class="agent-card-top">
+            <div class="agent-avatar" style="background:linear-gradient(135deg,#22C55E,#16A34A);">CR</div>
+            <div class="agent-info">
+              <div class="agent-name">Carol</div>
+              <div class="agent-shift">Libre</div>
+            </div>
+            <span class="badge badge-blue"><span class="badge-dot"></span>Disponible</span>
+          </div>
+          <div class="agent-stats">
+            <div class="agent-stat"><div class="stat-label">Leads Hoy</div><div class="stat-value">0</div></div>
+            <div class="agent-stat"><div class="stat-label">Leads Semana</div><div class="stat-value">18</div></div>
+            <div class="agent-stat"><div class="stat-label">Tiempo Avg Claim</div><div class="stat-value">2.2<span style="font-size:12px;color:#94A3B8;"> min</span></div></div>
+            <div class="agent-stat"><div class="stat-label">Tasa Claim</div><div class="stat-value" style="color:#22C55E;">87%</div></div>
+          </div>
+        </div>
+        <!-- Moni -->
+        <div class="agent-card">
+          <div class="agent-card-top">
+            <div class="agent-avatar" style="background:linear-gradient(135deg,#06B6D4,#0891B2);">MN</div>
+            <div class="agent-info">
+              <div class="agent-name">Moni</div>
+              <div class="agent-shift">Libre</div>
+            </div>
+            <span class="badge badge-blue"><span class="badge-dot"></span>Disponible</span>
+          </div>
+          <div class="agent-stats">
+            <div class="agent-stat"><div class="stat-label">Leads Hoy</div><div class="stat-value">0</div></div>
+            <div class="agent-stat"><div class="stat-label">Leads Semana</div><div class="stat-value">15</div></div>
+            <div class="agent-stat"><div class="stat-label">Tiempo Avg Claim</div><div class="stat-value">2.8<span style="font-size:12px;color:#94A3B8;"> min</span></div></div>
+            <div class="agent-stat"><div class="stat-label">Tasa Claim</div><div class="stat-value" style="color:#F59E0B;">82%</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SUBASTAS ==================== -->
+    <div class="page" id="page-auctions">
+      <div class="section-header">
+        <div>
+          <h2>Subastas TOMO</h2>
+          <div class="section-sub">Sistema de subasta — primer agente en responder gana el lead</div>
+        </div>
+      </div>
+
+      <!-- Active auction -->
+      <div class="auction-card active-auction">
+        <div class="auction-top">
+          <div>
+            <span class="auction-code">TOMO-A3F2</span>
+            <span class="badge badge-yellow" style="margin-left:10px;"><span class="badge-dot"></span>Activa</span>
+          </div>
+          <span style="font-size:24px;font-weight:800;color:#D97706;font-variant-numeric:tabular-nums;" id="auction-timer-1">2:15</span>
+        </div>
+        <div class="auction-meta">
+          <div class="auction-meta-item">
+            <span class="meta-label">Lead</span>
+            <span class="meta-value">Juan Lopez</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Propiedad</span>
+            <span class="meta-value">Casa Condesa — $5.8M MXN</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Agentes Notificados</span>
+            <span class="meta-value">3 agentes</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Ganador</span>
+            <span class="meta-value" style="color:#D97706;">(pendiente)</span>
+          </div>
+        </div>
+        <div class="auction-progress"><div class="fill" style="width:45%;background:linear-gradient(90deg,#F59E0B,#FBBF24);"></div></div>
+      </div>
+
+      <!-- Active auction 2 -->
+      <div class="auction-card active-auction">
+        <div class="auction-top">
+          <div>
+            <span class="auction-code">TOMO-E2G7</span>
+            <span class="badge badge-yellow" style="margin-left:10px;"><span class="badge-dot"></span>Activa</span>
+          </div>
+          <span style="font-size:24px;font-weight:800;color:#D97706;font-variant-numeric:tabular-nums;">0:42</span>
+        </div>
+        <div class="auction-meta">
+          <div class="auction-meta-item">
+            <span class="meta-label">Lead</span>
+            <span class="meta-value">Pedro Martinez</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Propiedad</span>
+            <span class="meta-value">Depto Del Valle — $2.9M MXN</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Agentes Notificados</span>
+            <span class="meta-value">3 agentes</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Ganador</span>
+            <span class="meta-value" style="color:#D97706;">(pendiente)</span>
+          </div>
+        </div>
+        <div class="auction-progress"><div class="fill" style="width:14%;background:linear-gradient(90deg,#F59E0B,#FBBF24);"></div></div>
+      </div>
+
+      <!-- Closed auctions -->
+      <div style="margin-top:24px;">
+        <h3 style="font-size:14px;font-weight:700;color:#64748B;margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px;">Historial Reciente</h3>
+      </div>
+
+      <div class="auction-card">
+        <div class="auction-top">
+          <div>
+            <span class="auction-code">TOMO-B7E1</span>
+            <span class="badge badge-green" style="margin-left:10px;"><span class="badge-dot"></span>Cerrada</span>
+          </div>
+          <span style="font-size:18px;font-weight:700;color:#94A3B8;">0:45</span>
+        </div>
+        <div class="auction-meta">
+          <div class="auction-meta-item">
+            <span class="meta-label">Lead</span>
+            <span class="meta-value">Maria Garcia</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Propiedad</span>
+            <span class="meta-value">Depto Polanco — $3.2M MXN</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Agentes Notificados</span>
+            <span class="meta-value">3 agentes</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Ganador</span>
+            <span class="meta-value" style="color:#22C55E;font-weight:700;">Lupita</span>
+          </div>
+        </div>
+        <div class="auction-progress"><div class="fill" style="width:100%;background:#22C55E;"></div></div>
+      </div>
+
+      <div class="auction-card">
+        <div class="auction-top">
+          <div>
+            <span class="auction-code">TOMO-C9D4</span>
+            <span class="badge badge-green" style="margin-left:10px;"><span class="badge-dot"></span>Cerrada</span>
+          </div>
+          <span style="font-size:18px;font-weight:700;color:#94A3B8;">1:12</span>
+        </div>
+        <div class="auction-meta">
+          <div class="auction-meta-item">
+            <span class="meta-label">Lead</span>
+            <span class="meta-value">Ana Torres</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Propiedad</span>
+            <span class="meta-value">Depto Roma — $2.1M MXN</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Agentes Notificados</span>
+            <span class="meta-value">3 agentes</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Ganador</span>
+            <span class="meta-value" style="color:#22C55E;font-weight:700;">Paty</span>
+          </div>
+        </div>
+        <div class="auction-progress"><div class="fill" style="width:100%;background:#22C55E;"></div></div>
+      </div>
+
+      <div class="auction-card">
+        <div class="auction-top">
+          <div>
+            <span class="auction-code">TOMO-D5F8</span>
+            <span class="badge badge-red" style="margin-left:10px;"><span class="badge-dot"></span>Expirada</span>
+          </div>
+          <span style="font-size:18px;font-weight:700;color:#EF4444;">5:00</span>
+        </div>
+        <div class="auction-meta">
+          <div class="auction-meta-item">
+            <span class="meta-label">Lead</span>
+            <span class="meta-value">Sofia Mendez</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Propiedad</span>
+            <span class="meta-value">Casa San Angel — $7.5M MXN</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Agentes Notificados</span>
+            <span class="meta-value">3 agentes</span>
+          </div>
+          <div class="auction-meta-item">
+            <span class="meta-label">Ganador</span>
+            <span class="meta-value" style="color:#EF4444;font-weight:700;">Nadie — Escalado a Manager</span>
+          </div>
+        </div>
+        <div class="auction-progress"><div class="fill" style="width:100%;background:#EF4444;"></div></div>
+      </div>
+    </div>
+
+    <!-- ==================== NOCTURNO ==================== -->
+    <div class="page" id="page-night">
+      <div class="section-header">
+        <div>
+          <h2>Vista Nocturna</h2>
+          <div class="section-sub">21:00 — 08:00 | Bot AI atiende leads, cola para manana</div>
+        </div>
+        <span class="badge badge-purple" style="font-size:13px;padding:6px 14px;"><span class="badge-dot"></span>Bot AI Activo</span>
+      </div>
+
+      <div class="night-summary">
+        <div class="ns-card">
+          <div class="ns-val">3</div>
+          <div class="ns-label">Leads en cola para manana</div>
+        </div>
+        <div class="ns-card">
+          <div class="ns-val">5</div>
+          <div class="ns-label">Conversaciones del bot esta noche</div>
+        </div>
+        <div class="ns-card">
+          <div class="ns-val">87%</div>
+          <div class="ns-label">Tasa de satisfaccion bot</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <h3 style="font-size:14px;font-weight:700;color:#0F172A;margin-bottom:14px;">Conversaciones del Bot</h3>
+          <div class="night-queue-cards">
+            <div class="night-card" style="cursor:pointer;border:2px solid #3B82F6;">
+              <div class="temp-indicator temp-hot"></div>
+              <div class="night-card-info">
+                <div class="nc-name">Miguel Fernandez</div>
+                <div class="nc-prop">Penthouse Reforma — $18M MXN</div>
+                <div class="nc-time">Ultima interaccion: hace 3 min</div>
+              </div>
+              <div class="night-card-right">
+                <div class="nc-msgs">12</div>
+                <div class="nc-label">mensajes</div>
+                <span class="badge badge-red" style="margin-top:4px;">Caliente</span>
+              </div>
+            </div>
+            <div class="night-card">
+              <div class="temp-indicator temp-warm"></div>
+              <div class="night-card-info">
+                <div class="nc-name">Isabel Morales</div>
+                <div class="nc-prop">Depto Condesa — $4.2M MXN</div>
+                <div class="nc-time">Ultima interaccion: hace 25 min</div>
+              </div>
+              <div class="night-card-right">
+                <div class="nc-msgs">7</div>
+                <div class="nc-label">mensajes</div>
+                <span class="badge badge-yellow" style="margin-top:4px;">Tibio</span>
+              </div>
+            </div>
+            <div class="night-card">
+              <div class="temp-indicator temp-cold"></div>
+              <div class="night-card-info">
+                <div class="nc-name">Alejandro Vega</div>
+                <div class="nc-prop">Casa Pedregal — $9.5M MXN</div>
+                <div class="nc-time">Ultima interaccion: hace 2 hrs</div>
+              </div>
+              <div class="night-card-right">
+                <div class="nc-msgs">3</div>
+                <div class="nc-label">mensajes</div>
+                <span class="badge badge-blue" style="margin-top:4px;">Frio</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h3 style="font-size:14px;font-weight:700;color:#0F172A;margin-bottom:14px;">Preview de Conversacion</h3>
+          <div class="chat-preview">
+            <div class="chat-bubble user">
+              <div class="chat-sender">Miguel Fernandez</div>
+              Hola buenas noches, vi el penthouse en Reforma y me interesa mucho. Tiene terraza?
+              <div class="chat-time">23:14</div>
+            </div>
+            <div class="chat-bubble bot">
+              <div class="chat-sender"><svg style="width:12px;height:12px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#8B5CF6"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/></svg> Bot AI — BYG Real Estate</div>
+              Buenas noches, Miguel! Gracias por tu interes en el Penthouse en Paseo de la Reforma. Si, cuenta con una terraza de 85m2 con vista panoramica a la ciudad. El inmueble tiene 320m2 de construccion, 3 recamaras, cuarto de servicio y 3 cajones de estacionamiento. Te gustaria agendar una visita?
+              <div class="chat-time">23:14</div>
+            </div>
+            <div class="chat-bubble user">
+              <div class="chat-sender">Miguel Fernandez</div>
+              Si, que dias tienen disponibles? Tambien me gustaria saber si el precio es negociable
+              <div class="chat-time">23:16</div>
+            </div>
+            <div class="chat-bubble bot">
+              <div class="chat-sender"><svg style="width:12px;height:12px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#8B5CF6"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/></svg> Bot AI — BYG Real Estate</div>
+              Excelente! Manana a primera hora una de nuestras asesoras se pondra en contacto contigo para coordinar la visita y darte todos los detalles sobre condiciones comerciales. Mientras tanto, te puedo compartir fotos adicionales del inmueble si gustas.
+              <div class="chat-time">23:16</div>
+            </div>
+            <div class="chat-bubble user">
+              <div class="chat-sender">Miguel Fernandez</div>
+              Si por favor, y tambien si tienen algun otro penthouse similar en la zona
+              <div class="chat-time">23:18</div>
+            </div>
+            <div class="chat-bubble bot">
+              <div class="chat-sender"><svg style="width:12px;height:12px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#8B5CF6"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/></svg> Bot AI — BYG Real Estate</div>
+              Claro que si! Tenemos 2 opciones similares en la zona: un penthouse en Polanco de $15M con 280m2 y otro en Lomas de $22M con 400m2, ambos con terraza. Manana nuestra asesora te dara informacion detallada de todas las opciones. Que descanses!
+              <div class="chat-time">23:19</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== CALENDARIO ==================== -->
+    <div class="page" id="page-calendar">
+      <div class="section-header">
+        <div>
+          <h2>Calendario de Turnos</h2>
+          <div class="section-sub">Semana del 5 al 11 de Mayo, 2026 — fuente: Google Sheets</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding:0;">
+          <div class="calendar-grid">
+            <!-- Headers -->
+            <div class="cal-header">Dia</div>
+            <div class="cal-header">Manana (8:00 — 14:00)</div>
+            <div class="cal-header">Tarde (14:00 — 21:00)</div>
+
+            <!-- Lun -->
+            <div class="cal-cell day-cell">Lunes 5</div>
+            <div class="cal-cell">
+              <span class="cal-agent"><span class="cal-dot" style="background:#3B82F6;"></span>Lupita</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#8B5CF6;"></span>Paty</span>
+            </div>
+            <div class="cal-cell">
+              <span class="cal-agent"><span class="cal-dot" style="background:#F59E0B;"></span>Yol</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#EC4899;"></span>Gina</span>
+            </div>
+
+            <!-- Mar -->
+            <div class="cal-cell day-cell">Martes 6</div>
+            <div class="cal-cell">
+              <span class="cal-agent"><span class="cal-dot" style="background:#22C55E;"></span>Carol</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#06B6D4;"></span>Moni</span>
+            </div>
+            <div class="cal-cell">
+              <span class="cal-agent"><span class="cal-dot" style="background:#3B82F6;"></span>Lupita</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#8B5CF6;"></span>Paty</span>
+            </div>
+
+            <!-- Mie -->
+            <div class="cal-cell day-cell">Miercoles 7</div>
+            <div class="cal-cell">
+              <span class="cal-agent"><span class="cal-dot" style="background:#F59E0B;"></span>Yol</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#EC4899;"></span>Gina</span>
+            </div>
+            <div class="cal-cell">
+              <span class="cal-agent"><span class="cal-dot" style="background:#22C55E;"></span>Carol</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#06B6D4;"></span>Moni</span>
+            </div>
+
+            <!-- Jue (today) -->
+            <div class="cal-cell day-cell" style="background:#EFF6FF;border-right:1px solid #BFDBFE;">Jueves 8 <span class="badge badge-blue" style="margin-left:6px;font-size:9px;">HOY</span></div>
+            <div class="cal-cell today">
+              <span class="cal-agent"><span class="cal-dot" style="background:#3B82F6;"></span>Lupita</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#8B5CF6;"></span>Paty</span>
+            </div>
+            <div class="cal-cell today">
+              <span class="cal-agent"><span class="cal-dot" style="background:#F59E0B;"></span>Yol</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#EC4899;"></span>Gina</span>
+            </div>
+
+            <!-- Vie -->
+            <div class="cal-cell day-cell">Viernes 9</div>
+            <div class="cal-cell">
+              <span class="cal-agent"><span class="cal-dot" style="background:#22C55E;"></span>Carol</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#06B6D4;"></span>Moni</span>
+            </div>
+            <div class="cal-cell">
+              <span class="cal-agent"><span class="cal-dot" style="background:#3B82F6;"></span>Lupita</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#8B5CF6;"></span>Paty</span>
+            </div>
+
+            <!-- Sab -->
+            <div class="cal-cell day-cell">Sabado 10</div>
+            <div class="cal-cell">
+              <span class="cal-agent"><span class="cal-dot" style="background:#F59E0B;"></span>Yol</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#22C55E;"></span>Carol</span>
+            </div>
+            <div class="cal-cell">
+              <span class="cal-agent"><span class="cal-dot" style="background:#EC4899;"></span>Gina</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#06B6D4;"></span>Moni</span>
+            </div>
+
+            <!-- Dom -->
+            <div class="cal-cell day-cell" style="border-bottom:none;">Domingo 11</div>
+            <div class="cal-cell" style="border-bottom:none;">
+              <span class="cal-agent"><span class="cal-dot" style="background:#3B82F6;"></span>Lupita</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#06B6D4;"></span>Moni</span>
+            </div>
+            <div class="cal-cell" style="border-bottom:none;">
+              <span class="cal-agent"><span class="cal-dot" style="background:#8B5CF6;"></span>Paty</span>
+              <span class="cal-agent"><span class="cal-dot" style="background:#F59E0B;"></span>Yol</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Configuracion de Turnos</div>
+          </div>
+          <div class="card-body">
+            <div style="display:flex;gap:32px;flex-wrap:wrap;">
+              <div>
+                <div style="font-size:12px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">Horario Diurno</div>
+                <div style="font-size:15px;font-weight:700;color:#0F172A;">8:00 — 21:00</div>
+                <div style="font-size:12px;color:#94A3B8;margin-top:2px;">2 agentes por turno</div>
+              </div>
+              <div>
+                <div style="font-size:12px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">Horario Nocturno</div>
+                <div style="font-size:15px;font-weight:700;color:#8B5CF6;">21:00 — 8:00</div>
+                <div style="font-size:12px;color:#94A3B8;margin-top:2px;">Bot AI automatico</div>
+              </div>
+              <div>
+                <div style="font-size:12px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">Reporte Matutino</div>
+                <div style="font-size:15px;font-weight:700;color:#0F172A;">8:00 AM</div>
+                <div style="font-size:12px;color:#94A3B8;margin-top:2px;">Resumen + auto-TOMO 8:05 AM</div>
+              </div>
+              <div>
+                <div style="font-size:12px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">Fuente del Calendario</div>
+                <div style="font-size:15px;font-weight:700;color:#22C55E;">Google Sheets</div>
+                <div style="font-size:12px;color:#94A3B8;margin-top:2px;">Sincronizacion automatica</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- WATERMARK -->
+<div class="watermark">Propuesta de Dashboard — Inmobiliaria24</div>
+
+<!-- ===== JAVASCRIPT ===== -->
+<script>
+(function() {
+  // ===== NAVIGATION =====
+  const navItems = document.querySelectorAll('.nav-item[data-page]');
+  const pages = document.querySelectorAll('.page');
+  const pageTitle = document.getElementById('pageTitle');
+
+  const titles = {
+    overview: 'Vista General',
+    leads: 'Leads en Vivo',
+    agents: 'Agentes',
+    auctions: 'Subastas',
+    night: 'Nocturno',
+    calendar: 'Calendario'
+  };
+
+  navItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const page = item.dataset.page;
+      navItems.forEach(n => n.classList.remove('active'));
+      item.classList.add('active');
+      pages.forEach(p => p.classList.remove('active'));
+      document.getElementById('page-' + page).classList.add('active');
+      pageTitle.textContent = titles[page] || page;
+    });
+  });
+
+  // ===== CLOCK =====
+  function updateClock() {
+    const now = new Date();
+    const opts = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+    const date = now.toLocaleDateString('es-MX', opts);
+    const time = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    document.getElementById('clock').textContent = date.charAt(0).toUpperCase() + date.slice(1) + '  |  ' + time;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // ===== BAR CHART =====
+  const barData = [
+    { h: '6', v: 1 }, { h: '7', v: 2 }, { h: '8', v: 5 },
+    { h: '9', v: 8 }, { h: '10', v: 14 }, { h: '11', v: 11 },
+    { h: '12', v: 9 }, { h: '13', v: 7 }, { h: '14', v: 10 },
+    { h: '15', v: 13 }, { h: '16', v: 10 }, { h: '17', v: 8 },
+    { h: '18', v: 6 }, { h: '19', v: 5 }, { h: '20', v: 4 },
+    { h: '21', v: 3, night: true }, { h: '22', v: 4, night: true },
+    { h: '23', v: 3, night: true }, { h: '0', v: 2, night: true },
+    { h: '1', v: 1, night: true }
+  ];
+  const maxV = Math.max(...barData.map(d => d.v));
+  const chart = document.getElementById('barChart');
+  barData.forEach(d => {
+    const col = document.createElement('div');
+    col.className = 'bar-col';
+    const wrap = document.createElement('div');
+    wrap.className = 'bar-wrap';
+    const bar = document.createElement('div');
+    bar.className = 'bar' + (d.night ? ' night' : '');
+    const pct = (d.v / maxV) * 100;
+    bar.style.height = '0%';
+    const valSpan = document.createElement('span');
+    valSpan.className = 'bar-value';
+    valSpan.textContent = d.v;
+    bar.appendChild(valSpan);
+    wrap.appendChild(bar);
+    col.appendChild(wrap);
+    const label = document.createElement('span');
+    label.className = 'bar-label';
+    label.textContent = d.h + ':00';
+    col.appendChild(label);
+    chart.appendChild(col);
+    // Animate
+    setTimeout(() => { bar.style.height = pct + '%'; }, 150);
+  });
+
+  // ===== AUCTION TIMER SIMULATION =====
+  let timerSeconds = 135; // 2:15
+  const timerEl = document.getElementById('auction-timer-1');
+  if (timerEl) {
+    setInterval(() => {
+      timerSeconds++;
+      const m = Math.floor(timerSeconds / 60);
+      const s = timerSeconds % 60;
+      timerEl.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+    }, 1000);
+  }
+})();
+</script>
+</body>
+</html>

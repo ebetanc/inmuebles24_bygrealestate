@@ -1,98 +1,145 @@
 {
-  "name": "WF3a - Auction Launcher",
+  "name": "WF3a - Auction Launcher (Evolution)",
   "nodes": [
     {
-      "parameters": { "inputSource": "passthrough" },
-      "id": "trigger-wf3a",
-      "name": "When Called by Another Workflow",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "891e6f6d-9744-42ba-9e3f-f70e2fa84e5d",
+      "name": "When Called by WF2",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [240, 300],
-      "notes": "Input from WF2:\n{\n  conversation_id: UUID,\n  lead_phone: '+5215512345678',\n  lead_name: 'María García',\n  property_id: 'EB-12345',\n  property_title: 'Depto. Bosques de las Lomas',\n  property_price: '$1,000,883 MXN',\n  assigned_agent_id: 'agent_yolanda' | null\n}"
+      "position": [
+        240,
+        300
+      ],
+      "notes": "Input from WF2:\n{\n  conversation_id: UUID,\n  lead_phone: '5215512345678',\n  lead_name: 'Maria Garcia',\n  property_id: 'EB-12345',\n  property_title: 'Depto. Bosques de las Lomas',\n  property_price: '$1,000,883 MXN',\n  assigned_agent_id: 'agent_yolanda' | null\n}"
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "WITH new_auction AS (\n  INSERT INTO auctions (conversation_id, property_id, short_code, expires_at)\n  VALUES (\n    $1::uuid,\n    $2,\n    UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 4)),\n    NOW() + INTERVAL '5 minutes'\n  )\n  RETURNING auction_id, short_code, expires_at\n)\nSELECT * FROM new_auction;",
-        "options": { "queryReplacement": "={{ $json.conversation_id }},={{ $json.property_id }}" }
+        "options": {
+          "queryReplacement": "={{ $json.conversation_id }},={{ $json.property_id }}"
+        }
       },
-      "id": "pg-create-auction",
+      "id": "355ea205-2b66-4a72-a1e9-789867b047fd",
       "name": "Create Auction Row",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [460, 300],
+      "position": [
+        460,
+        300
+      ],
       "credentials": {
-        "postgres": { "id": "REPLACE_POSTGRES_CRED_ID", "name": "Supabase Postgres" }
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
       }
     },
     {
-      "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} },
-      "id": "merge-auction-and-lead",
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "c18921ad-5ad3-428c-99c1-cccc72ab6835",
       "name": "Merge Auction + Lead Context",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.1,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT DISTINCT a.agent_id, a.name, a.whatsapp_number\nFROM agents a\nWHERE (a.on_shift = true AND a.is_available = true)\n   OR a.agent_id = $1;",
-        "options": { "queryReplacement": "={{ $json.assigned_agent_id || '__none__' }}" }
+        "query": "-- Get on-shift agents from agent_schedule (with on_shift fallback).\n-- Also include the manager and any specifically assigned agent.\nSELECT DISTINCT a.agent_id, a.name, a.whatsapp_number\nFROM get_on_shift_agents() g\nJOIN agents a ON a.agent_id = g.agent_id\nUNION\nSELECT a.agent_id, a.name, a.whatsapp_number\nFROM agents a WHERE a.agent_id = 'agent_manager'\nUNION\nSELECT a.agent_id, a.name, a.whatsapp_number\nFROM agents a WHERE a.agent_id = $1 AND $1 != '__none__';",
+        "options": {
+          "queryReplacement": "={{ $json.assigned_agent_id || '__none__' }}"
+        }
       },
-      "id": "pg-fetch-pool",
-      "name": "Fetch Notification Pool",
+      "id": "d19a7614-f3c0-4ae3-88c2-69f54a28b65b",
+      "name": "Fetch Agent Pool",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [900, 300],
+      "position": [
+        900,
+        300
+      ],
       "credentials": {
-        "postgres": { "id": "REPLACE_POSTGRES_CRED_ID", "name": "Supabase Postgres" }
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
       }
     },
     {
       "parameters": {
-        "jsCode": "const auctionCtx = $('Merge Auction + Lead Context').first().json;\nconst agents = $input.all();\n\nreturn agents.map(item => {\n  const agent = item.json;\n  const body = [\n    `🏠 Nuevo lead para ${auctionCtx.property_title}`,\n    `💰 ${auctionCtx.property_price}`,\n    `👤 Lead: ${auctionCtx.lead_name || 'Sin nombre'}`,\n    ``,\n    `Responde *TOMO-${auctionCtx.short_code}* para asignártelo.`,\n    `(Expira en 5 min)`\n  ].join('\\n');\n\n  return {\n    json: {\n      agent_id: agent.agent_id,\n      agent_name: agent.name,\n      to_phone: `whatsapp:${agent.whatsapp_number}`,\n      body,\n      auction_id: auctionCtx.auction_id,\n      short_code: auctionCtx.short_code,\n      conversation_id: auctionCtx.conversation_id\n    }\n  };\n});"
+        "jsCode": "const ctx = $('Merge Auction + Lead Context').first().json;\nconst agents = $input.all();\n\nreturn agents.map(item => {\n  const agent = item.json;\n  const body = [\n    `\\u{1F3E0} Nuevo lead para ${ctx.property_title}`,\n    `\\u{1F4B0} ${ctx.property_price}`,\n    `\\u{1F464} Lead: ${ctx.lead_name || 'Sin nombre'}`,\n    ``,\n    `Responde *TOMO-${ctx.short_code}* para asignartelo.`,\n    `(Expira en 5 min)`\n  ].join('\\n');\n\n  return {\n    json: {\n      agent_id: agent.agent_id,\n      agent_name: agent.name,\n      number: agent.whatsapp_number,\n      text: body,\n      auction_id: ctx.auction_id,\n      short_code: ctx.short_code,\n      conversation_id: ctx.conversation_id\n    }\n  };\n});"
       },
-      "id": "build-messages",
+      "id": "592d7ee4-342c-484a-9eda-49c9c5d9dfb0",
       "name": "Build Fan-out Messages",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
     },
     {
       "parameters": {
-        "resource": "sms",
-        "operation": "send",
-        "from": "={{ $env.TWILIO_WHATSAPP_FROM }}",
-        "to": "={{ $json.to_phone }}",
-        "toWhatsapp": true,
-        "message": "={{ $json.body }}",
-        "options": {}
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.number }}\",\n  \"text\": {{ JSON.stringify($json.text) }},\n  \"delay\": 1200\n}",
+        "options": {
+          "timeout": 15000
+        }
       },
-      "id": "twilio-send",
-      "name": "Send via Twilio WhatsApp",
-      "type": "n8n-nodes-base.twilio",
-      "typeVersion": 1,
-      "position": [1340, 300],
-      "credentials": {
-        "twilioApi": { "id": "REPLACE_TWILIO_CRED_ID", "name": "Twilio" }
-      },
+      "id": "f6d691f7-bfc7-4605-86da-c805acd63098",
+      "name": "Send via Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        300
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, twilio_sid, metadata)\nVALUES ($1::uuid, 'outbound', 'system', $2, $3, $4, $5::jsonb);",
+        "query": "INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nVALUES ($1::uuid, 'outbound', 'system', $2, $3, $4::jsonb);",
         "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $json.to_phone }},={{ $json.body }},={{ $('Send via Twilio WhatsApp').item.json.sid || null }},={{ JSON.stringify({ purpose: 'auction_notify', auction_id: $json.auction_id, agent_id: $json.agent_id }) }}"
+          "queryReplacement": "={{ $json.conversation_id }},={{ $json.number }},={{ $json.text }},={{ JSON.stringify({ purpose: 'auction_notify', auction_id: $json.auction_id, agent_id: $json.agent_id }) }}"
         }
       },
-      "id": "pg-log-outbound",
+      "id": "3a609e21-49a9-4a9a-8ebb-6efa1c80d1b8",
       "name": "Log Outbound Message",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1560, 300],
+      "position": [
+        1560,
+        300
+      ],
       "credentials": {
-        "postgres": { "id": "REPLACE_POSTGRES_CRED_ID", "name": "Supabase Postgres" }
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
       },
       "continueOnFail": true
     },
@@ -100,11 +147,14 @@
       "parameters": {
         "jsCode": "const items = $input.all();\nconst notifiedAgents = items.filter(i => i.json.agent_id).map(i => i.json.agent_id);\n\nreturn [{\n  json: {\n    auction_id: items[0]?.json?.auction_id,\n    conversation_id: items[0]?.json?.conversation_id,\n    short_code: items[0]?.json?.short_code,\n    notified_agents: notifiedAgents,\n    notified_count: notifiedAgents.length\n  }\n}];"
       },
-      "id": "aggregate",
+      "id": "b31134fd-1e90-4253-82aa-5cf115fb7c95",
       "name": "Aggregate Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1780, 300]
+      "position": [
+        1780,
+        300
+      ]
     },
     {
       "parameters": {
@@ -114,25 +164,119 @@
           "queryReplacement": "={{ '{' + $json.notified_agents.join(',') + '}' }},={{ $json.auction_id }}"
         }
       },
-      "id": "pg-record-notified",
+      "id": "3772a469-ce25-4ca2-849e-ac2328a4d30f",
       "name": "Record Notified Agents",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [2000, 300],
+      "position": [
+        2000,
+        300
+      ],
       "credentials": {
-        "postgres": { "id": "REPLACE_POSTGRES_CRED_ID", "name": "Supabase Postgres" }
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
       }
     }
   ],
   "connections": {
-    "When Called by Another Workflow": { "main": [[{ "node": "Create Auction Row", "type": "main", "index": 0 }]] },
-    "Create Auction Row":              { "main": [[{ "node": "Merge Auction + Lead Context", "type": "main", "index": 0 }]] },
-    "Merge Auction + Lead Context":    { "main": [[{ "node": "Fetch Notification Pool", "type": "main", "index": 0 }]] },
-    "Fetch Notification Pool":         { "main": [[{ "node": "Build Fan-out Messages", "type": "main", "index": 0 }]] },
-    "Build Fan-out Messages":          { "main": [[{ "node": "Send via Twilio WhatsApp", "type": "main", "index": 0 }]] },
-    "Send via Twilio WhatsApp":        { "main": [[{ "node": "Log Outbound Message", "type": "main", "index": 0 }]] },
-    "Log Outbound Message":            { "main": [[{ "node": "Aggregate Results", "type": "main", "index": 0 }]] },
-    "Aggregate Results":               { "main": [[{ "node": "Record Notified Agents", "type": "main", "index": 0 }]] }
+    "When Called by WF2": {
+      "main": [
+        [
+          {
+            "node": "Create Auction Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Auction + Lead Context",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create Auction Row": {
+      "main": [
+        [
+          {
+            "node": "Merge Auction + Lead Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Auction + Lead Context": {
+      "main": [
+        [
+          {
+            "node": "Fetch Agent Pool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Agent Pool": {
+      "main": [
+        [
+          {
+            "node": "Build Fan-out Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Fan-out Messages": {
+      "main": [
+        [
+          {
+            "node": "Send via Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send via Evolution": {
+      "main": [
+        [
+          {
+            "node": "Log Outbound Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Outbound Message": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Record Notified Agents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1", "saveExecutionProgress": true }
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true
+  }
 }

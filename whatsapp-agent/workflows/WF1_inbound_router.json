@@ -1,0 +1,505 @@
+{
+  "name": "WF1 - Inbound Router (Evolution)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "evolution-webhook",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "2dd402fb-2665-45d6-82c4-7d7cdb08242a",
+      "name": "Evolution Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "18d79979-c54f-4687-9aa1-ed2ca88a754b",
+      "notes": "Receives all Evolution API webhook events.\nConfigure Evolution instance webhook URL to: https://your-n8n-domain/webhook/evolution-webhook\nSet events: MESSAGES_UPSERT"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Evolution webhook payload and extract message details.\n// Evolution sends different event types; we only care about messages.upsert\n// with fromMe=false (inbound messages from others).\n\nconst body = $input.first().json.body || $input.first().json;\n\n// Check event type\nconst event = body.event;\nif (event !== 'messages.upsert') {\n  return [{ json: { _action: 'ignore', reason: `event_type: ${event}` } }];\n}\n\nconst data = body.data || body;\nconst key = data.key || {};\n\n// Ignore messages sent by us\nif (key.fromMe === true) {\n  return [{ json: { _action: 'ignore', reason: 'from_me' } }];\n}\n\n// Ignore group messages (only handle 1:1 chats)\nconst remoteJid = key.remoteJid || '';\nif (remoteJid.includes('@g.us')) {\n  return [{ json: { _action: 'ignore', reason: 'group_message' } }];\n}\n\n// Extract phone number (strip @s.whatsapp.net)\nconst phone = remoteJid.replace('@s.whatsapp.net', '');\n\n// Extract message text from various message types\nlet text = '';\nconst msg = data.message || {};\nif (msg.conversation) {\n  text = msg.conversation;\n} else if (msg.extendedTextMessage && msg.extendedTextMessage.text) {\n  text = msg.extendedTextMessage.text;\n} else if (msg.buttonsResponseMessage) {\n  text = msg.buttonsResponseMessage.selectedDisplayText || '';\n} else if (msg.listResponseMessage) {\n  text = msg.listResponseMessage.title || '';\n} else if (msg.templateButtonReplyMessage) {\n  text = msg.templateButtonReplyMessage.selectedDisplayText || '';\n} else {\n  // Image, audio, video, document, etc. - not handled yet\n  return [{ json: { _action: 'ignore', reason: 'unsupported_message_type' } }];\n}\n\n// Extract metadata\nconst pushName = data.pushName || '';\nconst messageId = key.id || '';\nconst timestamp = data.messageTimestamp || Math.floor(Date.now() / 1000);\nconst instanceName = body.instance || '';\n\nreturn [{\n  json: {\n    _action: 'process',\n    phone,\n    text: text.trim(),\n    pushName,\n    messageId,\n    timestamp,\n    instanceName,\n    remoteJid\n  }\n}];"
+      },
+      "id": "cea82b5d-4fde-4e15-a0a0-5f279866802b",
+      "name": "Parse Evolution Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "4b4a6519-0649-4254-8d9e-d0fa81afa6b5",
+              "leftValue": "={{ $json._action }}",
+              "rightValue": "process",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "80631397-0ac5-4044-b540-7f30602bb797",
+      "name": "Valid Message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Dedup: try to insert the message. If msg_external_id already exists, skip.\n-- Also classify the sender in one round-trip.\nWITH dedup AS (\n  INSERT INTO messages (conversation_id, direction, sender_type, body, msg_external_id, metadata)\n  VALUES (NULL, 'inbound', 'lead', $1, $2, $3::jsonb)\n  ON CONFLICT (msg_external_id) DO NOTHING\n  RETURNING message_id\n),\nclassification AS (\n  SELECT * FROM classify_sender($4)\n)\nSELECT\n  (SELECT message_id FROM dedup) AS new_message_id,\n  c.*\nFROM classification c;",
+        "options": {
+          "queryReplacement": "={{ $json.text }},={{ $json.messageId }},={{ JSON.stringify({ phone: $json.phone, pushName: $json.pushName, timestamp: $json.timestamp }) }},={{ $json.phone }}"
+        }
+      },
+      "id": "fe60518a-2419-4e35-9133-283023544ab3",
+      "name": "Dedup + Classify Sender",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        860,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine routing based on dedup + classification results.\n// Input: the parsed message from 'Parse Evolution Payload' + DB classification.\n\nconst parsed = $('Parse Evolution Payload').first().json;\nconst db = $input.first().json;\n\n// If message was already processed (dedup), ignore\nif (!db.new_message_id && db.new_message_id !== 0) {\n  return [{ json: { route: 'ignore', reason: 'duplicate_message' } }];\n}\n\nconst phone = parsed.phone;\nconst text = parsed.text;\nconst pushName = parsed.pushName;\nconst messageId = parsed.messageId;\n\n// Check if sender is an agent\nif (db.is_agent) {\n  // Check if message is a TOMO claim\n  const tomoMatch = text.match(/^TOMO-([A-Z0-9]{4})$/i);\n  if (tomoMatch) {\n    return [{\n      json: {\n        route: 'agent_claim',\n        agent_id: db.agent_id,\n        agent_name: db.agent_name,\n        agent_phone: phone,\n        short_code: tomoMatch[1].toUpperCase(),\n        raw_message: text,\n        messageId\n      }\n    }];\n  }\n  // Agent sent something else - ignore for now\n  return [{ json: { route: 'ignore', reason: 'agent_non_claim_message' } }];\n}\n\n// Not an agent - check conversation status\nif (!db.conversation_id) {\n  // New lead - no conversation exists\n  return [{\n    json: {\n      route: 'new_lead',\n      phone,\n      pushName,\n      text,\n      messageId\n    }\n  }];\n}\n\n// Existing conversation - route by mode\nconst mode = db.conv_mode;\nif (mode === 'ai') {\n  return [{\n    json: {\n      route: 'ai_conversation',\n      conversation_id: db.conversation_id,\n      phone,\n      pushName,\n      text,\n      messageId,\n      current_property: db.current_property,\n      assigned_agent_id: db.assigned_agent_id\n    }\n  }];\n}\n\nif (mode === 'human') {\n  return [{\n    json: {\n      route: 'human_forward',\n      conversation_id: db.conversation_id,\n      phone,\n      pushName,\n      text,\n      messageId,\n      assigned_agent_id: db.assigned_agent_id,\n      assigned_agent_phone: db.assigned_agent_phone\n    }\n  }];\n}\n\nif (mode === 'pending_assignment') {\n  return [{\n    json: {\n      route: 'pending',\n      conversation_id: db.conversation_id,\n      phone,\n      pushName,\n      text,\n      messageId\n    }\n  }];\n}\n\n// Fallback\nreturn [{ json: { route: 'ignore', reason: 'unknown_mode' } }];"
+      },
+      "id": "249f2966-93e8-4a93-a6bc-35e166b4dbb3",
+      "name": "Classify & Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "new_lead",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "6199da73-e7cd-48e1-af01-318fb452859a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "new_lead"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "agent_claim",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "448325d7-bdd8-4481-8018-9db3f8972c2e"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "agent_claim"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "ai_conversation",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "8074adb6-44eb-420d-bfaf-cbd87708d01b"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ai_conversation"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "human_forward",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "bf1857ed-f47e-4c71-860b-e0672fc16760"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "human_forward"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "pending",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "1d0ef960-b18c-45c2-8ed6-e4fe150b4a07"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "pending"
+            }
+          ],
+          "fallbackOutput": {
+            "active": true
+          }
+        },
+        "options": {}
+      },
+      "id": "d7a2e059-02b8-46b4-bb0f-0a36b0b4253b",
+      "name": "Route Message",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "={{ $env.WF2_WORKFLOW_ID }}",
+        "options": {}
+      },
+      "id": "9061b24c-06a4-4b07-83ea-ba5205fabd3a",
+      "name": "Call WF2: Lead Intake",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "={{ $env.WF3B_WORKFLOW_ID }}",
+        "options": {}
+      },
+      "id": "21b110d6-03da-4117-ae8f-abc8f820012b",
+      "name": "Call WF3b: Claim Handler",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1560,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "={{ $env.WF4_WORKFLOW_ID }}",
+        "options": {}
+      },
+      "id": "0050259f-8c07-4fd5-a411-d2fc9e26d06c",
+      "name": "Call WF4: AI Conversation",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1560,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Forward lead message to assigned agent via Evolution.\n// In human mode, the bot acts as a relay.\nconst data = $input.first().json;\n\nconst forwardBody = [\n  `Mensaje de ${data.pushName || 'Lead'} (${data.phone}):`,\n  ``,\n  data.text\n].join('\\n');\n\nreturn [{\n  json: {\n    number: data.assigned_agent_phone,\n    text: forwardBody,\n    conversation_id: data.conversation_id,\n    phone: data.phone\n  }\n}];"
+      },
+      "id": "eb8bce0a-459d-4a38-b9bc-b4a730e63587",
+      "name": "Build Forward Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.number }}\",\n  \"text\": {{ JSON.stringify($json.text) }}\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "1500f637-802c-4f18-849a-36fc4a512883",
+      "name": "Send Forward via Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        420
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.phone }}\",\n  \"text\": \"Hola! Estamos buscando un asesor disponible para atenderte. En unos momentos te contactamos. \\n\\nHi! We're finding an available agent for you. We'll be in touch shortly.\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "670d96a1-3545-4623-9017-47327b58005c",
+      "name": "Send Pending Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        560
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "89422342-f03f-4d03-b226-91a59d4541ea",
+      "name": "End (Ignored)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        860,
+        420
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "4e30f4b2-cc12-4b56-a21b-fed158933d39",
+      "name": "End (Fallback)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Evolution Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Evolution Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Evolution Payload": {
+      "main": [
+        [
+          {
+            "node": "Valid Message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Message?": {
+      "main": [
+        [
+          {
+            "node": "Dedup + Classify Sender",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "End (Ignored)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup + Classify Sender": {
+      "main": [
+        [
+          {
+            "node": "Classify & Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify & Route": {
+      "main": [
+        [
+          {
+            "node": "Route Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Message": {
+      "main": [
+        [
+          {
+            "node": "Call WF2: Lead Intake",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF3b: Claim Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF4: AI Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Forward Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Pending Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "End (Fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Forward Message": {
+      "main": [
+        [
+          {
+            "node": "Send Forward via Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  }
+}

@@ -1,0 +1,499 @@
+{
+  "name": "Inmuebles24 CDMX - Real Estate Scraper & Notifier",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8,14,20 * * *"
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Schedule: 3x Daily",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300],
+      "notes": "Runs at 8AM, 2PM, and 8PM daily (server timezone). Adjust cron expression for your timezone. For Mexico City (UTC-6), if server is UTC, use: 0 14,20,2 * * *"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate a unique run ID and timestamp for this execution\nconst runId = `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\nconst startedAt = new Date().toISOString();\n\n// Define pages to scrape\nconst pages = [\n  'https://www.inmuebles24.com/inmuebles-en-ciudad-de-mexico.html',\n  'https://www.inmuebles24.com/inmuebles-en-ciudad-de-mexico-pagina-2.html',\n  'https://www.inmuebles24.com/inmuebles-en-ciudad-de-mexico-pagina-3.html'\n];\n\nreturn pages.map((url, index) => ({\n  json: {\n    url,\n    pageNumber: index + 1,\n    runId,\n    startedAt,\n    totalPages: pages.length\n  }\n}));"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000002",
+      "name": "Setup: Generate Run Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "notes": "Creates a unique run ID and generates items for each page to scrape. Adjust the pages array to scrape more or fewer pages."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/scrape",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"{{ $json.url }}\",\n  \"formats\": [\"markdown\"],\n  \"onlyMainContent\": true,\n  \"waitFor\": 5000,\n  \"timeout\": 30000\n}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000003",
+      "name": "Firecrawl: Scrape Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "FIRECRAWL_CREDENTIAL_ID",
+          "name": "Firecrawl API Key"
+        }
+      },
+      "notes": "Calls Firecrawl API to scrape each page. Authentication: Create an HTTP Header Auth credential with Name='Authorization' and Value='Bearer YOUR_FIRECRAWL_API_KEY'. The waitFor parameter gives JS time to render listings.",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Firecrawl markdown output into structured listing data\nconst items = [];\nconst allListings = [];\n\nfor (const item of $input.all()) {\n  const markdown = item.json.data?.markdown || item.json.markdown || '';\n  const pageNumber = item.json.pageNumber || 1;\n  const runId = item.json.runId || 'unknown';\n  \n  if (!markdown) {\n    console.log(`No markdown content for page ${pageNumber}`);\n    continue;\n  }\n\n  // Split markdown into potential listing blocks\n  // Inmuebles24 listings typically have patterns like:\n  // - Price (MXN $X,XXX,XXX or USD $X,XXX)\n  // - Location / neighborhood\n  // - Features (bedrooms, bathrooms, area)\n  // - URLs to individual listings\n\n  // Strategy 1: Split by listing patterns (price headers or card boundaries)\n  const sections = markdown.split(/(?=(?:MXN|USD|\\$)\\s*[\\d,.]+)/gi);\n  \n  // Strategy 2: Also try splitting by URLs that point to individual listings\n  const urlPattern = /https?:\\/\\/www\\.inmuebles24\\.com\\/propiedades\\/[^\\s)\\]]+/gi;\n  const allUrls = markdown.match(urlPattern) || [];\n  \n  // Strategy 3: Extract structured blocks between listing dividers\n  // Look for patterns that indicate listing boundaries\n  const listingBlocks = markdown.split(/(?=#{1,3}\\s|\\*\\*\\$|(?:Departamento|Casa|Terreno|Oficina|Local|Bodega)\\s)/i);\n\n  // Process each block to extract listing data\n  for (const block of listingBlocks) {\n    if (block.trim().length < 30) continue;\n    \n    // Extract URL\n    const urlMatch = block.match(/https?:\\/\\/www\\.inmuebles24\\.com\\/propiedades\\/[^\\s)\\]\"]+/i);\n    const url = urlMatch ? urlMatch[0].replace(/[)\\]]+$/, '') : null;\n    \n    // Extract price\n    const priceMatch = block.match(/(?:MXN|USD)?\\s*\\$?\\s*([\\d,.]+(?:\\.\\d{2})?)/i);\n    const priceText = priceMatch ? priceMatch[0].trim() : null;\n    const priceNumeric = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : null;\n    const currency = block.match(/USD/i) ? 'USD' : 'MXN';\n    \n    // Extract title (first meaningful line)\n    const titleMatch = block.match(/(?:#{1,3}\\s*)?([A-ZÁÉÍÓÚÑa-záéíóúñ][^\\n]{10,100})/i);\n    const title = titleMatch ? titleMatch[1].trim() : null;\n    \n    // Extract location patterns\n    const locationMatch = block.match(/(?:en\\s+|,\\s*)((?:Col\\.?\\s*|Colonia\\s*)?[A-ZÁÉÍÓÚÑa-záéíóúñ\\s]+,\\s*[A-ZÁÉÍÓÚÑa-záéíóúñ\\s]+)/i)\n      || block.match(/(?:Alcaldía|Delegación|Municipio)\\s+([^\\n,]+)/i)\n      || block.match(/((?:Benito Juárez|Miguel Hidalgo|Cuauhtémoc|Coyoacán|Álvaro Obregón|Tlalpan|Azcapotzalco|Gustavo A\\. Madero|Iztapalapa|Xochimilco|Magdalena Contreras|Cuajimalpa|Milpa Alta|Tláhuac|Venustiano Carranza|Iztacalco)[^\\n]*)/i);\n    const location = locationMatch ? locationMatch[1].trim() : null;\n    \n    // Extract features\n    const bedroomsMatch = block.match(/(\\d+)\\s*(?:rec[áa]mara|dormitorio|hab\\.?|cuarto)/i);\n    const bathroomsMatch = block.match(/(\\d+)\\s*(?:ba[ñn]o)/i);\n    const areaMatch = block.match(/(\\d+(?:\\.\\d+)?)\\s*(?:m²|m2|metros?\\s*cuadrados?)/i);\n    \n    // Extract property type\n    const typeMatch = block.match(/(Departamento|Casa|Terreno|Oficina|Local|Bodega|Penthouse|Loft|Estudio)/i);\n    \n    // Extract operation type\n    const opMatch = block.match(/(Venta|Renta|Desarrollo|Preventa|Traspaso)/i);\n    \n    // Extract image URL\n    const imgMatch = block.match(/!\\[.*?\\]\\((https?[^)]+)\\)/i)\n      || block.match(/(https?:\\/\\/[^\\s]+\\.(?:jpg|jpeg|png|webp)[^\\s]*)/i);\n    const imageUrl = imgMatch ? imgMatch[1] : null;\n\n    // Only keep if we have at least a URL or (title + price)\n    if (url || (title && priceText)) {\n      // Generate unique hash from URL or title+price combo\n      const hashSource = url || `${title}_${priceText}_${location}`;\n      // Simple hash function (n8n Code node doesn't have crypto by default)\n      let hash = 0;\n      for (let i = 0; i < hashSource.length; i++) {\n        const char = hashSource.charCodeAt(i);\n        hash = ((hash << 5) - hash) + char;\n        hash = hash & hash; // Convert to 32-bit integer\n      }\n      const listingHash = `inm24_${Math.abs(hash).toString(36)}`;\n\n      allListings.push({\n        listing_hash: listingHash,\n        title: title || 'Sin título',\n        price: priceText,\n        price_numeric: priceNumeric,\n        currency,\n        location: location || 'Ciudad de México',\n        city: 'Ciudad de México',\n        url: url || '',\n        property_type: typeMatch ? typeMatch[1] : null,\n        operation_type: opMatch ? opMatch[1] : null,\n        bedrooms: bedroomsMatch ? parseInt(bedroomsMatch[1]) : null,\n        bathrooms: bathroomsMatch ? parseInt(bathroomsMatch[1]) : null,\n        area_m2: areaMatch ? parseFloat(areaMatch[1]) : null,\n        description: block.substring(0, 300).replace(/\\n/g, ' ').trim(),\n        image_url: imageUrl,\n        source_page: pageNumber,\n        raw_data: { block: block.substring(0, 500) }\n      });\n    }\n  }\n}\n\n// Deduplicate within this scrape batch (by listing_hash)\nconst seen = new Set();\nconst uniqueListings = allListings.filter(listing => {\n  if (seen.has(listing.listing_hash)) return false;\n  seen.add(listing.listing_hash);\n  return true;\n});\n\nconsole.log(`Parsed ${uniqueListings.length} unique listings from ${$input.all().length} pages`);\n\n// Pass along the runId from the first item\nconst runId = $input.all()[0]?.json?.runId || 'unknown';\nconst startedAt = $input.all()[0]?.json?.startedAt || new Date().toISOString();\n\nreturn [{\n  json: {\n    listings: uniqueListings,\n    totalScraped: uniqueListings.length,\n    runId,\n    startedAt,\n    pagesProcessed: $input.all().length\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000004",
+      "name": "Parse: Extract Listings from Markdown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "notes": "Parses the Firecrawl markdown output to extract structured listing data. Uses multiple regex strategies to handle varying page structures. Generates a unique hash for each listing for deduplication."
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "listings",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "is_active=eq.true&select=listing_hash,id"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000005",
+      "name": "Supabase: Get Existing Listings",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase Inmuebles24"
+        }
+      },
+      "notes": "Fetches all active listing hashes from Supabase. Used to compare against newly scraped listings to find only NEW ones. Configure Supabase credentials with your project URL and service_role key."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare scraped listings with existing ones in Supabase\nconst scrapedData = $('Parse: Extract Listings from Markdown').first().json;\nconst existingItems = $('Supabase: Get Existing Listings').all();\n\nconst listings = scrapedData.listings || [];\nconst runId = scrapedData.runId;\nconst startedAt = scrapedData.startedAt;\nconst pagesProcessed = scrapedData.pagesProcessed;\n\n// Build a set of existing hashes for O(1) lookup\nconst existingHashes = new Set();\nfor (const item of existingItems) {\n  if (item.json.listing_hash) {\n    existingHashes.add(item.json.listing_hash);\n  }\n}\n\n// Filter to only new listings\nconst newListings = listings.filter(l => !existingHashes.has(l.listing_hash));\nconst duplicateCount = listings.length - newListings.length;\n\nconsole.log(`Found ${newListings.length} NEW listings out of ${listings.length} total (${duplicateCount} duplicates)`);\n\nreturn [{\n  json: {\n    newListings,\n    newCount: newListings.length,\n    totalScraped: listings.length,\n    duplicateCount,\n    runId,\n    startedAt,\n    pagesProcessed\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000006",
+      "name": "Compare: Find New Listings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "notes": "Compares freshly scraped listings against existing Supabase records. Uses Set for O(1) hash lookup. Outputs only NEW listings that haven't been seen before."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-new-listings",
+              "leftValue": "={{ $json.newCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000007",
+      "name": "IF: New Listings Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "notes": "Branches the workflow: YES if new listings were found, NO if all are duplicates."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare individual items for Supabase batch insert\nconst data = $input.first().json;\nconst newListings = data.newListings || [];\nconst now = new Date().toISOString();\n\nreturn newListings.map(listing => ({\n  json: {\n    listing_hash: listing.listing_hash,\n    title: listing.title,\n    price: listing.price,\n    price_numeric: listing.price_numeric,\n    currency: listing.currency,\n    location: listing.location,\n    city: listing.city,\n    url: listing.url,\n    property_type: listing.property_type,\n    operation_type: listing.operation_type,\n    bedrooms: listing.bedrooms,\n    bathrooms: listing.bathrooms,\n    area_m2: listing.area_m2,\n    description: listing.description,\n    image_url: listing.image_url,\n    source_page: listing.source_page,\n    raw_data: JSON.stringify(listing.raw_data || {}),\n    first_seen_at: now,\n    last_seen_at: now,\n    is_active: true,\n    notified: false\n  }\n}));"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000008",
+      "name": "Prepare: Split Listings for Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200],
+      "notes": "Transforms the array of new listings into individual n8n items, each ready to be inserted into Supabase."
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "listings",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "listing_hash", "fieldValue": "={{ $json.listing_hash }}" },
+            { "fieldName": "title", "fieldValue": "={{ $json.title }}" },
+            { "fieldName": "price", "fieldValue": "={{ $json.price }}" },
+            { "fieldName": "price_numeric", "fieldValue": "={{ $json.price_numeric }}" },
+            { "fieldName": "currency", "fieldValue": "={{ $json.currency }}" },
+            { "fieldName": "location", "fieldValue": "={{ $json.location }}" },
+            { "fieldName": "city", "fieldValue": "={{ $json.city }}" },
+            { "fieldName": "url", "fieldValue": "={{ $json.url }}" },
+            { "fieldName": "property_type", "fieldValue": "={{ $json.property_type }}" },
+            { "fieldName": "operation_type", "fieldValue": "={{ $json.operation_type }}" },
+            { "fieldName": "bedrooms", "fieldValue": "={{ $json.bedrooms }}" },
+            { "fieldName": "bathrooms", "fieldValue": "={{ $json.bathrooms }}" },
+            { "fieldName": "area_m2", "fieldValue": "={{ $json.area_m2 }}" },
+            { "fieldName": "description", "fieldValue": "={{ $json.description }}" },
+            { "fieldName": "image_url", "fieldValue": "={{ $json.image_url }}" },
+            { "fieldName": "source_page", "fieldValue": "={{ $json.source_page }}" },
+            { "fieldName": "is_active", "fieldValue": "=true" },
+            { "fieldName": "notified", "fieldValue": "=false" }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000009",
+      "name": "Supabase: Insert New Listings",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1780, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase Inmuebles24"
+        }
+      },
+      "notes": "Inserts each new listing as a row in the Supabase 'listings' table. Runs once per new listing item."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format a notification message with all new listings\nconst allInserted = $input.all();\nconst compareData = $('Compare: Find New Listings').first().json;\n\nconst runId = compareData.runId;\nconst newCount = compareData.newCount;\nconst totalScraped = compareData.totalScraped;\nconst now = new Date();\nconst timeStr = now.toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });\n\n// Build Telegram message (supports HTML formatting)\nlet message = `🏠 <b>Inmuebles24 - Nuevos Listados</b>\\n`;\nmessage += `📅 ${timeStr}\\n`;\nmessage += `🔍 Encontrados: <b>${newCount} nuevos</b> de ${totalScraped} escaneados\\n`;\nmessage += `━━━━━━━━━━━━━━━━━━━━━━\\n\\n`;\n\nconst listings = compareData.newListings || [];\n\nfor (let i = 0; i < Math.min(listings.length, 10); i++) {\n  const l = listings[i];\n  message += `🔹 <b>${l.title || 'Propiedad'}</b>\\n`;\n  if (l.price) message += `   💰 ${l.price} ${l.currency || ''}\\n`;\n  if (l.location) message += `   📍 ${l.location}\\n`;\n  if (l.property_type) message += `   🏢 ${l.property_type}`;\n  if (l.operation_type) message += ` · ${l.operation_type}`;\n  message += '\\n';\n  \n  const features = [];\n  if (l.bedrooms) features.push(`${l.bedrooms} rec.`);\n  if (l.bathrooms) features.push(`${l.bathrooms} baños`);\n  if (l.area_m2) features.push(`${l.area_m2} m²`);\n  if (features.length > 0) message += `   📐 ${features.join(' · ')}\\n`;\n  \n  if (l.url) message += `   🔗 <a href=\"${l.url}\">Ver listado</a>\\n`;\n  message += '\\n';\n}\n\nif (listings.length > 10) {\n  message += `... y ${listings.length - 10} listados más\\n`;\n}\n\nmessage += `\\n🤖 Scraper Inmuebles24 | Run: ${runId}`;\n\n// Also build plain text version for email\nlet emailSubject = `🏠 ${newCount} nuevos inmuebles en CDMX - Inmuebles24`;\nlet emailBody = `Se encontraron ${newCount} nuevos listados de ${totalScraped} escaneados.\\n\\n`;\n\nfor (const l of listings.slice(0, 20)) {\n  emailBody += `• ${l.title || 'Propiedad'}\\n`;\n  emailBody += `  Precio: ${l.price || 'No disponible'} ${l.currency || ''}\\n`;\n  emailBody += `  Ubicación: ${l.location || 'CDMX'}\\n`;\n  if (l.url) emailBody += `  Link: ${l.url}\\n`;\n  emailBody += '\\n';\n}\n\nreturn [{\n  json: {\n    telegramMessage: message,\n    emailSubject,\n    emailBody,\n    newCount,\n    totalScraped,\n    runId,\n    startedAt: compareData.startedAt,\n    pagesProcessed: compareData.pagesProcessed\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000010",
+      "name": "Format: Notification Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 200],
+      "notes": "Creates formatted notification messages for Telegram (HTML) and Email (plain text). Shows up to 10 listings in Telegram, 20 in email. Includes property details, prices, locations, and direct links."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"{{ $env.TELEGRAM_CHAT_ID }}\",\n  \"text\": {{ JSON.stringify($json.telegramMessage) }},\n  \"parse_mode\": \"HTML\",\n  \"disable_web_page_preview\": false\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000011",
+      "name": "Telegram: Send Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2240, 100],
+      "notes": "Sends the formatted notification to Telegram. Requires: 1) Create a bot via @BotFather, 2) Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID as n8n environment variables. Alternative: hardcode the values directly.",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🏠 *Inmuebles24 - Nuevos Listados*\\nSe encontraron {{ $json.newCount }} nuevos listados.\",\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": {\n        \"type\": \"plain_text\",\n        \"text\": \"🏠 {{ $json.newCount }} nuevos inmuebles en CDMX\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"Se escanearon {{ $json.totalScraped }} listados y se encontraron *{{ $json.newCount }} nuevos*.\"\n      }\n    }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000012",
+      "name": "Webhook: Slack/Discord (Optional)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2240, 300],
+      "notes": "Optional: Send notification to Slack or Discord webhook. Set WEBHOOK_URL as n8n environment variable or replace the URL directly. Can be disabled if not needed.",
+      "disabled": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "scrape_logs",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "run_id", "fieldValue": "={{ $json.runId }}" },
+            { "fieldName": "started_at", "fieldValue": "={{ $json.startedAt }}" },
+            { "fieldName": "completed_at", "fieldValue": "={{ new Date().toISOString() }}" },
+            { "fieldName": "status", "fieldValue": "success" },
+            { "fieldName": "total_scraped", "fieldValue": "={{ $json.totalScraped }}" },
+            { "fieldName": "new_listings", "fieldValue": "={{ $json.newCount }}" },
+            { "fieldName": "duplicates", "fieldValue": "={{ $json.totalScraped - $json.newCount }}" },
+            { "fieldName": "pages_scraped", "fieldValue": "={{ $json.pagesProcessed }}" },
+            { "fieldName": "notifications_sent", "fieldValue": "=true" }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000013",
+      "name": "Supabase: Log Successful Run",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2480, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase Inmuebles24"
+        }
+      },
+      "notes": "Logs the successful scrape run with statistics to the scrape_logs table."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log run with no new listings found\nconst compareData = $input.first().json;\n\nreturn [{\n  json: {\n    run_id: compareData.runId || 'unknown',\n    started_at: compareData.startedAt || new Date().toISOString(),\n    completed_at: new Date().toISOString(),\n    status: 'success',\n    total_scraped: compareData.totalScraped || 0,\n    new_listings: 0,\n    duplicates: compareData.totalScraped || 0,\n    pages_scraped: compareData.pagesProcessed || 0,\n    notifications_sent: false,\n    metadata: JSON.stringify({ message: 'No new listings found' })\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000014",
+      "name": "Prepare: No-Change Log Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 480]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "scrape_logs",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "run_id", "fieldValue": "={{ $json.run_id }}" },
+            { "fieldName": "started_at", "fieldValue": "={{ $json.started_at }}" },
+            { "fieldName": "completed_at", "fieldValue": "={{ $json.completed_at }}" },
+            { "fieldName": "status", "fieldValue": "={{ $json.status }}" },
+            { "fieldName": "total_scraped", "fieldValue": "={{ $json.total_scraped }}" },
+            { "fieldName": "new_listings", "fieldValue": "={{ $json.new_listings }}" },
+            { "fieldName": "duplicates", "fieldValue": "={{ $json.duplicates }}" },
+            { "fieldName": "pages_scraped", "fieldValue": "={{ $json.pages_scraped }}" },
+            { "fieldName": "notifications_sent", "fieldValue": "={{ $json.notifications_sent }}" }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000015",
+      "name": "Supabase: Log No-Change Run",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1780, 480],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase Inmuebles24"
+        }
+      },
+      "notes": "Logs runs where no new listings were found, keeping a complete audit trail."
+    },
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-0001-4000-8000-000000000016",
+      "name": "NoOp: End (No New Listings)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2000, 480],
+      "notes": "Workflow ends here when no new listings are found."
+    }
+  ],
+  "connections": {
+    "Schedule: 3x Daily": {
+      "main": [
+        [
+          {
+            "node": "Setup: Generate Run Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup: Generate Run Config": {
+      "main": [
+        [
+          {
+            "node": "Firecrawl: Scrape Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firecrawl: Scrape Page": {
+      "main": [
+        [
+          {
+            "node": "Parse: Extract Listings from Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse: Extract Listings from Markdown": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Get Existing Listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Get Existing Listings": {
+      "main": [
+        [
+          {
+            "node": "Compare: Find New Listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare: Find New Listings": {
+      "main": [
+        [
+          {
+            "node": "IF: New Listings Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: New Listings Found?": {
+      "main": [
+        [
+          {
+            "node": "Prepare: Split Listings for Insert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare: No-Change Log Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare: Split Listings for Insert": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Insert New Listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Insert New Listings": {
+      "main": [
+        [
+          {
+            "node": "Format: Notification Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format: Notification Message": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Send Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Webhook: Slack/Discord (Optional)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Supabase: Log Successful Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare: No-Change Log Data": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Log No-Change Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Log No-Change Run": {
+      "main": [
+        [
+          {
+            "node": "NoOp: End (No New Listings)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "real-estate",
+      "id": "tag-real-estate"
+    },
+    {
+      "name": "scraper",
+      "id": "tag-scraper"
+    },
+    {
+      "name": "inmuebles24",
+      "id": "tag-inmuebles24"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-02-26T12:00:00.000Z",
+  "createdAt": "2026-02-26T12:00:00.000Z"
+}

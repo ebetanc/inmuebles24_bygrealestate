@@ -1,0 +1,127 @@
+import { createSupabaseServer } from "./supabase";
+import type { Agent, Conversation, Auction, NightQueueItem, KPIs } from "./types";
+
+const db = () => createSupabaseServer();
+
+export async function getKPIs(): Promise<KPIs> {
+  const supabase = db();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 7);
+
+  const [todayRes, weekRes, auctionRes, nightRes, sourceRes] = await Promise.all([
+    supabase
+      .from("conversations")
+      .select("conversation_id", { count: "exact", head: true })
+      .gte("created_at", todayStart.toISOString()),
+    supabase
+      .from("conversations")
+      .select("conversation_id", { count: "exact", head: true })
+      .gte("created_at", weekStart.toISOString()),
+    supabase
+      .from("auctions")
+      .select("auction_id", { count: "exact", head: true })
+      .eq("status", "open"),
+    supabase
+      .from("night_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("processed", false),
+    supabase
+      .from("conversations")
+      .select("source")
+      .gte("created_at", weekStart.toISOString()),
+  ]);
+
+  const sources = (sourceRes.data || []) as { source: string }[];
+  const bySource = {
+    inmuebles24: sources.filter((s) => s.source === "inmuebles24").length,
+    easybroker: sources.filter((s) => s.source === "easybroker").length,
+    whatsapp_direct: sources.filter((s) => s.source === "whatsapp_direct").length,
+  };
+
+  return {
+    totalLeadsToday: todayRes.count || 0,
+    totalLeadsWeek: weekRes.count || 0,
+    activeAuctions: auctionRes.count || 0,
+    nightQueuePending: nightRes.count || 0,
+    avgResponseMin: 0,
+    conversionRate: 0,
+    bySource,
+  };
+}
+
+export async function getRecentConversations(limit = 20): Promise<Conversation[]> {
+  const supabase = db();
+  const { data } = await supabase
+    .from("conversations")
+    .select("*, agents(name)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return ((data || []) as (Conversation & { agents: { name: string } | null })[]).map(
+    ({ agents: agentRow, ...rest }) => ({
+      ...rest,
+      agent_name: agentRow?.name || null,
+    })
+  );
+}
+
+export async function getAgents(): Promise<Agent[]> {
+  const supabase = db();
+  const { data } = await supabase
+    .from("agents")
+    .select("*")
+    .eq("is_available", true)
+    .order("name");
+  return (data || []) as Agent[];
+}
+
+export async function getAgentStats(agentId: string) {
+  const supabase = db();
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 7);
+
+  const { count } = await supabase
+    .from("conversations")
+    .select("conversation_id", { count: "exact", head: true })
+    .eq("assigned_agent_id", agentId)
+    .gte("created_at", weekStart.toISOString());
+
+  return { leadsThisWeek: count || 0 };
+}
+
+export async function getActiveAuctions(): Promise<Auction[]> {
+  const supabase = db();
+  const { data } = await supabase
+    .from("auctions")
+    .select("*")
+    .eq("status", "open")
+    .order("created_at", { ascending: false });
+  return (data || []) as Auction[];
+}
+
+export async function getNightQueue(): Promise<NightQueueItem[]> {
+  const supabase = db();
+  const { data } = await supabase
+    .from("night_queue")
+    .select("*")
+    .eq("processed", false)
+    .order("created_at", { ascending: false });
+  return (data || []) as NightQueueItem[];
+}
+
+export async function getGuardSchedule() {
+  const supabase = db();
+  const today = new Date().toISOString().split("T")[0];
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() + 7);
+
+  const { data } = await supabase
+    .from("agent_schedule")
+    .select("*, agents(name)")
+    .gte("schedule_date", today)
+    .lte("schedule_date", endDate.toISOString().split("T")[0])
+    .order("schedule_date")
+    .order("shift");
+  return data || [];
+}

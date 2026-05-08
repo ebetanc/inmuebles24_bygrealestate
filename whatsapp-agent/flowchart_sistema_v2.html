@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema WhatsApp — Inmobiliaria24 (v2: Dos Flujos Paralelos)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --green: #25D366;
+    --green-dark: #128C7E;
+    --green-light: #DCF8C6;
+    --blue: #3B82F6;
+    --blue-light: #DBEAFE;
+    --orange: #F59E0B;
+    --orange-light: #FEF3C7;
+    --red: #EF4444;
+    --red-light: #FEE2E2;
+    --purple: #8B5CF6;
+    --purple-light: #EDE9FE;
+    --teal: #14B8A6;
+    --teal-light: #CCFBF1;
+    --gray-50: #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-300: #D1D5DB;
+    --gray-400: #9CA3AF;
+    --gray-500: #6B7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    line-height: 1.6;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #075E54 0%, #128C7E 40%, #25D366 100%);
+    color: white;
+    padding: 60px 40px 50px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.07) 0%, transparent 70%);
+  }
+  .hero h1 {
+    font-size: 2.4rem;
+    font-weight: 900;
+    margin-bottom: 12px;
+    position: relative;
+  }
+  .hero p {
+    font-size: 1.1rem;
+    opacity: 0.92;
+    max-width: 750px;
+    margin: 0 auto;
+    position: relative;
+  }
+  .hero .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 20px;
+    padding: 6px 18px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-top: 18px;
+    position: relative;
+  }
+
+  /* ── LAYOUT ── */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  /* ── SECTION HEADERS ── */
+  .section-header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+  .section-header .icon { font-size: 2.5rem; margin-bottom: 8px; }
+  .section-header h2 { font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+  .section-header p { color: var(--gray-500); font-size: 1.02rem; max-width: 650px; margin: 0 auto; }
+
+  /* ── BIG CONCEPT ── */
+  .two-flows {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 50px;
+  }
+  .flow-card {
+    border-radius: 20px;
+    padding: 36px 28px;
+    position: relative;
+    overflow: hidden;
+    border: 2px solid;
+  }
+  .flow-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 5px;
+  }
+  .flow-card.flow-a {
+    background: linear-gradient(180deg, #FFF7ED 0%, white 40%);
+    border-color: #FDBA74;
+  }
+  .flow-card.flow-a::before { background: linear-gradient(90deg, var(--orange), #F97316); }
+  .flow-card.flow-b {
+    background: linear-gradient(180deg, #F0FDF4 0%, white 40%);
+    border-color: #86EFAC;
+  }
+  .flow-card.flow-b::before { background: linear-gradient(90deg, var(--green-dark), var(--green)); }
+  .flow-card .flow-label {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 16px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 14px;
+  }
+  .flow-card.flow-a .flow-label { background: #FED7AA; color: #9A3412; }
+  .flow-card.flow-b .flow-label { background: #BBF7D0; color: #166534; }
+  .flow-card h3 { font-size: 1.3rem; font-weight: 800; margin-bottom: 8px; }
+  .flow-card .flow-desc { color: var(--gray-500); font-size: 0.92rem; margin-bottom: 18px; }
+  .flow-card .flow-steps { list-style: none; }
+  .flow-card .flow-steps li {
+    padding: 8px 0;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .flow-card .flow-steps li:last-child { border-bottom: none; }
+  .flow-card .flow-steps .step-icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: white;
+    margin-top: 1px;
+  }
+  .flow-a .step-icon { background: var(--orange); }
+  .flow-b .step-icon { background: var(--green-dark); }
+
+  /* ── CONNECTOR ── */
+  .connector {
+    text-align: center;
+    margin: -10px 0 30px;
+    font-size: 0.85rem;
+    color: var(--gray-500);
+  }
+  .connector .connector-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+  .connector .connector-line::before,
+  .connector .connector-line::after {
+    content: '';
+    width: 80px;
+    height: 2px;
+    background: var(--gray-300);
+  }
+  .connector .link-icon {
+    background: white;
+    border: 2px solid var(--gray-300);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 2px;
+    background: linear-gradient(to right, transparent, var(--gray-300), transparent);
+    margin: 50px 0;
+  }
+
+  /* ── SCENARIO ── */
+  .scenario {
+    background: white;
+    border-radius: 20px;
+    padding: 36px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    border: 1px solid var(--gray-200);
+    margin-bottom: 32px;
+  }
+  .scenario h3 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    margin-bottom: 6px;
+  }
+  .scenario .subtitle {
+    color: var(--gray-500);
+    margin-bottom: 20px;
+    font-size: 0.93rem;
+  }
+
+  /* ── FLOW TAG ── */
+  .flow-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 6px;
+    vertical-align: middle;
+  }
+  .flow-tag.a { background: #FED7AA; color: #9A3412; }
+  .flow-tag.b { background: #BBF7D0; color: #166534; }
+
+  /* ── WHATSAPP BUBBLES ── */
+  .wa-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .wa-bubble {
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+  .wa-bubble .sender {
+    font-weight: 700;
+    font-size: 0.78rem;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .wa-bubble .time {
+    font-size: 0.7rem;
+    opacity: 0.5;
+    float: right;
+    margin-left: 12px;
+    margin-top: 4px;
+  }
+  .wa-bubble.incoming {
+    background: white;
+    border: 1px solid var(--gray-200);
+    align-self: flex-start;
+    border-top-left-radius: 4px;
+  }
+  .wa-bubble.incoming .sender { color: var(--blue); }
+  .wa-bubble.outgoing {
+    background: var(--green-light);
+    align-self: flex-end;
+    border-top-right-radius: 4px;
+  }
+  .wa-bubble.outgoing .sender { color: var(--green-dark); }
+  .wa-bubble.agent {
+    background: var(--blue-light);
+    align-self: flex-start;
+    border-top-left-radius: 4px;
+  }
+  .wa-bubble.agent .sender { color: var(--blue); }
+  .wa-bubble.system {
+    background: var(--orange-light);
+    align-self: flex-end;
+    border-top-right-radius: 4px;
+    border: 1px solid #FCD34D;
+  }
+  .wa-bubble.system .sender { color: #B45309; }
+  .wa-bubble.scraper {
+    background: #E0E7FF;
+    align-self: flex-end;
+    border-top-right-radius: 4px;
+    border: 1px solid #A5B4FC;
+  }
+  .wa-bubble.scraper .sender { color: #4338CA; }
+
+  /* ── INFO BOX ── */
+  .info-box {
+    display: flex;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: 10px;
+    margin-top: 14px;
+    font-size: 0.88rem;
+  }
+  .info-box .info-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+  .info-box.green { background: #ECFDF5; border: 1px solid #A7F3D0; }
+  .info-box.blue { background: var(--blue-light); border: 1px solid #93C5FD; }
+  .info-box.orange { background: var(--orange-light); border: 1px solid #FCD34D; }
+  .info-box.red { background: var(--red-light); border: 1px solid #FCA5A5; }
+  .info-box.purple { background: var(--purple-light); border: 1px solid #C4B5FD; }
+  .info-box.teal { background: var(--teal-light); border: 1px solid #5EEAD4; }
+  .info-box ul { padding-left: 18px; margin-top: 4px; }
+  .info-box li { margin-bottom: 3px; }
+
+  /* ── BRANCHES ── */
+  .branch-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 16px;
+  }
+  .branch {
+    border-radius: 12px;
+    padding: 20px;
+    border: 2px solid;
+  }
+  .branch.success { background: #F0FDF4; border-color: #86EFAC; }
+  .branch.fail { background: #FFF7ED; border-color: #FDBA74; }
+  .branch h4 { font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .branch p, .branch li { font-size: 0.88rem; color: var(--gray-700); }
+  .branch ul { padding-left: 18px; margin-top: 6px; }
+
+  /* ── MASTER DIAGRAM ── */
+  .master-diagram {
+    background: white;
+    border-radius: 20px;
+    padding: 40px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    border: 1px solid var(--gray-200);
+    margin-bottom: 40px;
+    overflow-x: auto;
+  }
+  .master-diagram h3 { text-align: center; font-size: 1.2rem; margin-bottom: 30px; color: var(--gray-700); }
+
+  .diagram-grid {
+    display: grid;
+    grid-template-columns: 1fr 60px 1fr;
+    gap: 0;
+    align-items: start;
+  }
+  .diagram-col {
+    padding: 20px;
+  }
+  .diagram-col h4 {
+    text-align: center;
+    padding: 10px 16px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-bottom: 20px;
+  }
+  .diagram-col.col-a h4 { background: #FED7AA; color: #9A3412; }
+  .diagram-col.col-b h4 { background: #BBF7D0; color: #166534; }
+
+  .d-node {
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    border: 2px solid;
+  }
+  .d-node.orange { background: #FEF3C7; border-color: #FCD34D; color: #92400E; }
+  .d-node.green { background: #D1FAE5; border-color: #6EE7B7; color: #065F46; }
+  .d-node.blue { background: #DBEAFE; border-color: #93C5FD; color: #1E40AF; }
+  .d-node.purple { background: #EDE9FE; border-color: #C4B5FD; color: #5B21B6; }
+  .d-node.red { background: #FEE2E2; border-color: #FCA5A5; color: #991B1B; }
+  .d-node.teal { background: #CCFBF1; border-color: #5EEAD4; color: #115E59; }
+  .d-node.indigo { background: #E0E7FF; border-color: #A5B4FC; color: #3730A3; }
+  .d-arrow {
+    text-align: center;
+    font-size: 1.2rem;
+    color: var(--gray-400);
+    margin: 4px 0;
+  }
+  .d-label {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--gray-500);
+    font-style: italic;
+    margin: -2px 0 6px;
+  }
+
+  .diagram-middle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 120px;
+  }
+  .diagram-middle .cross-arrow {
+    writing-mode: horizontal-tb;
+    font-size: 0.75rem;
+    color: var(--gray-400);
+    text-align: center;
+    padding: 8px 0;
+  }
+  .diagram-middle .cross-line {
+    width: 100%;
+    height: 2px;
+    background: var(--gray-300);
+    position: relative;
+  }
+  .diagram-middle .cross-line::after {
+    content: '&#8594;';
+    position: absolute;
+    right: -4px;
+    top: -10px;
+    font-size: 1rem;
+    color: var(--gray-400);
+  }
+
+  /* ── FEATURES ── */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .feature {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    background: var(--gray-50);
+    border-radius: 12px;
+    border: 1px solid var(--gray-200);
+  }
+  .feature .feat-icon { font-size: 1.4rem; flex-shrink: 0; }
+  .feature h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 3px; }
+  .feature p { font-size: 0.82rem; color: var(--gray-500); }
+
+  /* ── TIMELINE ── */
+  .timeline {
+    position: relative;
+    padding-left: 60px;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 27px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 3px;
+  }
+  .timeline.flow-a-line::before { background: linear-gradient(to bottom, var(--orange), #F97316, var(--red)); }
+  .timeline.flow-b-line::before { background: linear-gradient(to bottom, var(--green), var(--blue), var(--purple)); }
+
+  .step {
+    position: relative;
+    margin-bottom: 28px;
+  }
+  .step:last-child { margin-bottom: 0; }
+  .step-number {
+    position: absolute;
+    left: -60px;
+    top: 0;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: white;
+    z-index: 2;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .step-content {
+    background: white;
+    border-radius: 16px;
+    padding: 22px 26px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid var(--gray-200);
+    position: relative;
+  }
+  .step-content::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 16px;
+    border: 10px solid transparent;
+    border-right-color: var(--gray-200);
+    border-left: none;
+  }
+  .step-content::after {
+    content: '';
+    position: absolute;
+    left: -9px;
+    top: 16px;
+    border: 10px solid transparent;
+    border-right-color: white;
+    border-left: none;
+  }
+  .step-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .step-desc {
+    color: var(--gray-500);
+    font-size: 0.92rem;
+  }
+
+  /* ── PARALLEL INDICATOR ── */
+  .parallel-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 16px;
+    margin: 40px 0;
+    background: linear-gradient(90deg, #FEF3C7, #ECFDF5);
+    border-radius: 14px;
+    border: 2px dashed var(--gray-300);
+  }
+  .parallel-banner .pb-icon { font-size: 1.5rem; }
+  .parallel-banner .pb-text { font-size: 0.95rem; font-weight: 600; color: var(--gray-700); }
+
+  /* ── FOOTER ── */
+  .footer {
+    text-align: center;
+    padding: 40px;
+    color: var(--gray-500);
+    font-size: 0.85rem;
+  }
+
+  /* ── COMPARISON TABLE ── */
+  .comparison {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--gray-200);
+    margin-top: 20px;
+    font-size: 0.88rem;
+  }
+  .comparison th {
+    background: var(--gray-900);
+    color: white;
+    padding: 14px 18px;
+    text-align: left;
+    font-weight: 600;
+  }
+  .comparison td {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .comparison tr:last-child td { border-bottom: none; }
+  .comparison tr:nth-child(even) td { background: var(--gray-50); }
+  .comparison .highlight { font-weight: 600; color: var(--green-dark); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .two-flows { grid-template-columns: 1fr; }
+    .branch-container { grid-template-columns: 1fr; }
+    .features { grid-template-columns: 1fr; }
+    .diagram-grid { grid-template-columns: 1fr; }
+    .diagram-middle { display: none; }
+    .hero h1 { font-size: 1.8rem; }
+    .container { padding: 24px 16px; }
+    .scenario { padding: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ HERO ═══════════════════════════════════════════ -->
+<div class="hero">
+  <h1>Sistema WhatsApp — Dos Flujos Paralelos</h1>
+  <p>Un scraper detecta propiedades nuevas cada 15 minutos y las asigna al primer asesor que responda. En paralelo, un bot con IA atiende a los clientes interesados.</p>
+  <div class="badge">Inmobiliaria24 &mdash; Scraping + Subasta + IA</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ CONCEPT ═══════════════════════════════════════ -->
+<div class="container">
+
+  <div class="section-header">
+    <div class="icon">&#128161;</div>
+    <h2>El Concepto: Dos Procesos en Paralelo</h2>
+    <p>Estos dos flujos trabajan de forma independiente pero se conectan a trav&eacute;s de la <strong>asignaci&oacute;n de propiedades</strong>.</p>
+  </div>
+
+  <div class="two-flows">
+
+    <!-- FLOW A -->
+    <div class="flow-card flow-a">
+      <div class="flow-label">Flujo A</div>
+      <h3>&#127968; Propiedades Nuevas + Subasta</h3>
+      <p class="flow-desc">El scraper detecta propiedades nuevas en Inmuebles24, las publica en EasyBroker, y lanza una subasta para asignar un asesor.</p>
+      <ul class="flow-steps">
+        <li><div class="step-icon">1</div> Scraper revisa Inmuebles24 cada 15 minutos</li>
+        <li><div class="step-icon">2</div> Propiedades nuevas se publican en EasyBroker</li>
+        <li><div class="step-icon">3</div> Se env&iacute;a WhatsApp a todos los asesores en turno</li>
+        <li><div class="step-icon">4</div> El primero que responda <strong>TOMO-XXXX</strong> se la queda</li>
+        <li><div class="step-icon">5</div> Se actualiza la asignaci&oacute;n en EasyBroker</li>
+      </ul>
+    </div>
+
+    <!-- FLOW B -->
+    <div class="flow-card flow-b">
+      <div class="flow-label">Flujo B</div>
+      <h3>&#128172; Atenci&oacute;n al Cliente con IA</h3>
+      <p class="flow-desc">Cuando un cliente escribe preguntando por una propiedad, el bot con IA le responde con informaci&oacute;n real y lo conecta con el asesor asignado.</p>
+      <ul class="flow-steps">
+        <li><div class="step-icon">1</div> Cliente escribe al WhatsApp de la empresa</li>
+        <li><div class="step-icon">2</div> El sistema identifica la propiedad que le interesa</li>
+        <li><div class="step-icon">3</div> La IA responde con datos reales (precio, recámaras...)</li>
+        <li><div class="step-icon">4</div> Si pide visita o negociaci&oacute;n, lo conecta con el asesor</li>
+        <li><div class="step-icon">5</div> El asesor ya asignado a esa propiedad toma el control</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="connector">
+    <div class="connector-line">
+      <div class="link-icon">&#128279;</div>
+    </div>
+    <p style="margin-top:8px;">Se conectan por la <strong>asignaci&oacute;n propiedad &#8594; asesor</strong>. Cuando un lead pregunta por una propiedad, el sistema ya sabe qu&eacute; asesor la maneja.</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ══════════════════════════════════════ MASTER DIAGRAM ════════════════════════════════════ -->
+  <div class="master-diagram">
+    <h3>Diagrama General — Los Dos Flujos y Su Conexi&oacute;n</h3>
+    <div class="diagram-grid">
+
+      <!-- FLOW A COLUMN -->
+      <div class="diagram-col col-a">
+        <h4>&#128293; Flujo A: Propiedades + Subasta</h4>
+
+        <div class="d-node indigo">&#128375; Scraper (cada 15 min)</div>
+        <div class="d-arrow">&#8595;</div>
+        <div class="d-label">propiedades nuevas detectadas</div>
+
+        <div class="d-node teal">&#128230; Publicar en EasyBroker</div>
+        <div class="d-arrow">&#8595;</div>
+        <div class="d-label">propiedad creada con datos completos</div>
+
+        <div class="d-node orange">&#128227; WhatsApp a asesores en turno</div>
+        <div class="d-arrow">&#8595;</div>
+        <div class="d-label">&iquest;qui&eacute;n responde primero?</div>
+
+        <div class="d-node blue">&#128274; TOMO-XXXX &mdash; Primer respuesta gana</div>
+        <div class="d-arrow">&#8595;</div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div class="d-node green" style="font-size:0.78rem;">&#9989; Ganador asignado a la propiedad</div>
+          <div class="d-node red" style="font-size:0.78rem;">&#9888;&#65039; Nadie reclam&oacute; &#8594; Alerta manager</div>
+        </div>
+        <div class="d-arrow">&#8595;</div>
+
+        <div class="d-node teal">&#128260; Actualizar asignaci&oacute;n en EasyBroker</div>
+      </div>
+
+      <!-- MIDDLE CONNECTOR -->
+      <div class="diagram-middle">
+        <div style="background:white; border:2px solid var(--gray-300); border-radius:50%; width:50px; height:50px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">&#128279;</div>
+        <div style="font-size:0.7rem; color:var(--gray-500); margin-top:8px; text-align:center; line-height:1.3;">Propiedad<br>&#8596;<br>Asesor</div>
+      </div>
+
+      <!-- FLOW B COLUMN -->
+      <div class="diagram-col col-b">
+        <h4>&#128154; Flujo B: Atenci&oacute;n al Cliente</h4>
+
+        <div class="d-node green">&#128241; Cliente escribe al WhatsApp</div>
+        <div class="d-arrow">&#8595;</div>
+        <div class="d-label">clasificar mensaje</div>
+
+        <div class="d-node blue">&#128268; Router: &iquest;nuevo o existente?</div>
+        <div class="d-arrow">&#8595;</div>
+        <div class="d-label">identificar propiedad</div>
+
+        <div class="d-node blue">&#128269; Buscar propiedad + asesor asignado</div>
+        <div class="d-arrow">&#8595;</div>
+        <div class="d-label">IA responde</div>
+
+        <div class="d-node purple">&#129302; IA contesta con datos reales</div>
+        <div class="d-arrow">&#8595;</div>
+        <div class="d-label">&iquest;necesita atenci&oacute;n humana?</div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div class="d-node purple" style="font-size:0.78rem;">&#128260; Transferir al asesor de la propiedad</div>
+          <div class="d-node green" style="font-size:0.78rem;">&#128172; IA sigue atendiendo</div>
+        </div>
+        <div class="d-arrow">&#8595;</div>
+
+        <div class="d-node blue">&#128588; Asesor toma la conversaci&oacute;n</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ FLOW A DETAILED ═══════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128293;</div>
+    <h2>Flujo A: Scraping + Subasta de Propiedades</h2>
+    <p>Cada 15 minutos el scraper busca propiedades nuevas y lanza una subasta para que los asesores las reclamen.</p>
+  </div>
+
+  <!-- A1 -->
+  <div class="scenario">
+    <span class="flow-tag a">Flujo A</span>
+    <h3>A1 &mdash; El scraper detecta propiedades nuevas</h3>
+    <p class="subtitle">Cada 15 minutos, el scraper revisa Inmuebles24 buscando propiedades que a&uacute;n no est&aacute;n en el sistema.</p>
+
+    <div class="info-box teal">
+      <span class="info-icon">&#128375;</span>
+      <div><strong>El scraper autom&aacute;ticamente:</strong>
+        <ul>
+          <li>Entra a Inmuebles24 y busca propiedades nuevas</li>
+          <li>Compara con las que ya tiene en la base de datos</li>
+          <li>Las que son nuevas se procesan al siguiente paso</li>
+          <li>Corre <strong>cada 15 minutos</strong>, 24/7</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- A2 -->
+  <div class="scenario">
+    <span class="flow-tag a">Flujo A</span>
+    <h3>A2 &mdash; Se publica la propiedad en EasyBroker</h3>
+    <p class="subtitle">Las propiedades nuevas se crean autom&aacute;ticamente en EasyBroker con toda la informaci&oacute;n.</p>
+
+    <div class="info-box blue">
+      <span class="info-icon">&#128230;</span>
+      <div><strong>Datos que se transfieren:</strong>
+        <ul>
+          <li>T&iacute;tulo, descripci&oacute;n, precio</li>
+          <li>Ubicaci&oacute;n, colonia, ciudad</li>
+          <li>Rec&aacute;maras, ba&ntilde;os, superficie (m&sup2;)</li>
+          <li>Tipo de operaci&oacute;n (venta/renta)</li>
+          <li>Fotos de la propiedad</li>
+          <li>URL original en Inmuebles24</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="info-box green">
+      <span class="info-icon">&#9201;</span>
+      <div><strong>Resultado:</strong> La propiedad que antes tardaba horas en llegar a EasyBroker, ahora llega en <strong>m&aacute;ximo 15 minutos</strong>.</div>
+    </div>
+  </div>
+
+  <!-- A3 -->
+  <div class="scenario">
+    <span class="flow-tag a">Flujo A</span>
+    <h3>A3 &mdash; Subasta: notificaci&oacute;n a todos los asesores</h3>
+    <p class="subtitle">Para cada propiedad nueva, todos los asesores en turno reciben una notificaci&oacute;n simult&aacute;nea.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble system">
+        <span class="sender">&#128227; Notificaci&oacute;n para cada asesor en turno</span>
+        &#127968; <strong>Nueva propiedad disponible</strong><br><br>
+        &#128205; Polanco, CDMX<br>
+        &#128176; $4,500,000 MXN<br>
+        &#128207; 3 rec&aacute;maras &bull; 2 ba&ntilde;os &bull; 145 m&sup2;<br>
+        &#127965; Departamento en venta<br><br>
+        Responde <strong>TOMO-XK47</strong> para que te la asignen.<br>
+        <em>(Expira en 5 min)</em>
+        <span class="time">09:15 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box orange">
+      <span class="info-icon">&#9201;</span>
+      <div><strong>Reglas de la subasta:</strong>
+        <ul>
+          <li>Todos los asesores <strong>en turno</strong> reciben la notificaci&oacute;n al mismo tiempo</li>
+          <li>El c&oacute;digo <strong>TOMO-XK47</strong> es &uacute;nico por propiedad</li>
+          <li>Tienen <strong>5 minutos</strong> para responder</li>
+          <li>Solo el <strong>primero que conteste</strong> gana</li>
+          <li>Es imposible que dos asesores reclamen la misma propiedad (bloqueo de base de datos)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- A4 -->
+  <div class="scenario">
+    <span class="flow-tag a">Flujo A</span>
+    <h3>A4 &mdash; Un asesor reclama la propiedad</h3>
+    <p class="subtitle">El asesor responde con el c&oacute;digo desde su WhatsApp personal.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble agent">
+        <span class="sender">&#128188; Yolanda</span>
+        TOMO-XK47
+        <span class="time">09:16 AM</span>
+      </div>
+    </div>
+
+    <div class="branch-container">
+      <div class="branch success">
+        <h4>&#9989; Yolanda gana (fue la primera)</h4>
+        <div class="wa-messages" style="margin-top:10px;">
+          <div class="wa-bubble outgoing" style="max-width:100%; font-size:0.82rem;">
+            <span class="sender">&#9989; Sistema</span>
+            &#9989; <strong>Propiedad asignada</strong><br><br>
+            &#127968; Depto. Polanco &mdash; $4,500,000 MXN<br>
+            &#128205; Polanco, CDMX<br><br>
+            Ya eres la asesora de esta propiedad. Cuando un cliente pregunte por ella, te lo enviaremos a ti.<br><br>
+            La propiedad ya est&aacute; actualizada en EasyBroker con tu nombre.
+          </div>
+        </div>
+      </div>
+      <div class="branch fail">
+        <h4>&#128164; Los dem&aacute;s asesores</h4>
+        <div class="wa-messages" style="margin-top:10px;">
+          <div class="wa-bubble outgoing" style="max-width:100%; font-size:0.82rem;">
+            <span class="sender">Sistema</span>
+            Esta propiedad ya fue tomada por otro asesor. &iexcl;La siguiente puede ser tuya! &#128170;
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-box green" style="margin-top:16px;">
+      <span class="info-icon">&#128260;</span>
+      <div><strong>Actualizaci&oacute;n autom&aacute;tica:</strong> La asignaci&oacute;n se actualiza instant&aacute;neamente tanto en la base de datos local como en EasyBroker, para que todo quede sincronizado.</div>
+    </div>
+  </div>
+
+  <!-- A5 (alternate) -->
+  <div class="scenario" style="border: 2px dashed #FCD34D; background: #FFFBEB;">
+    <span class="flow-tag a">Flujo A</span>
+    <h3>&#9888;&#65039; Si nadie reclama en 5 minutos</h3>
+    <p class="subtitle">El sistema escala al manager para asignaci&oacute;n manual.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble system">
+        <span class="sender">&#9888;&#65039; Alerta al Manager</span>
+        &#9888;&#65039; <strong>Propiedad sin asesor</strong><br><br>
+        &#127968; Depto. Polanco &mdash; $4,500,000 MXN<br>
+        &#128205; Polanco, CDMX<br>
+        C&oacute;digo: XK47<br><br>
+        Ning&uacute;n asesor respondi&oacute; en 5 min.<br>
+        <strong>Asignaci&oacute;n manual requerida.</strong>
+        <span class="time">09:20 AM</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="parallel-banner">
+    <div class="pb-icon">&#128260;</div>
+    <div class="pb-text">Mientras tanto, en paralelo, el bot de WhatsApp est&aacute; atendiendo clientes...</div>
+    <div class="pb-icon">&#128260;</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ FLOW B DETAILED ═══════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128154;</div>
+    <h2>Flujo B: Atenci&oacute;n al Cliente con IA</h2>
+    <p>Cuando un cliente escribe al WhatsApp, el bot con IA le responde y lo conecta con el asesor de la propiedad.</p>
+  </div>
+
+  <!-- B1 -->
+  <div class="scenario">
+    <span class="flow-tag b">Flujo B</span>
+    <h3>B1 &mdash; Un cliente escribe al WhatsApp</h3>
+    <p class="subtitle">El cliente vio una propiedad en la p&aacute;gina y decide escribir para preguntar.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble incoming">
+        <span class="sender">&#128100; Mar&iacute;a Garc&iacute;a</span>
+        Hola, me interesa el departamento en Polanco que vi en su p&aacute;gina. &iquest;Est&aacute; disponible?
+        <span class="time">11:42 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box green">
+      <span class="info-icon">&#9889;</span>
+      <div><strong>&iquest;Qu&eacute; pasa?</strong><br>
+        El sistema recibe el mensaje, detecta que es un n&uacute;mero nuevo, y busca la propiedad mencionada. Como la propiedad <strong>ya tiene asesor asignado</strong> (Yolanda, del Flujo A), el sistema lo sabe inmediatamente.</div>
+    </div>
+  </div>
+
+  <!-- B2 -->
+  <div class="scenario">
+    <span class="flow-tag b">Flujo B</span>
+    <h3>B2 &mdash; La IA responde con datos reales</h3>
+    <p class="subtitle">El asistente con IA atiende al cliente instant&aacute;neamente, usando la informaci&oacute;n real de la propiedad.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble outgoing">
+        <span class="sender">&#129302; Asistente IA</span>
+        &iexcl;Hola Mar&iacute;a! &#128075; S&iacute;, el departamento en Polanco est&aacute; disponible. &iquest;Qu&eacute; te gustar&iacute;a saber? Puedo contarte sobre precio, ubicaci&oacute;n, rec&aacute;maras, amenidades...
+        <span class="time">11:42 AM</span>
+      </div>
+      <div class="wa-bubble incoming">
+        <span class="sender">&#128100; Mar&iacute;a</span>
+        &iquest;Cu&aacute;ntas rec&aacute;maras tiene y cu&aacute;nto cuesta?
+        <span class="time">11:43 AM</span>
+      </div>
+      <div class="wa-bubble outgoing">
+        <span class="sender">&#129302; Asistente IA</span>
+        El departamento tiene 3 rec&aacute;maras, 2 ba&ntilde;os, y 145 m&sup2; de superficie. El precio es de $4,500,000 MXN. Incluye 2 cajones de estacionamiento y tiene balc&oacute;n con vista al parque. &#127968;
+        <span class="time">11:43 AM</span>
+      </div>
+      <div class="wa-bubble incoming">
+        <span class="sender">&#128100; Mar&iacute;a</span>
+        &iquest;Tiene amenidades?
+        <span class="time">11:44 AM</span>
+      </div>
+      <div class="wa-bubble outgoing">
+        <span class="sender">&#129302; Asistente IA</span>
+        &iexcl;Claro! Cuenta con gimnasio, roof garden, &aacute;rea de juegos infantiles y sal&oacute;n de eventos. El edificio tiene vigilancia 24 horas. &#127942;
+        <span class="time">11:44 AM</span>
+      </div>
+    </div>
+
+    <div class="info-box purple">
+      <span class="info-icon">&#129504;</span>
+      <div><strong>La IA:</strong>
+        <ul>
+          <li>Solo usa <strong>datos reales</strong> de la propiedad &mdash; nunca inventa</li>
+          <li>Si no tiene un dato, dice que lo verificar&aacute; con el asesor</li>
+          <li>Responde en <strong>segundos</strong>, 24/7</li>
+          <li>Responde en espa&ntilde;ol o ingl&eacute;s seg&uacute;n el cliente</li>
+          <li>Mensajes cortos, optimizados para WhatsApp</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- B3 -->
+  <div class="scenario">
+    <span class="flow-tag b">Flujo B</span>
+    <h3>B3 &mdash; Transferencia autom&aacute;tica al asesor de la propiedad</h3>
+    <p class="subtitle">Cuando el cliente pide algo que necesita atenci&oacute;n humana, la IA lo conecta con <strong>el asesor asignado a esa propiedad</strong>.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble incoming">
+        <span class="sender">&#128100; Mar&iacute;a</span>
+        Me encanta, &iquest;puedo ir a verlo ma&ntilde;ana?
+        <span class="time">11:46 AM</span>
+      </div>
+      <div class="wa-bubble outgoing">
+        <span class="sender">&#129302; Asistente IA</span>
+        &iexcl;Excelente elecci&oacute;n! Te estoy conectando con Yolanda, quien es la asesora de esta propiedad. Ella coordinar&aacute; la visita contigo.
+        <span class="time">11:46 AM</span>
+      </div>
+    </div>
+
+    <div style="margin-top:20px; padding:20px; background:#EFF6FF; border-radius:12px; border:2px solid #93C5FD;">
+      <h4 style="margin-bottom:10px;">&#128227; Lo que recibe Yolanda (asesora de la propiedad):</h4>
+      <div class="wa-messages">
+        <div class="wa-bubble system" style="max-width:100%; background:#FEF3C7;">
+          <span class="sender">&#128680; Nuevo cliente interesado en tu propiedad</span>
+          &#128100; Cliente: Mar&iacute;a Garc&iacute;a<br>
+          &#128241; Tel&eacute;fono: 5215512345678<br>
+          &#127968; Propiedad: Depto. Polanco &mdash; $4,500,000 MXN<br><br>
+          <strong>Resumen de la conversaci&oacute;n:</strong><br>
+          <em>Mar&iacute;a: &iquest;Rec&aacute;maras y precio?</em><br>
+          <em>IA: 3 rec., $4.5M MXN, 145m&sup2;, 2 estac.</em><br>
+          <em>Mar&iacute;a: &iquest;Amenidades?</em><br>
+          <em>IA: Gym, roof garden, vigilancia 24h</em><br>
+          <em>Mar&iacute;a: Quiero ir a verlo ma&ntilde;ana</em><br><br>
+          La cliente quiere agendar visita. Sus mensajes ahora te llegar&aacute;n a ti.
+          <span class="time">11:46 AM</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-box green" style="margin-top:16px;">
+      <span class="info-icon">&#128172;</span>
+      <div><strong>Conexi&oacute;n con Flujo A:</strong> El sistema sabe que Yolanda es la asesora de esta propiedad porque ella la reclam&oacute; en la subasta del Flujo A. La IA <strong>siempre</strong> conecta al lead con el asesor correcto de esa propiedad.</div>
+    </div>
+  </div>
+
+  <!-- B4 -->
+  <div class="scenario">
+    <span class="flow-tag b">Flujo B</span>
+    <h3>B4 &mdash; El asesor toma la conversaci&oacute;n</h3>
+    <p class="subtitle">A partir de este momento, los mensajes del cliente se reenv&iacute;an directamente al WhatsApp de Yolanda.</p>
+
+    <div class="wa-messages">
+      <div class="wa-bubble incoming">
+        <span class="sender">&#128100; Mar&iacute;a</span>
+        &iquest;Podr&iacute;a ser a las 11 AM?
+        <span class="time">11:47 AM</span>
+      </div>
+    </div>
+
+    <div style="margin:16px 0; text-align:center; color:var(--gray-500); font-size:0.85rem;">
+      &#128257; El sistema reenv&iacute;a autom&aacute;ticamente al WhatsApp de Yolanda:
+    </div>
+
+    <div class="wa-messages">
+      <div class="wa-bubble system" style="max-width:100%;">
+        <span class="sender">&#128229; Mensaje reenviado a Yolanda</span>
+        Mensaje de Mar&iacute;a Garc&iacute;a (5215512345678):<br><br>
+        &iquest;Podr&iacute;a ser a las 11 AM?
+        <span class="time">11:47 AM</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ HANDOFF TRIGGERS ════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128260;</div>
+    <h2>&iquest;Cu&aacute;ndo transfiere la IA al asesor?</h2>
+    <p>La IA detecta autom&aacute;ticamente estas situaciones.</p>
+  </div>
+
+  <div class="features" style="margin-bottom:50px;">
+    <div class="feature" style="border-color:#C4B5FD; background:#FAF5FF;">
+      <div class="feat-icon">&#128197;</div>
+      <div>
+        <h4>Agendar visita</h4>
+        <p>"Quiero ir a ver la propiedad", "&iquest;Puedo agendar una cita?"</p>
+      </div>
+    </div>
+    <div class="feature" style="border-color:#C4B5FD; background:#FAF5FF;">
+      <div class="feat-icon">&#128176;</div>
+      <div>
+        <h4>Negociaci&oacute;n de precio</h4>
+        <p>"&iquest;Bajan el precio?", "Ofrezco 4 millones"</p>
+      </div>
+    </div>
+    <div class="feature" style="border-color:#C4B5FD; background:#FAF5FF;">
+      <div class="feat-icon">&#127974;</div>
+      <div>
+        <h4>Financiamiento</h4>
+        <p>"&iquest;Aceptan Infonavit?", "Cr&eacute;dito hipotecario"</p>
+      </div>
+    </div>
+    <div class="feature" style="border-color:#C4B5FD; background:#FAF5FF;">
+      <div class="feat-icon">&#128100;</div>
+      <div>
+        <h4>Solicitud directa</h4>
+        <p>"Quiero hablar con alguien", "P&aacute;same con un asesor"</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ EDGE CASES ═══════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128300;</div>
+    <h2>Casos Especiales</h2>
+    <p>&iquest;Qu&eacute; pasa en situaciones no est&aacute;ndar?</p>
+  </div>
+
+  <div class="scenario">
+    <h3>&iquest;Qu&eacute; pasa si un cliente pregunta por una propiedad que a&uacute;n no tiene asesor?</h3>
+    <p class="subtitle">Si la subasta del Flujo A a&uacute;n no termina, o nadie la reclam&oacute;.</p>
+    <div class="info-box orange">
+      <span class="info-icon">&#9888;&#65039;</span>
+      <div>La IA <strong>s&iacute; responde</strong> las preguntas del cliente con los datos de la propiedad. Pero si necesita transferir a un asesor, <strong>alerta al manager</strong> para que asigne manualmente. El cliente nunca se queda sin atenci&oacute;n.</div>
+    </div>
+  </div>
+
+  <div class="scenario">
+    <h3>&iquest;Qu&eacute; pasa si un cliente pregunta sin mencionar propiedad espec&iacute;fica?</h3>
+    <p class="subtitle">"Hola, busco departamento en Polanco"</p>
+    <div class="info-box blue">
+      <span class="info-icon">&#128269;</span>
+      <div>El sistema busca propiedades que coincidan con la b&uacute;squeda del cliente (ubicaci&oacute;n, tipo, rango de precio). Si encuentra coincidencias, la IA le muestra opciones. Si necesita ayuda, se conecta con el manager o un asesor de guardia.</div>
+    </div>
+  </div>
+
+  <div class="scenario">
+    <h3>&iquest;Qu&eacute; pasa si el scraper encuentra muchas propiedades nuevas a la vez?</h3>
+    <p class="subtitle">Por ejemplo, 10 propiedades nuevas en una sola corrida.</p>
+    <div class="info-box teal">
+      <span class="info-icon">&#128202;</span>
+      <div>Se lanza <strong>una subasta independiente por cada propiedad</strong>. Los asesores pueden reclamar m&uacute;ltiples propiedades respondiendo a cada c&oacute;digo TOMO. No hay l&iacute;mite (o se puede configurar un l&iacute;mite por asesor si se desea).</div>
+    </div>
+  </div>
+
+  <div class="scenario">
+    <h3>&iquest;Puede un asesor tener m&uacute;ltiples propiedades asignadas?</h3>
+    <div class="info-box green">
+      <span class="info-icon">&#9989;</span>
+      <div><strong>S&iacute;.</strong> Cada asesor puede reclamar y manejar m&uacute;ltiples propiedades. Cuando un lead pregunta por una propiedad espec&iacute;fica, el sistema siempre lo conecta con el asesor correcto de esa propiedad.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ RESUMEN TIMELINE ════════════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#127912;</div>
+    <h2>Resumen Visual: Los Dos Flujos</h2>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:30px; margin-bottom:50px;">
+    <!-- FLOW A TIMELINE -->
+    <div>
+      <h3 style="text-align:center; margin-bottom:20px; color:#9A3412;"><span class="flow-tag a">Flujo A</span> Propiedades + Subasta</h3>
+      <div class="timeline flow-a-line">
+        <div class="step">
+          <div class="step-number" style="background:var(--orange); font-size:1.1rem;">A1</div>
+          <div class="step-content">
+            <div class="step-title">&#128375; Scraper cada 15 min</div>
+            <div class="step-desc">Detecta propiedades nuevas en Inmuebles24</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number" style="background:#14B8A6; font-size:1.1rem;">A2</div>
+          <div class="step-content">
+            <div class="step-title">&#128230; Publicar en EasyBroker</div>
+            <div class="step-desc">Crear propiedad con todos los datos</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number" style="background:var(--orange); font-size:1.1rem;">A3</div>
+          <div class="step-content">
+            <div class="step-title">&#128227; Subasta por WhatsApp</div>
+            <div class="step-desc">Notificaci&oacute;n a asesores: TOMO-XXXX</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number" style="background:var(--blue); font-size:1.1rem;">A4</div>
+          <div class="step-content">
+            <div class="step-title">&#128274; Primer asesor gana</div>
+            <div class="step-desc">Asignado a la propiedad en DB + EasyBroker</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FLOW B TIMELINE -->
+    <div>
+      <h3 style="text-align:center; margin-bottom:20px; color:#166534;"><span class="flow-tag b">Flujo B</span> Atenci&oacute;n al Cliente</h3>
+      <div class="timeline flow-b-line">
+        <div class="step">
+          <div class="step-number" style="background:var(--green-dark); font-size:1.1rem;">B1</div>
+          <div class="step-content">
+            <div class="step-title">&#128241; Cliente escribe</div>
+            <div class="step-desc">"Me interesa el depto. en Polanco"</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number" style="background:var(--green-dark); font-size:1.1rem;">B2</div>
+          <div class="step-content">
+            <div class="step-title">&#129302; IA responde instant&aacute;neamente</div>
+            <div class="step-desc">Datos reales: precio, rec&aacute;maras, m&sup2;...</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number" style="background:var(--purple); font-size:1.1rem;">B3</div>
+          <div class="step-content">
+            <div class="step-title">&#128260; Transferencia al asesor</div>
+            <div class="step-desc">Conecta con el asesor de esa propiedad</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number" style="background:var(--blue); font-size:1.1rem;">B4</div>
+          <div class="step-content">
+            <div class="step-title">&#128172; Asesor toma la conversaci&oacute;n</div>
+            <div class="step-desc">Recibe resumen + mensajes en tiempo real</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══════════════════════════════════════ WHAT NEEDS TO BE BUILT ════════════════════════ -->
+  <div class="section-header">
+    <div class="icon">&#128736;&#65039;</div>
+    <h2>Resumen T&eacute;cnico: &iquest;Qu&eacute; se necesita construir?</h2>
+    <p>Lo que ya existe y lo que falta.</p>
+  </div>
+
+  <table class="comparison">
+    <tr>
+      <th>Componente</th>
+      <th>Estado</th>
+      <th>Detalle</th>
+    </tr>
+    <tr>
+      <td><strong>Scraper de propiedades</strong></td>
+      <td>&#128992; Adaptar</td>
+      <td>Existe scraper de leads. Necesita adaptarse para capturar <strong>propiedades</strong> de Inmuebles24 (no solo leads del inbox)</td>
+    </tr>
+    <tr>
+      <td><strong>Integraci&oacute;n EasyBroker API</strong></td>
+      <td>&#128308; Nuevo</td>
+      <td>Crear propiedades y actualizar asignaci&oacute;n de asesor via API de EasyBroker</td>
+    </tr>
+    <tr>
+      <td><strong>Subasta de propiedades</strong></td>
+      <td>&#128994; Existe</td>
+      <td class="highlight">Ya funciona el mecanismo de subasta (TOMO-XXXX). Solo cambia el trigger: de "nuevo lead" a "nueva propiedad"</td>
+    </tr>
+    <tr>
+      <td><strong>Bot WhatsApp (recepci&oacute;n)</strong></td>
+      <td>&#128994; Existe</td>
+      <td class="highlight">Router de mensajes, clasificaci&oacute;n, dedup &mdash; ya implementado</td>
+    </tr>
+    <tr>
+      <td><strong>Asistente IA</strong></td>
+      <td>&#128994; Existe</td>
+      <td class="highlight">Conversaci&oacute;n con IA usando datos reales de propiedad &mdash; ya implementado</td>
+    </tr>
+    <tr>
+      <td><strong>Handoff a asesor</strong></td>
+      <td>&#128992; Adaptar</td>
+      <td>Existe el mecanismo. Adaptar para conectar al asesor de la <strong>propiedad</strong> (no al asesor del lead)</td>
+    </tr>
+    <tr>
+      <td><strong>Escalaci&oacute;n a manager</strong></td>
+      <td>&#128994; Existe</td>
+      <td class="highlight">Alerta cuando nadie reclama &mdash; ya implementado</td>
+    </tr>
+    <tr>
+      <td><strong>Base de datos</strong></td>
+      <td>&#128992; Adaptar</td>
+      <td>Agregar columna de asesor asignado a tabla de propiedades</td>
+    </tr>
+  </table>
+
+  <div class="info-box green" style="margin-top:24px;">
+    <span class="info-icon">&#128161;</span>
+    <div><strong>Conclusi&oacute;n:</strong> El <strong>70% del sistema ya est&aacute; construido</strong>. Los mecanismos de subasta, IA, handoff, y router ya funcionan. Lo que falta es: (1) adaptar el scraper para propiedades, (2) la integraci&oacute;n con la API de EasyBroker, y (3) cambiar el trigger de la subasta de "lead nuevo" a "propiedad nueva".</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ FOOTER ══════════════════════════════════════ -->
+<div class="footer">
+  Inmobiliaria24 &mdash; Sistema WhatsApp con Dos Flujos Paralelos<br>
+  Scraping autom&aacute;tico + Subasta de propiedades + Atenci&oacute;n con IA + Handoff inteligente
+</div>
+
+</body>
+</html>
