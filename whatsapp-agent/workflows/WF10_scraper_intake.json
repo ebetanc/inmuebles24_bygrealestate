@@ -14,7 +14,7 @@
       "typeVersion": 2,
       "position": [200, 300],
       "webhookId": "scraper-leads-webhook-id",
-      "notes": "Receives POST from Python scraper.\nPayload: JSON array of lead objects.\nConfigure scraper env: WEBHOOK_URL=https://n8n.srv856940.hstgr.cloud/webhook/scraper-leads"
+      "notes": "Receives POST from Python scraper.\nPayload: JSON array of lead objects.\nConfigure scraper env: WEBHOOK_URL=https://[your-n8n-domain]/webhook/scraper-leads"
     },
     {
       "parameters": {

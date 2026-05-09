@@ -24,11 +24,8 @@ class SessionStaleError(Exception):
     """Raised when the browser session has expired and needs re-authentication."""
 
 
-# Default webhook — overridden by WEBHOOK_URL env var in config.
-_DEFAULT_WEBHOOK_URL = (
-    "https://n8n.srv856940.hstgr.cloud/webhook/"
-    "63340e41-c487-4e66-86fe-c4ff710fbcdd"
-)
+# Must be set via WEBHOOK_URL env var in config.
+_DEFAULT_WEBHOOK_URL = ""
 INTERESADOS_URL = "https://www.inmuebles24.com/panel/interesados"
 
 # Retry settings
@@ -510,6 +507,8 @@ async def _extract_lead_by_click(
 async def send_to_webhook(leads: list[dict], webhook_url: str = "") -> None:
     """POST lead data to webhook with exponential backoff retry."""
     url = webhook_url or _DEFAULT_WEBHOOK_URL
+    if not url:
+        raise ValueError("WEBHOOK_URL not configured — set it in .env")
     last_err: Exception | None = None
 
     async with httpx.AsyncClient(timeout=30) as client:

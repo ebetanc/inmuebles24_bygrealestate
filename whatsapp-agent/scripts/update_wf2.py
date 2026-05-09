@@ -1,10 +1,11 @@
 """Update WF2 in n8n with v5 changes: returning lead detection, night queue, day/night routing."""
 import json
+import os
 import requests
 
-N8N_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZjEzZTZjMi1mMjcxLTRjZmUtYTU5ZC0yYWI0MzZmZGYwYjIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiZGRhYjM5NzItYTBiNC00MzA3LThhODEtNTQ3NDhjMWEyYTA1IiwiaWF0IjoxNzc4MjM0MjIzfQ.i9kP3igkUA_eR5g7uNqr0sS8y9G2NK6roIKA0q5GB3g"
-N8N_URL = "https://n8n.srv856940.hstgr.cloud/api/v1"
-WF2_ID = "CYbIxSodtjGEQwMp"
+N8N_KEY = os.environ["N8N_API_KEY"]
+N8N_URL = os.environ.get("N8N_URL", "https://n8n.srv856940.hstgr.cloud/api/v1")
+WF2_ID = os.environ.get("WF2_WORKFLOW_ID", "CYbIxSodtjGEQwMp")
 
 r = requests.get(f"{N8N_URL}/workflows/{WF2_ID}", headers={"X-N8N-API-KEY": N8N_KEY})
 wf = r.json()
@@ -228,7 +229,7 @@ night_queue_node = {
 notify_agent_node = {
     "parameters": {
         "method": "POST",
-        "url": "http://69.62.108.2:32769/message/sendText/byg_bot_n8n",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
         "sendBody": True,
         "specifyBody": "json",
         "jsonBody": '={\n  "number": "{{ $json.lead_phone }}",\n  "text": "Lead recurrente\\n\\nEl lead {{ $json.lead_name || $json.lead_phone }} volvio a preguntar por la misma propiedad ({{ $json.property_title }}).\\n\\nTelefono: {{ $json.lead_phone }}\\nYa esta asignado a ti."\n}',
@@ -245,7 +246,7 @@ notify_agent_node = {
 night_ack_node = {
     "parameters": {
         "method": "POST",
-        "url": "http://69.62.108.2:32769/message/sendText/byg_bot_n8n",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
         "sendBody": True,
         "specifyBody": "json",
         "jsonBody": '={\n  "number": "{{ $json.lead_phone }}",\n  "text": "Hola {{ $json.lead_name || "" }}! Gracias por contactarnos. En este momento nuestro equipo no esta disponible, pero un asesor te atendera a primera hora manana. Hay algo especifico que te interese saber sobre la propiedad?"\n}',
