@@ -24,7 +24,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH expired AS (\n  UPDATE auctions\n  SET status = 'expired'\n  WHERE status = 'open' AND expires_at <= NOW()\n  RETURNING auction_id, conversation_id, property_id, short_code\n)\nSELECT e.*, conv.lead_phone, conv.lead_name\nFROM expired e\nJOIN conversations conv ON conv.conversation_id = e.conversation_id;",
+        "query": "WITH expired AS (\n  UPDATE auctions\n  SET status = 'expired'\n  WHERE status = 'open' AND expires_at <= NOW()\n  RETURNING auction_id, conversation_id, property_id, short_code\n),\nescalated AS (\n  UPDATE conversations\n  SET mode = 'human',\n      assigned_agent_id = 'agent_manager'\n  WHERE conversation_id IN (SELECT conversation_id FROM expired)\n    AND mode = 'pending_assignment'\n  RETURNING conversation_id\n)\nSELECT e.*, conv.lead_phone, conv.lead_name\nFROM expired e\nJOIN conversations conv ON conv.conversation_id = e.conversation_id;",
         "options": {}
       },
       "id": "4907bdf7-6514-4c5e-b147-3cecbfee7398",

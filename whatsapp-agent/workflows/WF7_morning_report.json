@@ -59,7 +59,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT\n  COUNT(*) AS total_night_conversations,\n  COUNT(*) FILTER (WHERE source = 'inmuebles24') AS from_inmuebles24,\n  COUNT(*) FILTER (WHERE source = 'easybroker') AS from_easybroker,\n  COUNT(*) FILTER (WHERE source = 'whatsapp_direct') AS from_whatsapp_direct\nFROM conversations\nWHERE arrived_during = 'night'\n  AND created_at >= (NOW() AT TIME ZONE 'America/Mexico_City')::date;",
+        "query": "SELECT\n  COUNT(*) AS total_night_conversations,\n  COUNT(*) FILTER (WHERE source = 'inmuebles24') AS from_inmuebles24,\n  COUNT(*) FILTER (WHERE source = 'easybroker') AS from_easybroker,\n  COUNT(*) FILTER (WHERE source = 'whatsapp_direct') AS from_whatsapp_direct\nFROM conversations\nWHERE arrived_during = 'night'\n  AND created_at >= (NOW() AT TIME ZONE 'America/Mexico_City')::date - INTERVAL '3 hours';",
         "options": {}
       },
       "id": "wf7-0004-4000-8000-000000000004",
@@ -238,7 +238,7 @@
         "operation": "executeQuery",
         "query": "UPDATE night_queue\nSET processed = TRUE,\n    processed_at = NOW()\nWHERE id = $1\nRETURNING id, conversation_id, processed_at;",
         "options": {
-          "queryReplacement": "={{ $('Process One by One').first().json.queue_id }}"
+          "queryReplacement": "={{ $json.queue_id }}"
         }
       },
       "id": "wf7-0014-4000-8000-000000000014",
