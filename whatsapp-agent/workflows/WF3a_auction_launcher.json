@@ -18,7 +18,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH new_auction AS (\n  INSERT INTO auctions (conversation_id, property_id, short_code, expires_at)\n  VALUES (\n    $1::uuid,\n    $2,\n    UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 4)),\n    NOW() + INTERVAL '5 minutes'\n  )\n  RETURNING auction_id, short_code, expires_at\n)\nSELECT * FROM new_auction;",
+        "query": "WITH new_auction AS (\n  INSERT INTO auctions (conversation_id, property_id, short_code, expires_at)\n  VALUES (\n    $1::uuid,\n    $2,\n    generate_tomo_code(),\n    NOW() + INTERVAL '5 minutes'\n  )\n  RETURNING auction_id, short_code, expires_at\n)\nSELECT * FROM new_auction;",
         "options": {
           "queryReplacement": "={{ $json.conversation_id }},={{ $json.property_id }}"
         }
@@ -145,7 +145,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst notifiedAgents = items.filter(i => i.json.agent_id).map(i => i.json.agent_id);\n\nreturn [{\n  json: {\n    auction_id: items[0]?.json?.auction_id,\n    conversation_id: items[0]?.json?.conversation_id,\n    short_code: items[0]?.json?.short_code,\n    notified_agents: notifiedAgents,\n    notified_count: notifiedAgents.length\n  }\n}];"
+        "jsCode": "const items = $input.all();\nconst notifiedAgents = [];\nconst failedAgents = [];\n\nfor (const item of items) {\n  const d = item.json;\n  if (d.agent_id) {\n    if (d.error || d.statusCode >= 400) {\n      failedAgents.push(d.agent_id);\n    } else {\n      notifiedAgents.push(d.agent_id);\n    }\n  }\n}\n\nreturn [{\n  json: {\n    auction_id: items[0]?.json?.auction_id,\n    conversation_id: items[0]?.json?.conversation_id,\n    short_code: items[0]?.json?.short_code,\n    notified_agents: notifiedAgents,\n    notified_count: notifiedAgents.length,\n    failed_agents: failedAgents,\n    failed_count: failedAgents.length\n  }\n}];"
       },
       "id": "b31134fd-1e90-4253-82aa-5cf115fb7c95",
       "name": "Aggregate Results",

@@ -66,7 +66,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Find a matching property from the listings table.\nSELECT id, listing_hash, title, price, price_numeric, currency,\n       location, property_type, operation_type, bedrooms, bathrooms,\n       area_m2, description, url, image_url\nFROM listings\nWHERE is_active = true\n  AND (\n    listing_hash = $1\n    OR title ILIKE '%' || $2 || '%'\n    OR location ILIKE '%' || $2 || '%'\n    OR url ILIKE '%' || $1 || '%'\n  )\nORDER BY last_seen_at DESC\nLIMIT 1;",
+        "query": "-- Find a matching property from the listings table.\n-- M5 fix: require search_terms >= 5 chars to prevent overly broad ILIKE matches.\nSELECT id, listing_hash, title, price, price_numeric, currency,\n       location, property_type, operation_type, bedrooms, bathrooms,\n       area_m2, description, url, image_url\nFROM listings\nWHERE is_active = true\n  AND (\n    listing_hash = $1\n    OR (length($2) >= 5 AND title ILIKE '%' || $2 || '%')\n    OR (length($2) >= 5 AND location ILIKE '%' || $2 || '%')\n    OR url ILIKE '%' || $1 || '%'\n  )\nORDER BY last_seen_at DESC\nLIMIT 1;",
         "options": {
           "queryReplacement": "={{ $('Extract Property Context').first().json.extracted_property_id || '' }},={{ $('Extract Property Context').first().json.search_terms || '' }}"
         }
