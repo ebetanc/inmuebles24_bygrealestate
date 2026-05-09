@@ -106,7 +106,7 @@ export async function getNightQueue(): Promise<NightQueueItem[]> {
     .from("night_queue")
     .select("*")
     .eq("processed", false)
-    .order("created_at", { ascending: false });
+    .order("queued_at", { ascending: false });
   return (data || []) as NightQueueItem[];
 }
 

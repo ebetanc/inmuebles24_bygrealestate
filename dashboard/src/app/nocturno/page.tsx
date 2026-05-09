@@ -6,6 +6,7 @@ const tempGradients: Record<string, string> = {
   high: "linear-gradient(180deg, #EF4444, #F97316)",
   medium: "linear-gradient(180deg, #F59E0B, #FBBF24)",
   low: "linear-gradient(180deg, #3B82F6, #93C5FD)",
+  unknown: "linear-gradient(180deg, #94A3B8, #CBD5E1)",
 };
 
 export default async function NocturnoPage() {
@@ -41,8 +42,8 @@ export default async function NocturnoPage() {
       {/* Night queue cards */}
       <div className="flex flex-col gap-3">
         {queue.map((item) => {
-          const gradient = tempGradients[item.temperature || "cold"] || tempGradients.cold;
-          const time = new Date(item.created_at).toLocaleTimeString("es-MX", {
+          const gradient = tempGradients[item.temperature || "unknown"];
+          const time = new Date(item.queued_at).toLocaleTimeString("es-MX", {
             hour: "2-digit",
             minute: "2-digit",
           });

@@ -43,8 +43,9 @@ export interface NightQueueItem {
   lead_email: string | null;
   property_id: string | null;
   temperature: string | null;
+  bot_summary: string | null;
   processed: boolean;
-  created_at: string;
+  queued_at: string;
 }
 
 export interface GuardShift {

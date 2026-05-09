@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AutoRefresh } from "./auto-refresh";
+import { logout } from "@/app/login/actions";
 
 const pageTitles: Record<string, string> = {
   "/": "Vista General",
@@ -45,8 +46,16 @@ export function Topbar() {
       <div className="flex items-center gap-4">
         <AutoRefresh />
         <span className="text-[13px] font-medium text-[#64748B] tabular-nums">{clock}</span>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] text-sm font-bold text-white cursor-pointer">
-          EB
+        <form action={logout}>
+          <button
+            type="submit"
+            className="flex h-9 items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 text-xs font-medium text-[#64748B] transition hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+          >
+            Salir
+          </button>
+        </form>
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] text-sm font-bold text-white">
+          BYG
         </div>
       </div>
     </header>
