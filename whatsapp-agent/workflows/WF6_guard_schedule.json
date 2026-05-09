@@ -1,5 +1,5 @@
 {
-  "name": "WF6 - Guard Schedule Sync (Google Sheets)",
+  "name": "WF6 - Guard Schedule Sync (Supabase)",
   "nodes": [
     {
       "parameters": {
@@ -7,256 +7,60 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "0 5,19 * * *"
+              "expression": "0 2,13,19 * * *"
             }
           ]
         }
       },
       "id": "a1b2c3d4-0001-4000-8000-000000000001",
-      "name": "Schedule (Midnight + 2PM CDMX)",
+      "name": "Schedule (Shift Changes)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [200, 300],
-      "notes": "Runs at midnight and 2 PM CDMX (05:00 and 19:00 UTC).\nAdjust cron if CDMX switches between CST/CDT:\n- CDT (Mar-Nov): UTC-5 → 0 5,19 * * *\n- CST (Nov-Mar): UTC-6 → 0 6,20 * * *"
+      "notes": "Runs at each shift transition in CDMX (CDT = UTC-5):\n- 8:00 AM CDMX = 13:00 UTC → morning shift starts\n- 2:00 PM CDMX = 19:00 UTC → afternoon shift starts\n- 9:00 PM CDMX = 02:00 UTC → night shift starts (all agents off)\n\nAdjust for CST (Nov-Mar, UTC-6): 0 3,14,20 * * *\n\nSchedule data is managed via the dashboard calendar editor\nand stored directly in agent_schedule table."
     },
     {
       "parameters": {
-        "operation": "read",
-        "documentId": {
-          "mode": "url",
-          "value": "={{ $env.GUARD_SCHEDULE_SHEET_URL }}"
-        },
-        "sheetName": {
-          "mode": "name",
-          "value": "={{ $env.GUARD_SCHEDULE_SHEET_NAME || 'Guardias' }}"
-        },
+        "operation": "executeQuery",
+        "query": "-- Sync agents.on_shift flag from agent_schedule table.\n-- The dashboard calendar editor writes to agent_schedule;\n-- this workflow just activates/deactivates the on_shift flag.\n\n-- Step 1: Reset all non-manager agents\nUPDATE agents\nSET on_shift = false, shift_slot = NULL\nWHERE agent_id != 'agent_manager';\n\n-- Step 2: Activate agents scheduled for the current shift\nUPDATE agents a\nSET on_shift = true,\n    shift_slot = current_shift()\nFROM agent_schedule s\nWHERE s.agent_id = a.agent_id\n  AND s.schedule_date = (NOW() AT TIME ZONE 'America/Mexico_City')::date\n  AND s.shift = current_shift()\n  AND current_shift() != 'night'\nRETURNING a.agent_id, a.name, a.shift_slot;",
         "options": {}
       },
       "id": "a1b2c3d4-0002-4000-8000-000000000002",
-      "name": "Read Guard Schedule",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
-      "position": [440, 300],
+      "name": "Sync On-Shift Agents",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
       "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_GOOGLE_SHEETS_CREDENTIAL_ID",
-          "name": "Google Sheets"
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
         }
-      },
-      "notes": "Sheet format (row per day):\n| Fecha | Manana 1 | Manana 2 | Tarde 1 | Tarde 2 |\n|------------|----------|----------|---------|---------||\n| 2026-05-08 | Lupita   | Paty     | Yol     | Gina    |\n\nFecha can be YYYY-MM-DD or DD/MM/YYYY. Agent names must match exactly."
+      }
     },
     {
       "parameters": {
-        "jsCode": "// Parse Google Sheet rows and find today's schedule.\n// Map agent names to agent_ids.\n\nconst NAME_TO_ID = {\n  'Lupita': 'agent_lupita',\n  'Paty':   'agent_paty',\n  'Yol':    'agent_yol',\n  'Gina':   'agent_gina',\n  'Carol':  'agent_carol',\n  'Moni':   'agent_moni'\n};\n\n// Get today's date in CDMX timezone\nconst now = new Date();\nconst cdmx = new Date(now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));\nconst todayStr = cdmx.getFullYear() + '-' +\n  String(cdmx.getMonth() + 1).padStart(2, '0') + '-' +\n  String(cdmx.getDate()).padStart(2, '0');\n\nconst rows = $input.all().map(i => i.json);\nconst scheduleEntries = [];\n\nfor (const row of rows) {\n  // Try to parse the date from the 'Fecha' column\n  let fecha = row['Fecha'] || row['fecha'] || '';\n  if (!fecha) continue;\n\n  // Normalize date format\n  fecha = String(fecha).trim();\n  let rowDate = '';\n\n  // Try YYYY-MM-DD\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(fecha)) {\n    rowDate = fecha;\n  }\n  // Try DD/MM/YYYY (Mexico format)\n  else if (/^\\d{1,2}\\/\\d{1,2}\\/\\d{4}$/.test(fecha)) {\n    const [d, m, y] = fecha.split('/');\n    rowDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;\n  }\n  // Try Google Sheets serial number\n  else if (/^\\d{5}$/.test(fecha)) {\n    const epoch = new Date(1899, 11, 30);\n    epoch.setDate(epoch.getDate() + parseInt(fecha));\n    rowDate = epoch.toISOString().split('T')[0];\n  }\n\n  if (rowDate !== todayStr) continue;\n\n  // Extract agents for each shift\n  const morning1 = row['Manana 1'] || row['Mañana 1'] || row['manana_1'] || '';\n  const morning2 = row['Manana 2'] || row['Mañana 2'] || row['manana_2'] || '';\n  const afternoon1 = row['Tarde 1'] || row['tarde_1'] || '';\n  const afternoon2 = row['Tarde 2'] || row['tarde_2'] || '';\n\n  for (const name of [morning1, morning2]) {\n    const trimmed = name.trim();\n    if (trimmed && NAME_TO_ID[trimmed]) {\n      scheduleEntries.push({\n        schedule_date: todayStr,\n        shift: 'morning',\n        agent_id: NAME_TO_ID[trimmed],\n        agent_name: trimmed\n      });\n    }\n  }\n\n  for (const name of [afternoon1, afternoon2]) {\n    const trimmed = name.trim();\n    if (trimmed && NAME_TO_ID[trimmed]) {\n      scheduleEntries.push({\n        schedule_date: todayStr,\n        shift: 'afternoon',\n        agent_id: NAME_TO_ID[trimmed],\n        agent_name: trimmed\n      });\n    }\n  }\n\n  break; // Found today's row\n}\n\nif (scheduleEntries.length === 0) {\n  return [{ json: { _action: 'no_schedule', date: todayStr, message: 'No schedule found for today' } }];\n}\n\nreturn [{ json: { _action: 'sync', date: todayStr, entries: scheduleEntries, count: scheduleEntries.length } }];"
+        "jsCode": "const activated = $input.all().map(i => i.json);\nconst now = new Date();\nconst cdmx = new Date(now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));\nconst todayStr = cdmx.getFullYear() + '-' +\n  String(cdmx.getMonth() + 1).padStart(2, '0') + '-' +\n  String(cdmx.getDate()).padStart(2, '0');\nconst hour = cdmx.getHours();\nconst shift = hour >= 8 && hour < 14 ? 'morning' : hour >= 14 && hour < 21 ? 'afternoon' : 'night';\n\nreturn [{\n  json: {\n    date: todayStr,\n    shift,\n    activated_agents: activated.map(a => `${a.name} (${a.shift_slot})`),\n    activated_count: activated.length,\n    status: shift === 'night'\n      ? 'night_mode_all_off'\n      : activated.length > 0\n        ? 'agents_on_shift'\n        : 'no_schedule_found'\n  }\n}];"
       },
       "id": "a1b2c3d4-0003-4000-8000-000000000003",
-      "name": "Parse Today Schedule",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [680, 300]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "typeValidation": "strict",
-            "leftValue": ""
-          },
-          "conditions": [
-            {
-              "id": "cond-has-schedule",
-              "leftValue": "={{ $json._action }}",
-              "rightValue": "sync",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        }
-      },
-      "id": "a1b2c3d4-0004-4000-8000-000000000004",
-      "name": "Has Schedule?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [900, 300]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Clear today's schedule and re-insert from Google Sheets.\n-- This ensures deletions in the sheet are reflected.\nDELETE FROM agent_schedule WHERE schedule_date = $1::date;\n\n-- Reset all agents' on_shift to false first\nUPDATE agents SET on_shift = false, shift_slot = NULL WHERE agent_id != 'agent_manager';",
-        "options": {
-          "queryReplacement": "={{ $json.date }}"
-        }
-      },
-      "id": "a1b2c3d4-0005-4000-8000-000000000005",
-      "name": "Clear Today Schedule",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1140, 200],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Split schedule entries into individual items for batch insert.\nconst data = $('Parse Today Schedule').first().json;\nreturn data.entries.map(entry => ({ json: entry }));"
-      },
-      "id": "a1b2c3d4-0006-4000-8000-000000000006",
-      "name": "Split Entries",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1360, 200]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO agent_schedule (schedule_date, shift, agent_id)\nVALUES ($1::date, $2, $3)\nON CONFLICT (schedule_date, shift, agent_id) DO NOTHING;",
-        "options": {
-          "queryReplacement": "={{ $json.schedule_date }},={{ $json.shift }},={{ $json.agent_id }}"
-        }
-      },
-      "id": "a1b2c3d4-0007-4000-8000-000000000007",
-      "name": "Insert Schedule Entry",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1580, 200],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Set on_shift = true for agents scheduled in the CURRENT shift.\n-- current_shift() returns 'morning', 'afternoon', or 'night'.\nUPDATE agents a\nSET on_shift = true,\n    shift_slot = s.shift\nFROM agent_schedule s\nWHERE s.agent_id = a.agent_id\n  AND s.schedule_date = (NOW() AT TIME ZONE 'America/Mexico_City')::date\n  AND s.shift = current_shift()\nRETURNING a.agent_id, a.name, a.on_shift, a.shift_slot;",
-        "options": {}
-      },
-      "id": "a1b2c3d4-0008-4000-8000-000000000008",
-      "name": "Activate Current Shift Agents",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1800, 200],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Summarize what happened for logging.\nconst parsed = $('Parse Today Schedule').first().json;\nconst activated = $input.all().map(i => i.json);\n\nreturn [{\n  json: {\n    date: parsed.date,\n    total_scheduled: parsed.count,\n    activated_agents: activated.map(a => `${a.name} (${a.shift_slot})`),\n    activated_count: activated.length,\n    status: activated.length > 0 ? 'agents_on_shift' : 'no_active_shift'\n  }\n}];"
-      },
-      "id": "a1b2c3d4-0009-4000-8000-000000000009",
       "name": "Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2020, 200]
-    },
-    {
-      "parameters": {},
-      "id": "a1b2c3d4-0010-4000-8000-000000000010",
-      "name": "No Schedule Found",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [1140, 420],
-      "notes": "No schedule row found for today in Google Sheet. Agents keep their previous on_shift state."
+      "position": [720, 300]
     }
   ],
   "connections": {
-    "Schedule (Midnight + 2PM CDMX)": {
+    "Schedule (Shift Changes)": {
       "main": [
         [
           {
-            "node": "Read Guard Schedule",
+            "node": "Sync On-Shift Agents",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Read Guard Schedule": {
-      "main": [
-        [
-          {
-            "node": "Parse Today Schedule",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Today Schedule": {
-      "main": [
-        [
-          {
-            "node": "Has Schedule?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Has Schedule?": {
-      "main": [
-        [
-          {
-            "node": "Clear Today Schedule",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "No Schedule Found",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Clear Today Schedule": {
-      "main": [
-        [
-          {
-            "node": "Split Entries",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Split Entries": {
-      "main": [
-        [
-          {
-            "node": "Insert Schedule Entry",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Insert Schedule Entry": {
-      "main": [
-        [
-          {
-            "node": "Activate Current Shift Agents",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Activate Current Shift Agents": {
+    "Sync On-Shift Agents": {
       "main": [
         [
           {

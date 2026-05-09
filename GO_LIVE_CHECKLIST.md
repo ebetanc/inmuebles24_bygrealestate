@@ -15,7 +15,7 @@ Los problemas criticos son:
 1. **Telefonos de agentes son placeholder** (5215500000001-6) — no hay numeros reales
 2. **WhatsApp no conectado** — falta escanear QR code
 3. **Scraper no conectado a n8n** — webhook URL no configurado en produccion
-4. **Google Sheet de guardias no existe** — falta crear y compartir
+4. **Calendario de guardias vacio** — llenar desde el dashboard /calendario
 5. **Base de datos tiene data de prueba** — necesita limpieza antes de go-live
 6. **Sin autenticacion en el dashboard** — cualquiera con la URL ve los datos
 7. **Sin politicas RLS para escritura** — n8n usa service_role (OK, pero documentar)
@@ -33,9 +33,8 @@ Los problemas criticos son:
 | 3 | **Emails de EasyBroker de cada agente** | Para vincular contactos asignados | [ ] Pendiente |
 | 4 | **API key de EasyBroker** | Con permisos de lectura Y escritura de contactos | [ ] Verificar si la actual tiene permisos de escritura |
 | 5 | **Confirmacion de horarios** | 8AM-2PM turno 1, 2PM-9PM turno 2, 9PM-8AM noche | [ ] Pendiente |
-| 6 | **Calendario de guardias del primer mes** | Quien trabaja que dia y turno | [ ] Pendiente |
+| 6 | **Calendario de guardias del primer mes** | Se llena desde el dashboard en /calendario | [ ] Pendiente |
 | 7 | **Numero de WhatsApp para el bot** | El numero que publicaran para que leads escriban | [ ] Pendiente (es el mismo de Evolution?) |
-| 8 | **Acceso a Google Sheets** | Cuenta de Google del manager para compartir la hoja | [ ] Pendiente |
 
 ### 0.2 Accesos tecnicos requeridos
 
@@ -120,35 +119,29 @@ Indices esperados:
 
 ---
 
-## ETAPA 2: GOOGLE SHEETS — CALENDARIO DE GUARDIAS (1 hora)
+## ETAPA 2: CALENDARIO DE GUARDIAS (30 min)
 
-### 2.1 Crear la hoja de calculo
+> **Google Sheets eliminado** — el calendario se gestiona directamente desde el dashboard
+> en `/calendario`. Los datos se guardan en la tabla `agent_schedule` de Supabase.
 
-Formato esperado por WF6:
+### 2.1 Llenar el calendario desde el dashboard
 
-| Fecha | Turno | Agente 1 | Agente 2 |
-|-------|-------|----------|----------|
-| 2026-05-09 | morning | Lupita | Paty |
-| 2026-05-09 | afternoon | Yol | Gina |
-| 2026-05-10 | morning | Carol | Moni |
-| ... | ... | ... | ... |
+- [ ] Ir a `https://[DASHBOARD_URL]/calendario`
+- [ ] Seleccionar el mes actual
+- [ ] Asignar 2 agentes por turno por dia (Manana + Tarde)
+- [ ] Usar "Auto-rotacion" como base y ajustar manualmente
+- [ ] Click "Guardar mes"
 
-- [ ] Crear Google Sheet con el formato correcto
-- [ ] Llenar primer mes completo de guardias
-- [ ] Compartir con la cuenta de servicio de n8n (o hacer publica con link)
-- [ ] Anotar el Sheet ID y nombre de la pestana
+### 2.2 Verificar datos en Supabase
 
-### 2.2 Configurar en n8n
-
-- [ ] Establecer variable: `GUARD_SCHEDULE_SHEET_URL=https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit`
-- [ ] Establecer variable: `GUARD_SCHEDULE_SHEET_NAME=Guardias`
-- [ ] Conectar credenciales de Google en n8n (OAuth2 o Service Account)
-
-### 2.3 Test de sincronizacion
-
-- [ ] Ejecutar WF6 manualmente una vez
 - [ ] Verificar: `SELECT * FROM agent_schedule WHERE schedule_date = CURRENT_DATE;`
 - [ ] Verificar: `SELECT * FROM get_on_shift_agents();` — debe retornar 2 agentes
+
+### 2.3 Test de WF6
+
+- [ ] Ejecutar WF6 manualmente en n8n
+- [ ] Verificar: `SELECT agent_id, name, on_shift, shift_slot FROM agents WHERE on_shift = true;`
+- [ ] Debe mostrar los 2 agentes del turno actual con on_shift=true
 
 ---
 
@@ -184,9 +177,7 @@ WF6_WORKFLOW_ID=
 WF8_WORKFLOW_ID=
 WF10_WORKFLOW_ID=
 
-# Google Sheets
-GUARD_SCHEDULE_SHEET_URL=https://docs.google.com/spreadsheets/d/[ID]/edit
-GUARD_SCHEDULE_SHEET_NAME=Guardias
+# Guard Schedule — managed via dashboard /calendario (no env vars needed)
 ```
 
 - [ ] Todas las variables de entorno configuradas
@@ -204,7 +195,7 @@ Importar desde `whatsapp-agent/workflows/`:
 | 4 | WF3b_claim_handler.json | Handler de claims TOMO | NO — llamado por WF1 |
 | 5 | WF3a_auction_launcher.json | Lanzador de subastas | NO — llamado por WF2/WF10 |
 | 6 | WF2_lead_intake.json | Intake de leads WhatsApp | NO — llamado por WF1 |
-| 7 | WF6_guard_schedule.json | Sync de Google Sheets | SI — Schedule trigger |
+| 7 | WF6_guard_schedule.json | Sync on_shift flag from agent_schedule | SI — Schedule trigger |
 | 8 | WF7_morning_report.json | Reporte matutino 8 AM | SI — Schedule trigger |
 | 9 | WF8_easybroker_polling.json | Polling EasyBroker cada 15 min | SI — Schedule trigger |
 | 10 | WF10_scraper_intake.json | Webhook del scraper | SI — Webhook trigger |
@@ -233,24 +224,19 @@ Conteo de nodos Postgres por workflow (verificar TODOS):
 | WF3c | 2-3 (find expired, update status, escalate) |
 | WF4 | 3 (get context, save message, check handoff) |
 | WF5 | 2-3 (update mode, notify agent) |
-| WF6 | 2 (truncate+insert schedule, update agents) |
+| WF6 | 1 (sync on_shift from agent_schedule) |
 | WF7 | 4-5 (query night_queue, conversations, compose report) |
 | WF8 | 3-4 (check processed, create conversation, launch auction) |
 | WF10 | 4-5 (returning lead check, create conversation, route day/night) |
 
 - [ ] **TOTAL: ~35-40 nodos Postgres** — TODOS deben tener credencial asignada
 
-### 3.4 Verificar credenciales de Google Sheets
-
-- [ ] Credencial OAuth2 o Service Account de Google configurada en n8n
-- [ ] WF6 puede leer la hoja de guardias
-
-### 3.5 Verificar triggers con schedule
+### 3.4 Verificar triggers con schedule
 
 | Workflow | Schedule esperado | Verificar |
 |----------|-------------------|-----------|
 | WF3c | Cada 1 minuto | [ ] |
-| WF6 | Medianoche + 2 PM CDMX | [ ] |
+| WF6 | 8 AM + 2 PM + 9 PM CDMX (shift changes) | [ ] |
 | WF7 | 8:00 AM CDMX + 8:05 AM CDMX | [ ] |
 | WF8 | Cada 15 minutos | [ ] |
 
@@ -516,11 +502,12 @@ curl -X POST "https://www.easybroker.com/api/v1/contact_requests" \
 
 ### 7.10 Test: Guard schedule sync
 
-1. [ ] Ejecutar WF6 manualmente
-2. [ ] Verificar `agent_schedule` tiene datos del dia
-3. [ ] Verificar `get_on_shift_agents()` retorna los correctos
-4. [ ] Cambiar algo en Google Sheet y re-ejecutar
-5. [ ] Verificar que el cambio se refleja en DB
+1. [ ] Verificar que el calendario del mes esta llenado en el dashboard (/calendario)
+2. [ ] Ejecutar WF6 manualmente en n8n
+3. [ ] Verificar `SELECT agent_id, on_shift, shift_slot FROM agents WHERE on_shift = true;`
+4. [ ] Verificar `get_on_shift_agents()` retorna los 2 agentes correctos del turno
+5. [ ] Cambiar una asignacion en el dashboard, guardar, re-ejecutar WF6
+6. [ ] Verificar que el cambio se refleja en agents.on_shift
 
 ---
 
@@ -680,7 +667,7 @@ git log --all -p | grep -i "api_key\|password\|secret" | head -20
 | 4 | n8n VPS se cae | Todo el sistema se detiene | Monitoreo con UptimeRobot | Reinicio automatico via systemd |
 | 5 | Supabase free tier limits | DB deja de aceptar writes | Monitorear uso en Supabase dashboard | Upgrade a plan Pro ($25/mes) |
 | 6 | OpenRouter sin credito | AI bot no responde | Monitorear balance | Fallback a mensaje fijo "te contactaremos manana" |
-| 7 | Google Sheet mal formateada | Guard schedule sync falla | Validacion en WF6 | Fallback a on_shift flag manual en agents |
+| 7 | Calendario no llenado en dashboard | No hay agentes de guardia | Alerta en WF6 summary | Fallback a on_shift flag manual en agents |
 | 8 | Agente no tiene WhatsApp activo | No recibe TOMO | Verificar numeros antes de go-live | Manager recibe como fallback |
 
 ---
@@ -689,7 +676,7 @@ git log --all -p | grep -i "api_key\|password\|secret" | head -20
 
 ```
 Dia 0:  Etapa 0 — Recopilar datos del cliente (BLOQUEANTE)
-Dia 1:  Etapa 1 (DB) + Etapa 2 (Google Sheets) + Etapa 3 (n8n)
+Dia 1:  Etapa 1 (DB) + Etapa 2 (Calendario en dashboard) + Etapa 3 (n8n)
 Dia 2:  Etapa 4 (Evolution/WA) + Etapa 5 (Scraper) + Etapa 6 (EasyBroker)
 Dia 3:  Etapa 7 (Pruebas E2E completas)
 Dia 4:  Etapa 8 (Seguridad) + Etapa 9 (Monitoreo) + Etapa 10 (GO-LIVE)

@@ -186,8 +186,8 @@
       </div>
     </div>
     <div class="field-group" style="margin-top:.75rem">
-      <label class="field-label">Email del manager (para Google Sheets)</label>
-      <div class="field-hint">Se compartira la hoja de guardias con esta cuenta de Google</div>
+      <label class="field-label">Email del manager</label>
+      <div class="field-hint">Para notificaciones y acceso al dashboard</div>
       <input class="field-input" id="manager_email" type="email" placeholder="manager@bygrealestate.com" oninput="checkSection(2)">
     </div>
   </div>
@@ -305,17 +305,17 @@
       <span class="status-badge pending" id="badge7">Pendiente</span>
     </div>
     <div class="section-desc">
-      Defina que 2 agentes trabajan en cada turno cada dia. Use la herramienta de calendario incluida.
+      Defina que 2 agentes trabajan en cada turno cada dia. El calendario se llena directamente desde el dashboard del sistema.
     </div>
-    <div style="text-align:center;margin-top:.5rem">
-      <a href="calendario_guardias.html" target="_blank" class="btn btn-primary" onclick="document.getElementById('guard_done').checked=true; checkSection(7)">
-        Abrir Calendario de Guardias
-      </a>
+    <div class="note-box">
+      <b>Nota:</b> El calendario de guardias se gestiona desde el dashboard en la seccion <b>/calendario</b>.
+      Una vez que el sistema este activo, podra asignar turnos mes a mes desde ahi.
+      Por ahora, solo confirme que esta de acuerdo con el formato de 2 agentes por turno (manana + tarde).
     </div>
     <div style="margin-top:.75rem;text-align:center">
       <label style="cursor:pointer;font-size:.85rem">
         <input type="checkbox" id="guard_done" onchange="checkSection(7)">
-        Ya complete el calendario de guardias
+        Confirmo: 2 agentes por turno (manana y tarde), calendario se llenara desde el dashboard
       </label>
     </div>
   </div>
@@ -558,7 +558,8 @@ function exportSummary() {
   text += `Numero: ${data.bot_whatsapp || '(pendiente)'}\n`;
 
   text += '\n--- CALENDARIO DE GUARDIAS ---\n';
-  text += `Estado: ${data.calendario_guardias}\n`;
+  text += `Formato confirmado: ${data.calendario_guardias}\n`;
+  text += 'Nota: Se gestiona desde el dashboard /calendario\n';
 
   text += '\n--- INMUEBLES24 ---\n';
   text += `Email: ${data.inmuebles24.email || '(pendiente)'}\n`;
