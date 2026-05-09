@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datos para Activacion — BYG Real Estate</title>
+<style>
+  :root {
+    --primary: #1e40af;
+    --primary-light: #3b82f6;
+    --primary-bg: #eff6ff;
+    --success: #10b981;
+    --success-bg: #ecfdf5;
+    --warning: #f59e0b;
+    --warning-bg: #fffbeb;
+    --danger: #ef4444;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--gray-50); color: var(--gray-900); line-height: 1.6;
+  }
+
+  .header {
+    background: linear-gradient(135deg, var(--primary) 0%, #1e3a8a 100%);
+    color: white; padding: 2rem 1.5rem; text-align: center;
+  }
+  .header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: .25rem; }
+  .header p { opacity: .85; font-size: .95rem; }
+
+  .container { max-width: 800px; margin: 0 auto; padding: 1.5rem; }
+
+  .progress-bar {
+    background: var(--gray-200); border-radius: 999px; height: 8px;
+    margin-bottom: 1.5rem; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; background: linear-gradient(90deg, var(--primary), var(--success));
+    border-radius: 999px; transition: width .5s ease;
+  }
+  .progress-text {
+    text-align: center; font-size: .85rem; color: var(--gray-500);
+    margin-bottom: .5rem;
+  }
+
+  .section {
+    background: white; border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 1.5rem; margin-bottom: 1.25rem;
+  }
+  .section-header {
+    display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem;
+    padding-bottom: .75rem; border-bottom: 2px solid var(--gray-100);
+  }
+  .section-num {
+    width: 28px; height: 28px; border-radius: 50%; background: var(--primary);
+    color: white; display: flex; align-items: center; justify-content: center;
+    font-size: .8rem; font-weight: 700; flex-shrink: 0;
+  }
+  .section-num.done { background: var(--success); }
+  .section-title { font-size: 1.1rem; font-weight: 700; }
+  .section-desc { font-size: .85rem; color: var(--gray-500); margin-bottom: 1rem; }
+
+  .field-group { margin-bottom: 1rem; }
+  .field-group:last-child { margin-bottom: 0; }
+  .field-label {
+    display: block; font-weight: 600; font-size: .875rem;
+    margin-bottom: .25rem; color: var(--gray-700);
+  }
+  .field-hint { font-size: .75rem; color: var(--gray-400); margin-bottom: .35rem; }
+  .field-input {
+    width: 100%; padding: .6rem .75rem; border: 1.5px solid var(--gray-300);
+    border-radius: 8px; font-size: .9rem; transition: border-color .15s;
+  }
+  .field-input:focus { outline: none; border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+  .field-input.valid { border-color: var(--success); }
+  .field-input.invalid { border-color: var(--danger); }
+
+  .agent-card {
+    background: var(--gray-50); border: 1px solid var(--gray-200);
+    border-radius: 8px; padding: 1rem; margin-bottom: .75rem;
+  }
+  .agent-card h4 { font-size: .9rem; color: var(--primary); margin-bottom: .5rem; }
+  .agent-fields { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+  @media (max-width: 600px) { .agent-fields { grid-template-columns: 1fr; } }
+
+  .schedule-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem;
+    margin-top: .5rem;
+  }
+  .schedule-option {
+    text-align: center; padding: .75rem .5rem; border: 2px solid var(--gray-200);
+    border-radius: 8px; cursor: pointer; transition: all .15s;
+    background: white;
+  }
+  .schedule-option:hover { border-color: var(--primary-light); }
+  .schedule-option.selected { border-color: var(--primary); background: var(--primary-bg); }
+  .schedule-option .time { font-size: .75rem; color: var(--gray-500); }
+  .schedule-option .label { font-weight: 700; font-size: .9rem; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .6rem 1.25rem; border-radius: 8px; font-size: .9rem;
+    font-weight: 600; border: none; cursor: pointer; transition: all .15s;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-success { background: var(--success); color: white; }
+  .btn-outline { background: white; color: var(--gray-700); border: 1px solid var(--gray-300); }
+
+  .actions { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: center; margin-top: 1.5rem; }
+
+  .toast {
+    position: fixed; bottom: 2rem; right: 2rem; background: var(--gray-900);
+    color: white; padding: .75rem 1.25rem; border-radius: 8px; font-size: .875rem;
+    transform: translateY(100px); opacity: 0; transition: all .3s ease;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  .status-badge {
+    display: inline-block; padding: .15rem .5rem; border-radius: 999px;
+    font-size: .7rem; font-weight: 600;
+  }
+  .status-badge.pending { background: var(--warning-bg); color: var(--warning); }
+  .status-badge.complete { background: var(--success-bg); color: var(--success); }
+
+  .note-box {
+    background: var(--warning-bg); border: 1px solid #fde68a; border-radius: 8px;
+    padding: .75rem 1rem; font-size: .85rem; color: #92400e; margin-top: .75rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Datos para Activacion del Sistema</h1>
+  <p>BYG Real Estate — Complete este formulario para activar su sistema de leads 24/7</p>
+</div>
+
+<div class="container">
+
+  <div class="progress-text" id="progressText">0 de 8 secciones completadas</div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+
+  <!-- Section 1: Agent Phone Numbers -->
+  <div class="section" id="sec1">
+    <div class="section-header">
+      <div class="section-num" id="num1">1</div>
+      <div class="section-title">Numeros de WhatsApp de Agentes</div>
+      <span class="status-badge pending" id="badge1">Pendiente</span>
+    </div>
+    <div class="section-desc">
+      Numero de celular de cada agente con codigo de pais. Ejemplo: <b>5215598765432</b> (sin +, sin espacios, sin guiones).
+      Este es el numero donde recibiran las notificaciones TOMO.
+    </div>
+
+    <div id="agentPhones"></div>
+  </div>
+
+  <!-- Section 2: Manager -->
+  <div class="section" id="sec2">
+    <div class="section-header">
+      <div class="section-num" id="num2">2</div>
+      <div class="section-title">Datos del Manager</div>
+      <span class="status-badge pending" id="badge2">Pendiente</span>
+    </div>
+    <div class="section-desc">El manager recibe alertas de subastas expiradas, reportes matutinos, y puede ver el dashboard.</div>
+    <div class="agent-fields">
+      <div class="field-group">
+        <label class="field-label">Nombre del manager</label>
+        <input class="field-input" id="manager_name" placeholder="Ej: Andrea Garcia" oninput="checkSection(2)">
+      </div>
+      <div class="field-group">
+        <label class="field-label">WhatsApp del manager</label>
+        <div class="field-hint">Digitos con codigo de pais, sin +</div>
+        <input class="field-input" id="manager_phone" placeholder="5215512345678" oninput="validatePhone(this); checkSection(2)" pattern="[0-9]{10,15}">
+      </div>
+    </div>
+    <div class="field-group" style="margin-top:.75rem">
+      <label class="field-label">Email del manager (para Google Sheets)</label>
+      <div class="field-hint">Se compartira la hoja de guardias con esta cuenta de Google</div>
+      <input class="field-input" id="manager_email" type="email" placeholder="manager@bygrealestate.com" oninput="checkSection(2)">
+    </div>
+  </div>
+
+  <!-- Section 3: EasyBroker Emails -->
+  <div class="section" id="sec3">
+    <div class="section-header">
+      <div class="section-num" id="num3">3</div>
+      <div class="section-title">Emails de EasyBroker por Agente</div>
+      <span class="status-badge pending" id="badge3">Pendiente</span>
+    </div>
+    <div class="section-desc">Email con el que cada agente esta registrada en EasyBroker. Se usa para vincular contactos asignados.</div>
+    <div id="agentEmails"></div>
+  </div>
+
+  <!-- Section 4: EasyBroker API -->
+  <div class="section" id="sec4">
+    <div class="section-header">
+      <div class="section-num" id="num4">4</div>
+      <div class="section-title">API Key de EasyBroker</div>
+      <span class="status-badge pending" id="badge4">Pendiente</span>
+    </div>
+    <div class="section-desc">
+      Se encuentra en EasyBroker > Configuracion > Integraciones > API.
+      Necesita permisos de <b>lectura</b> (para ver contactos) y preferiblemente <b>escritura</b> (para asignar).
+    </div>
+    <div class="field-group">
+      <label class="field-label">API Key</label>
+      <input class="field-input" id="eb_apikey" placeholder="eb_XXXXXXXXXXXX" oninput="checkSection(4)">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Tiene permisos de escritura?</label>
+      <div style="display:flex;gap:.5rem;margin-top:.25rem">
+        <label style="cursor:pointer"><input type="radio" name="eb_write" value="yes" onclick="checkSection(4)"> Si</label>
+        <label style="cursor:pointer"><input type="radio" name="eb_write" value="no" onclick="checkSection(4)"> No</label>
+        <label style="cursor:pointer"><input type="radio" name="eb_write" value="unknown" onclick="checkSection(4)"> No estoy seguro</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 5: Schedule -->
+  <div class="section" id="sec5">
+    <div class="section-header">
+      <div class="section-num" id="num5">5</div>
+      <div class="section-title">Confirmacion de Horarios</div>
+      <span class="status-badge pending" id="badge5">Pendiente</span>
+    </div>
+    <div class="section-desc">Confirme los horarios de cada turno. El sistema cambia automaticamente entre modo dia y noche.</div>
+
+    <div class="schedule-grid">
+      <div class="schedule-option selected" id="sched_default" onclick="selectSchedule('default')">
+        <div class="label">Propuesto</div>
+        <div class="time">Manana: 8-14h</div>
+        <div class="time">Tarde: 14-21h</div>
+        <div class="time">Noche: 21-8h (bot)</div>
+      </div>
+      <div class="schedule-option" id="sched_alt1" onclick="selectSchedule('alt1')">
+        <div class="label">Alternativa A</div>
+        <div class="time">Manana: 9-15h</div>
+        <div class="time">Tarde: 15-21h</div>
+        <div class="time">Noche: 21-9h (bot)</div>
+      </div>
+      <div class="schedule-option" id="sched_custom" onclick="selectSchedule('custom')">
+        <div class="label">Personalizado</div>
+        <div class="time">Usted define</div>
+        <div class="time">los horarios</div>
+      </div>
+    </div>
+
+    <div id="customSchedule" style="display:none;margin-top:.75rem">
+      <div class="agent-fields">
+        <div class="field-group">
+          <label class="field-label">Turno manana inicia</label>
+          <input class="field-input" id="custom_m_start" type="time" value="08:00">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Turno manana termina / Tarde inicia</label>
+          <input class="field-input" id="custom_m_end" type="time" value="14:00">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Turno tarde termina (inicia noche/bot)</label>
+          <input class="field-input" id="custom_t_end" type="time" value="21:00">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 6: Bot WhatsApp number -->
+  <div class="section" id="sec6">
+    <div class="section-header">
+      <div class="section-num" id="num6">6</div>
+      <div class="section-title">Numero de WhatsApp para el Bot</div>
+      <span class="status-badge pending" id="badge6">Pendiente</span>
+    </div>
+    <div class="section-desc">
+      Este es el numero que se publicara en anuncios, sitio web, etc. Los leads enviaran mensajes a este numero
+      y el sistema los atendera automaticamente. <b>Debe ser un numero dedicado</b> (no personal).
+    </div>
+    <div class="field-group">
+      <label class="field-label">Numero del bot</label>
+      <div class="field-hint">Digitos con codigo de pais, sin +</div>
+      <input class="field-input" id="bot_phone" placeholder="5215500001234" oninput="validatePhone(this); checkSection(6)" pattern="[0-9]{10,15}">
+    </div>
+    <div class="note-box">
+      <b>Importante:</b> Este telefono NO debe tener WhatsApp Business instalado previamente.
+      Se conectara via QR code al sistema. Si ya tiene WhatsApp Business, desinstalelo primero.
+    </div>
+  </div>
+
+  <!-- Section 7: Guard Calendar -->
+  <div class="section" id="sec7">
+    <div class="section-header">
+      <div class="section-num" id="num7">7</div>
+      <div class="section-title">Calendario de Guardias del Primer Mes</div>
+      <span class="status-badge pending" id="badge7">Pendiente</span>
+    </div>
+    <div class="section-desc">
+      Defina que 2 agentes trabajan en cada turno cada dia. Use la herramienta de calendario incluida.
+    </div>
+    <div style="text-align:center;margin-top:.5rem">
+      <a href="calendario_guardias.html" target="_blank" class="btn btn-primary" onclick="document.getElementById('guard_done').checked=true; checkSection(7)">
+        Abrir Calendario de Guardias
+      </a>
+    </div>
+    <div style="margin-top:.75rem;text-align:center">
+      <label style="cursor:pointer;font-size:.85rem">
+        <input type="checkbox" id="guard_done" onchange="checkSection(7)">
+        Ya complete el calendario de guardias
+      </label>
+    </div>
+  </div>
+
+  <!-- Section 8: Inmuebles24 -->
+  <div class="section" id="sec8">
+    <div class="section-header">
+      <div class="section-num" id="num8">8</div>
+      <div class="section-title">Credenciales de Inmuebles24 (Scraper)</div>
+      <span class="status-badge pending" id="badge8">Pendiente</span>
+    </div>
+    <div class="section-desc">
+      El sistema revisa automaticamente su bandeja de Inmuebles24 cada 2 horas para capturar leads nuevos.
+      Necesitamos su login.
+    </div>
+    <div class="agent-fields">
+      <div class="field-group">
+        <label class="field-label">Email de Inmuebles24</label>
+        <input class="field-input" id="i24_email" type="email" placeholder="su@email.com" oninput="checkSection(8)">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Password de Inmuebles24</label>
+        <input class="field-input" id="i24_password" type="password" placeholder="********" oninput="checkSection(8)">
+      </div>
+    </div>
+    <div class="note-box">
+      Estas credenciales se guardan de forma segura en el servidor del scraper y nunca se comparten.
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="btn btn-success" onclick="exportSummary()">Generar Resumen</button>
+    <button class="btn btn-primary" onclick="copyAll()">Copiar Todo</button>
+    <button class="btn btn-outline" onclick="saveDraft()">Guardar Borrador</button>
+    <button class="btn btn-outline" onclick="loadDraft()">Cargar Borrador</button>
+  </div>
+
+  <!-- Summary output -->
+  <div id="summaryOutput" style="display:none;margin-top:1.5rem">
+    <div class="section" style="background:var(--gray-900);color:white">
+      <h3 style="margin-bottom:.5rem">Resumen de Datos</h3>
+      <pre id="summaryText" style="white-space:pre-wrap;font-size:.8rem;line-height:1.6;overflow-x:auto"></pre>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const AGENTS = ['Lupita', 'Paty', 'Yol', 'Gina', 'Carol', 'Moni'];
+
+// Build agent phone fields
+const phonesDiv = document.getElementById('agentPhones');
+AGENTS.forEach(name => {
+  phonesDiv.innerHTML += `
+    <div class="agent-card">
+      <h4>${name}</h4>
+      <div class="agent-fields">
+        <div class="field-group">
+          <label class="field-label">Nombre completo</label>
+          <input class="field-input" id="agent_${name}_name" placeholder="Nombre completo" oninput="checkSection(1)">
+        </div>
+        <div class="field-group">
+          <label class="field-label">WhatsApp</label>
+          <div class="field-hint">Digitos con codigo de pais, sin +</div>
+          <input class="field-input" id="agent_${name}_phone" placeholder="5215598765432" oninput="validatePhone(this); checkSection(1)" pattern="[0-9]{10,15}">
+        </div>
+      </div>
+    </div>`;
+});
+
+// Build agent email fields
+const emailsDiv = document.getElementById('agentEmails');
+AGENTS.forEach(name => {
+  emailsDiv.innerHTML += `
+    <div class="field-group">
+      <label class="field-label">${name}</label>
+      <input class="field-input" id="agent_${name}_email" type="email" placeholder="${name.toLowerCase()}@bygrealestate.com" oninput="checkSection(3)">
+    </div>`;
+});
+
+function validatePhone(input) {
+  const val = input.value.replace(/\D/g, '');
+  input.value = val;
+  if (val.length >= 10 && val.length <= 15) {
+    input.classList.add('valid');
+    input.classList.remove('invalid');
+  } else if (val.length > 0) {
+    input.classList.add('invalid');
+    input.classList.remove('valid');
+  } else {
+    input.classList.remove('valid', 'invalid');
+  }
+}
+
+function selectSchedule(type) {
+  document.querySelectorAll('.schedule-option').forEach(o => o.classList.remove('selected'));
+  document.getElementById(`sched_${type}`).classList.add('selected');
+  document.getElementById('customSchedule').style.display = type === 'custom' ? 'block' : 'none';
+  checkSection(5);
+}
+
+function checkSection(num) {
+  let complete = false;
+  switch(num) {
+    case 1:
+      complete = AGENTS.every(name => {
+        const phone = document.getElementById(`agent_${name}_phone`).value;
+        return phone.length >= 10;
+      });
+      break;
+    case 2:
+      complete = document.getElementById('manager_name').value.length > 0 &&
+                 document.getElementById('manager_phone').value.length >= 10 &&
+                 document.getElementById('manager_email').value.includes('@');
+      break;
+    case 3:
+      complete = AGENTS.every(name => {
+        const email = document.getElementById(`agent_${name}_email`).value;
+        return email.includes('@');
+      });
+      break;
+    case 4:
+      complete = document.getElementById('eb_apikey').value.length > 3 &&
+                 document.querySelector('input[name="eb_write"]:checked');
+      break;
+    case 5:
+      complete = document.querySelector('.schedule-option.selected') !== null;
+      break;
+    case 6:
+      complete = document.getElementById('bot_phone').value.length >= 10;
+      break;
+    case 7:
+      complete = document.getElementById('guard_done').checked;
+      break;
+    case 8:
+      complete = document.getElementById('i24_email').value.includes('@') &&
+                 document.getElementById('i24_password').value.length > 0;
+      break;
+  }
+
+  const badge = document.getElementById(`badge${num}`);
+  const numEl = document.getElementById(`num${num}`);
+  if (complete) {
+    badge.textContent = 'Completo';
+    badge.className = 'status-badge complete';
+    numEl.classList.add('done');
+  } else {
+    badge.textContent = 'Pendiente';
+    badge.className = 'status-badge pending';
+    numEl.classList.remove('done');
+  }
+  updateProgress();
+}
+
+function updateProgress() {
+  const total = 8;
+  const done = document.querySelectorAll('.section-num.done').length;
+  document.getElementById('progressFill').style.width = `${(done/total)*100}%`;
+  document.getElementById('progressText').textContent = `${done} de ${total} secciones completadas`;
+}
+
+function getAllData() {
+  const data = {
+    agentes: [],
+    manager: {
+      nombre: document.getElementById('manager_name').value,
+      whatsapp: document.getElementById('manager_phone').value,
+      email: document.getElementById('manager_email').value
+    },
+    easybroker: {
+      api_key: document.getElementById('eb_apikey').value,
+      permisos_escritura: (document.querySelector('input[name="eb_write"]:checked') || {}).value || ''
+    },
+    horarios: {
+      tipo: document.querySelector('.schedule-option.selected')?.id?.replace('sched_','') || 'default'
+    },
+    bot_whatsapp: document.getElementById('bot_phone').value,
+    calendario_guardias: document.getElementById('guard_done').checked ? 'Completado' : 'Pendiente',
+    inmuebles24: {
+      email: document.getElementById('i24_email').value,
+      password: document.getElementById('i24_password').value ? '(proporcionado)' : '(pendiente)'
+    }
+  };
+
+  if (data.horarios.tipo === 'custom') {
+    data.horarios.manana_inicio = document.getElementById('custom_m_start').value;
+    data.horarios.manana_fin = document.getElementById('custom_m_end').value;
+    data.horarios.tarde_fin = document.getElementById('custom_t_end').value;
+  }
+
+  AGENTS.forEach(name => {
+    data.agentes.push({
+      alias: name,
+      nombre_completo: document.getElementById(`agent_${name}_name`).value,
+      whatsapp: document.getElementById(`agent_${name}_phone`).value,
+      email_easybroker: document.getElementById(`agent_${name}_email`).value
+    });
+  });
+
+  return data;
+}
+
+function exportSummary() {
+  const data = getAllData();
+  let text = '=== DATOS PARA ACTIVACION — BYG REAL ESTATE ===\n';
+  text += `Fecha: ${new Date().toLocaleDateString('es-MX')}\n\n`;
+
+  text += '--- AGENTES ---\n';
+  data.agentes.forEach((a, i) => {
+    text += `${i+1}. ${a.alias}\n`;
+    text += `   Nombre: ${a.nombre_completo || '(pendiente)'}\n`;
+    text += `   WhatsApp: ${a.whatsapp || '(pendiente)'}\n`;
+    text += `   Email EB: ${a.email_easybroker || '(pendiente)'}\n`;
+  });
+
+  text += '\n--- MANAGER ---\n';
+  text += `Nombre: ${data.manager.nombre || '(pendiente)'}\n`;
+  text += `WhatsApp: ${data.manager.whatsapp || '(pendiente)'}\n`;
+  text += `Email: ${data.manager.email || '(pendiente)'}\n`;
+
+  text += '\n--- EASYBROKER ---\n';
+  text += `API Key: ${data.easybroker.api_key || '(pendiente)'}\n`;
+  text += `Permisos escritura: ${data.easybroker.permisos_escritura || '(pendiente)'}\n`;
+
+  text += '\n--- HORARIOS ---\n';
+  if (data.horarios.tipo === 'default') {
+    text += 'Manana: 8:00 - 14:00\nTarde: 14:00 - 21:00\nNoche (bot): 21:00 - 8:00\n';
+  } else if (data.horarios.tipo === 'alt1') {
+    text += 'Manana: 9:00 - 15:00\nTarde: 15:00 - 21:00\nNoche (bot): 21:00 - 9:00\n';
+  } else {
+    text += `Manana: ${data.horarios.manana_inicio} - ${data.horarios.manana_fin}\n`;
+    text += `Tarde: ${data.horarios.manana_fin} - ${data.horarios.tarde_fin}\n`;
+    text += `Noche (bot): ${data.horarios.tarde_fin} - ${data.horarios.manana_inicio}\n`;
+  }
+
+  text += '\n--- WHATSAPP BOT ---\n';
+  text += `Numero: ${data.bot_whatsapp || '(pendiente)'}\n`;
+
+  text += '\n--- CALENDARIO DE GUARDIAS ---\n';
+  text += `Estado: ${data.calendario_guardias}\n`;
+
+  text += '\n--- INMUEBLES24 ---\n';
+  text += `Email: ${data.inmuebles24.email || '(pendiente)'}\n`;
+  text += `Password: ${data.inmuebles24.password}\n`;
+
+  document.getElementById('summaryText').textContent = text;
+  document.getElementById('summaryOutput').style.display = 'block';
+  document.getElementById('summaryOutput').scrollIntoView({ behavior: 'smooth' });
+}
+
+function copyAll() {
+  exportSummary();
+  const text = document.getElementById('summaryText').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Resumen copiado al portapapeles');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Resumen copiado al portapapeles');
+  });
+}
+
+function saveDraft() {
+  // Save all field values
+  const fields = {};
+  document.querySelectorAll('.field-input').forEach(el => {
+    if (el.id) fields[el.id] = el.value;
+  });
+  // Save radio
+  const ebWrite = document.querySelector('input[name="eb_write"]:checked');
+  if (ebWrite) fields['_eb_write'] = ebWrite.value;
+  // Save schedule
+  const schedSel = document.querySelector('.schedule-option.selected');
+  if (schedSel) fields['_schedule'] = schedSel.id;
+  // Save checkbox
+  fields['_guard_done'] = document.getElementById('guard_done').checked;
+
+  localStorage.setItem('byg_client_data', JSON.stringify(fields));
+  showToast('Borrador guardado');
+}
+
+function loadDraft() {
+  const saved = localStorage.getItem('byg_client_data');
+  if (!saved) { showToast('No hay borrador guardado'); return; }
+
+  const fields = JSON.parse(saved);
+  Object.keys(fields).forEach(key => {
+    if (key.startsWith('_')) return;
+    const el = document.getElementById(key);
+    if (el) {
+      el.value = fields[key];
+      if (el.type !== 'checkbox' && el.value) el.classList.add('valid');
+    }
+  });
+
+  // Restore radio
+  if (fields['_eb_write']) {
+    const radio = document.querySelector(`input[name="eb_write"][value="${fields['_eb_write']}"]`);
+    if (radio) radio.checked = true;
+  }
+
+  // Restore schedule
+  if (fields['_schedule']) {
+    document.querySelectorAll('.schedule-option').forEach(o => o.classList.remove('selected'));
+    const el = document.getElementById(fields['_schedule']);
+    if (el) el.classList.add('selected');
+    if (fields['_schedule'] === 'sched_custom') {
+      document.getElementById('customSchedule').style.display = 'block';
+    }
+  }
+
+  // Restore checkbox
+  if (fields['_guard_done']) {
+    document.getElementById('guard_done').checked = true;
+  }
+
+  // Recheck all sections
+  for (let i = 1; i <= 8; i++) checkSection(i);
+  showToast('Borrador cargado');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Check section 5 on load (schedule has default selection)
+checkSection(5);
+
+// Try to load draft on page load
+const hasDraft = localStorage.getItem('byg_client_data');
+if (hasDraft) {
+  loadDraft();
+}
+</script>
+</body>
+</html>

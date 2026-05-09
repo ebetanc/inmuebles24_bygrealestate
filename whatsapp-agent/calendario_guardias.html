@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendario de Guardias — BYG Real Estate</title>
+<style>
+  :root {
+    --primary: #1e40af;
+    --primary-light: #3b82f6;
+    --primary-bg: #eff6ff;
+    --morning: #f59e0b;
+    --morning-bg: #fffbeb;
+    --morning-border: #fbbf24;
+    --afternoon: #8b5cf6;
+    --afternoon-bg: #f5f3ff;
+    --afternoon-border: #a78bfa;
+    --success: #10b981;
+    --danger: #ef4444;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    line-height: 1.5;
+  }
+
+  .header {
+    background: linear-gradient(135deg, var(--primary) 0%, #1e3a8a 100%);
+    color: white;
+    padding: 2rem 1.5rem;
+    text-align: center;
+  }
+  .header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: .25rem; }
+  .header p { opacity: .85; font-size: .95rem; }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+
+  /* Controls bar */
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;
+    background: white; padding: 1rem 1.25rem; border-radius: var(--radius);
+    box-shadow: var(--shadow); margin-bottom: 1.5rem;
+  }
+  .controls label { font-weight: 600; font-size: .9rem; color: var(--gray-700); }
+  .controls select, .controls input {
+    padding: .5rem .75rem; border: 1px solid var(--gray-300); border-radius: 8px;
+    font-size: .9rem; background: white;
+  }
+  .controls select:focus, .controls input:focus { outline: none; border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .5rem 1rem; border-radius: 8px; font-size: .875rem;
+    font-weight: 600; border: none; cursor: pointer; transition: all .15s;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-light); }
+  .btn-success { background: var(--success); color: white; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-outline { background: white; color: var(--gray-700); border: 1px solid var(--gray-300); }
+
+  /* Info box */
+  .info-box {
+    background: var(--primary-bg); border: 1px solid #bfdbfe; border-radius: var(--radius);
+    padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: .875rem; color: var(--primary);
+  }
+  .info-box strong { display: block; margin-bottom: .25rem; }
+
+  /* Legend */
+  .legend {
+    display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem;
+    font-size: .85rem; color: var(--gray-500);
+  }
+  .legend-item { display: flex; align-items: center; gap: .4rem; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+  .legend-dot.morning { background: var(--morning); }
+  .legend-dot.afternoon { background: var(--afternoon); }
+
+  /* Calendar grid */
+  .calendar {
+    background: white; border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .cal-header {
+    display: grid; grid-template-columns: .9fr repeat(4, 1fr);
+    background: var(--gray-100); border-bottom: 2px solid var(--gray-200);
+  }
+  .cal-header > div {
+    padding: .6rem .5rem; font-weight: 700; font-size: .8rem;
+    text-align: center; text-transform: uppercase; letter-spacing: .03em;
+    color: var(--gray-500);
+  }
+  .cal-header .col-morning { color: var(--morning); }
+  .cal-header .col-afternoon { color: var(--afternoon); }
+
+  .cal-row {
+    display: grid; grid-template-columns: .9fr repeat(4, 1fr);
+    border-bottom: 1px solid var(--gray-100);
+    transition: background .1s;
+  }
+  .cal-row:hover { background: var(--gray-50); }
+  .cal-row.weekend { background: #fefce8; }
+  .cal-row.weekend:hover { background: #fef9c3; }
+
+  .cal-date {
+    padding: .5rem .75rem; display: flex; flex-direction: column;
+    justify-content: center; border-right: 1px solid var(--gray-100);
+  }
+  .cal-date .day-num { font-weight: 700; font-size: 1rem; color: var(--gray-900); }
+  .cal-date .day-name { font-size: .7rem; color: var(--gray-400); text-transform: uppercase; }
+  .cal-row.weekend .day-name { color: var(--morning); }
+
+  .cal-cell {
+    padding: .35rem .25rem; display: flex; align-items: center; justify-content: center;
+  }
+  .cal-cell select {
+    width: 100%; padding: .4rem .25rem; border: 1.5px solid var(--gray-200);
+    border-radius: 6px; font-size: .8rem; background: white; cursor: pointer;
+    text-align: center; transition: border-color .15s;
+  }
+  .cal-cell select:focus { outline: none; }
+  .cal-cell.morning select { border-color: var(--morning-border); background: var(--morning-bg); }
+  .cal-cell.morning select:focus { box-shadow: 0 0 0 2px rgba(245,158,11,.2); }
+  .cal-cell.afternoon select { border-color: var(--afternoon-border); background: var(--afternoon-bg); }
+  .cal-cell.afternoon select:focus { box-shadow: 0 0 0 2px rgba(139,92,246,.2); }
+  .cal-cell select.filled { font-weight: 600; }
+
+  /* Stats bar */
+  .stats {
+    display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1.5rem;
+    background: white; padding: 1rem 1.25rem; border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .stat-item { flex: 1; min-width: 120px; text-align: center; }
+  .stat-item .stat-val { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
+  .stat-item .stat-label { font-size: .75rem; color: var(--gray-500); text-transform: uppercase; }
+
+  /* Actions */
+  .actions {
+    display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.5rem;
+    justify-content: center;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 2rem; right: 2rem; background: var(--gray-900);
+    color: white; padding: .75rem 1.25rem; border-radius: 8px; font-size: .875rem;
+    box-shadow: var(--shadow-lg); transform: translateY(100px); opacity: 0;
+    transition: all .3s ease;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .cal-header > div, .cal-date, .cal-cell { padding: .3rem .15rem; }
+    .cal-cell select { font-size: .7rem; padding: .3rem .1rem; }
+    .cal-date .day-num { font-size: .85rem; }
+    .controls { flex-direction: column; align-items: stretch; }
+  }
+
+  /* Print */
+  @media print {
+    .header { background: white !important; color: black !important; }
+    .controls, .actions, .info-box, .toast { display: none !important; }
+    .calendar { box-shadow: none; border: 1px solid #ccc; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Calendario de Guardias</h1>
+  <p>BYG Real Estate — Sistema 24/7 de Gestion de Leads</p>
+</div>
+
+<div class="container">
+
+  <div class="info-box">
+    <strong>Instrucciones</strong>
+    Seleccione 2 agentes para el turno de <b>manana (8:00 - 14:00)</b> y 2 para el turno de <b>tarde (14:00 - 21:00)</b> para cada dia del mes.
+    Los nombres deben coincidir exactamente: <b>Lupita, Paty, Yol, Gina, Carol, Moni</b>.
+    Al terminar, haga clic en <b>"Copiar para Google Sheets"</b> y pegue en su hoja de calculo.
+  </div>
+
+  <div class="controls">
+    <label>Mes:</label>
+    <select id="selMonth"></select>
+    <label>Ano:</label>
+    <select id="selYear"></select>
+    <button class="btn btn-primary" onclick="renderCalendar()">Generar</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-outline" onclick="autoFillRotation()">Rellenar rotacion</button>
+    <button class="btn btn-danger" onclick="clearAll()">Limpiar todo</button>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot morning"></div> Turno Manana (8:00-14:00)</div>
+    <div class="legend-item"><div class="legend-dot afternoon"></div> Turno Tarde (14:00-21:00)</div>
+  </div>
+
+  <div id="calendarContainer"></div>
+
+  <div id="statsContainer"></div>
+
+  <div class="actions">
+    <button class="btn btn-success" onclick="copyToClipboard()">Copiar para Google Sheets</button>
+    <button class="btn btn-primary" onclick="downloadCSV()">Descargar CSV</button>
+    <button class="btn btn-outline" onclick="saveToLocalStorage()">Guardar borrador</button>
+    <button class="btn btn-outline" onclick="loadFromLocalStorage()">Cargar borrador</button>
+  </div>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const AGENTS = ['Lupita', 'Paty', 'Yol', 'Gina', 'Carol', 'Moni'];
+const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                     'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// Populate selectors
+const selMonth = document.getElementById('selMonth');
+const selYear = document.getElementById('selYear');
+
+MONTH_NAMES.forEach((m, i) => {
+  const opt = document.createElement('option');
+  opt.value = i; opt.textContent = m;
+  selMonth.appendChild(opt);
+});
+
+const currentYear = new Date().getFullYear();
+for (let y = currentYear; y <= currentYear + 2; y++) {
+  const opt = document.createElement('option');
+  opt.value = y; opt.textContent = y;
+  selYear.appendChild(opt);
+}
+
+// Set current month
+const now = new Date();
+selMonth.value = now.getMonth();
+selYear.value = now.getFullYear();
+
+function getDaysInMonth(month, year) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function renderCalendar() {
+  const month = parseInt(selMonth.value);
+  const year = parseInt(selYear.value);
+  const days = getDaysInMonth(month, year);
+
+  let html = '<div class="calendar">';
+  html += '<div class="cal-header">';
+  html += '<div>Fecha</div>';
+  html += '<div class="col-morning">Manana 1</div>';
+  html += '<div class="col-morning">Manana 2</div>';
+  html += '<div class="col-afternoon">Tarde 1</div>';
+  html += '<div class="col-afternoon">Tarde 2</div>';
+  html += '</div>';
+
+  for (let d = 1; d <= days; d++) {
+    const date = new Date(year, month, d);
+    const dow = date.getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+    html += `<div class="cal-row${isWeekend ? ' weekend' : ''}" data-date="${dateStr}">`;
+    html += `<div class="cal-date">
+      <span class="day-num">${d}</span>
+      <span class="day-name">${DAY_NAMES[dow]}</span>
+    </div>`;
+
+    const slots = ['m1','m2','t1','t2'];
+    const types = ['morning','morning','afternoon','afternoon'];
+    slots.forEach((slot, i) => {
+      html += `<div class="cal-cell ${types[i]}">`;
+      html += `<select id="s_${dateStr}_${slot}" onchange="onSelect(this)" data-date="${dateStr}" data-slot="${slot}">`;
+      html += '<option value="">—</option>';
+      AGENTS.forEach(a => {
+        html += `<option value="${a}">${a}</option>`;
+      });
+      html += '</select></div>';
+    });
+
+    html += '</div>';
+  }
+  html += '</div>';
+
+  document.getElementById('calendarContainer').innerHTML = html;
+  updateStats();
+  loadFromLocalStorage(true); // silent load
+}
+
+function onSelect(el) {
+  el.classList.toggle('filled', el.value !== '');
+  checkDuplicates(el.dataset.date);
+  updateStats();
+  autoSave();
+}
+
+function checkDuplicates(dateStr) {
+  const slots = ['m1','m2','t1','t2'];
+  const values = slots.map(s => {
+    const sel = document.getElementById(`s_${dateStr}_${s}`);
+    return sel ? sel.value : '';
+  }).filter(v => v);
+
+  const hasDup = new Set(values).size !== values.length;
+
+  slots.forEach(s => {
+    const sel = document.getElementById(`s_${dateStr}_${s}`);
+    if (!sel) return;
+    const isDup = sel.value && values.filter(v => v === sel.value).length > 1;
+    sel.style.borderColor = isDup ? 'var(--danger)' : '';
+    sel.style.background = isDup ? '#fef2f2' : '';
+  });
+}
+
+function updateStats() {
+  const counts = {};
+  AGENTS.forEach(a => counts[a] = { morning: 0, afternoon: 0, total: 0 });
+
+  let filled = 0, total = 0;
+  document.querySelectorAll('.cal-row').forEach(row => {
+    const slots = ['m1','m2','t1','t2'];
+    slots.forEach((s, i) => {
+      total++;
+      const sel = document.getElementById(`s_${row.dataset.date}_${s}`);
+      if (sel && sel.value) {
+        filled++;
+        const shift = i < 2 ? 'morning' : 'afternoon';
+        if (counts[sel.value]) {
+          counts[sel.value][shift]++;
+          counts[sel.value].total++;
+        }
+      }
+    });
+  });
+
+  let html = '<div class="stats">';
+  html += `<div class="stat-item"><div class="stat-val">${Math.round(filled/total*100)}%</div><div class="stat-label">Completado</div></div>`;
+  AGENTS.forEach(a => {
+    html += `<div class="stat-item">
+      <div class="stat-val">${counts[a].total}</div>
+      <div class="stat-label">${a}<br><small style="color:var(--morning)">${counts[a].morning}m</small> / <small style="color:var(--afternoon)">${counts[a].afternoon}t</small></div>
+    </div>`;
+  });
+  html += '</div>';
+
+  document.getElementById('statsContainer').innerHTML = html;
+}
+
+function autoFillRotation() {
+  // Simple balanced rotation: pairs rotate through shifts
+  const pairs = [
+    ['Lupita', 'Paty'],
+    ['Yol', 'Gina'],
+    ['Carol', 'Moni']
+  ];
+
+  let pairIdx = 0;
+  document.querySelectorAll('.cal-row').forEach(row => {
+    const dateStr = row.dataset.date;
+    const morningPair = pairs[pairIdx % 3];
+    const afternoonPair = pairs[(pairIdx + 1) % 3];
+
+    const m1 = document.getElementById(`s_${dateStr}_m1`);
+    const m2 = document.getElementById(`s_${dateStr}_m2`);
+    const t1 = document.getElementById(`s_${dateStr}_t1`);
+    const t2 = document.getElementById(`s_${dateStr}_t2`);
+
+    if (m1) { m1.value = morningPair[0]; m1.classList.add('filled'); }
+    if (m2) { m2.value = morningPair[1]; m2.classList.add('filled'); }
+    if (t1) { t1.value = afternoonPair[0]; t1.classList.add('filled'); }
+    if (t2) { t2.value = afternoonPair[1]; t2.classList.add('filled'); }
+
+    pairIdx++;
+  });
+
+  updateStats();
+  autoSave();
+  showToast('Rotacion aplicada. Puede modificar cualquier dia.');
+}
+
+function clearAll() {
+  if (!confirm('Limpiar todas las asignaciones?')) return;
+  document.querySelectorAll('.cal-cell select').forEach(s => {
+    s.value = '';
+    s.classList.remove('filled');
+    s.style.borderColor = '';
+    s.style.background = '';
+  });
+  updateStats();
+  autoSave();
+}
+
+function getTableData() {
+  const rows = [];
+  document.querySelectorAll('.cal-row').forEach(row => {
+    const dateStr = row.dataset.date;
+    const m1 = document.getElementById(`s_${dateStr}_m1`);
+    const m2 = document.getElementById(`s_${dateStr}_m2`);
+    const t1 = document.getElementById(`s_${dateStr}_t1`);
+    const t2 = document.getElementById(`s_${dateStr}_t2`);
+    rows.push({
+      fecha: dateStr,
+      manana1: m1 ? m1.value : '',
+      manana2: m2 ? m2.value : '',
+      tarde1: t1 ? t1.value : '',
+      tarde2: t2 ? t2.value : ''
+    });
+  });
+  return rows;
+}
+
+function copyToClipboard() {
+  const data = getTableData();
+  // Tab-separated for Google Sheets paste
+  let tsv = 'Fecha\tManana 1\tManana 2\tTarde 1\tTarde 2\n';
+  data.forEach(r => {
+    tsv += `${r.fecha}\t${r.manana1}\t${r.manana2}\t${r.tarde1}\t${r.tarde2}\n`;
+  });
+
+  navigator.clipboard.writeText(tsv).then(() => {
+    showToast('Copiado! Abra Google Sheets y pegue con Ctrl+V');
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = tsv;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Copiado! Abra Google Sheets y pegue con Ctrl+V');
+  });
+}
+
+function downloadCSV() {
+  const data = getTableData();
+  let csv = 'Fecha,Manana 1,Manana 2,Tarde 1,Tarde 2\n';
+  data.forEach(r => {
+    csv += `${r.fecha},${r.manana1},${r.manana2},${r.tarde1},${r.tarde2}\n`;
+  });
+
+  const month = parseInt(selMonth.value);
+  const year = parseInt(selYear.value);
+  const filename = `guardias_${year}_${String(month+1).padStart(2,'0')}.csv`;
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  showToast(`Descargado: ${filename}`);
+}
+
+function autoSave() {
+  saveToLocalStorage(true);
+}
+
+function saveToLocalStorage(silent) {
+  const month = parseInt(selMonth.value);
+  const year = parseInt(selYear.value);
+  const key = `guardias_${year}_${month}`;
+  const data = getTableData();
+  localStorage.setItem(key, JSON.stringify(data));
+  if (!silent) showToast('Borrador guardado');
+}
+
+function loadFromLocalStorage(silent) {
+  const month = parseInt(selMonth.value);
+  const year = parseInt(selYear.value);
+  const key = `guardias_${year}_${month}`;
+  const saved = localStorage.getItem(key);
+  if (!saved) {
+    if (!silent) showToast('No hay borrador guardado para este mes');
+    return;
+  }
+
+  const data = JSON.parse(saved);
+  let loaded = 0;
+  data.forEach(r => {
+    const m1 = document.getElementById(`s_${r.fecha}_m1`);
+    const m2 = document.getElementById(`s_${r.fecha}_m2`);
+    const t1 = document.getElementById(`s_${r.fecha}_t1`);
+    const t2 = document.getElementById(`s_${r.fecha}_t2`);
+    if (m1 && r.manana1) { m1.value = r.manana1; m1.classList.add('filled'); loaded++; }
+    if (m2 && r.manana2) { m2.value = r.manana2; m2.classList.add('filled'); loaded++; }
+    if (t1 && r.tarde1) { t1.value = r.tarde1; t1.classList.add('filled'); loaded++; }
+    if (t2 && r.tarde2) { t2.value = r.tarde2; t2.classList.add('filled'); loaded++; }
+  });
+
+  updateStats();
+  if (!silent && loaded > 0) showToast(`Borrador cargado (${loaded} asignaciones)`);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Init
+renderCalendar();
+</script>
+</body>
+</html>
