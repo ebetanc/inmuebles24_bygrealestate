@@ -23,3 +23,5 @@ n8n-workflow-leads-telegram.json
 .mcp.json
 .env.local
 whatsapp-agent/workflows/live_*.json
+
+.vercel

@@ -7,9 +7,14 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "0 2,13,19 * * *"
+              "expression": "0 8,14,21 * * *"
             }
           ]
+        },
+        "options": {
+          "cronTimezone": {
+            "timezone": "America/Mexico_City"
+          }
         }
       },
       "id": "a1b2c3d4-0001-4000-8000-000000000001",
@@ -17,7 +22,7 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [200, 300],
-      "notes": "Runs at each shift transition in CDMX (CDT = UTC-5):\n- 8:00 AM CDMX = 13:00 UTC → morning shift starts\n- 2:00 PM CDMX = 19:00 UTC → afternoon shift starts\n- 9:00 PM CDMX = 02:00 UTC → night shift starts (all agents off)\n\nAdjust for CST (Nov-Mar, UTC-6): 0 3,14,20 * * *\n\nSchedule data is managed via the dashboard calendar editor\nand stored directly in agent_schedule table."
+      "notes": "Runs at each shift transition in CDMX local time (auto-adjusts for DST):\n- 8:00 AM CDMX → morning shift starts\n- 2:00 PM CDMX → afternoon shift starts\n- 9:00 PM CDMX → night shift starts (all agents off)\n\nTimezone set to America/Mexico_City — no manual DST adjustment needed.\n\nSchedule data is managed via the dashboard calendar editor\nand stored directly in agent_schedule table."
     },
     {
       "parameters": {
