@@ -125,3 +125,19 @@ export async function getGuardSchedule() {
     .order("shift");
   return data || [];
 }
+
+export async function getMonthSchedule(year: number, month: number) {
+  const supabase = db();
+  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  const { data } = await supabase
+    .from("agent_schedule")
+    .select("id, schedule_date, shift, agent_id")
+    .gte("schedule_date", startDate)
+    .lte("schedule_date", endDate)
+    .order("schedule_date")
+    .order("shift");
+  return (data || []) as { id: number; schedule_date: string; shift: string; agent_id: string }[];
+}
