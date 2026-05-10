@@ -1,163 +1,132 @@
 # Inmobiliaria24
 
-Production-grade lead capture and WhatsApp qualification bot for [Inmuebles24](https://www.inmuebles24.com/) real estate portal.
+24/7 lead management system for BYG Real Estate. Captures leads from 3 sources, runs daytime TOMO auctions to assign agents, and handles after-hours leads with an AI bot + morning queue.
 
-Scrapes new leads from the Inmuebles24 panel, deduplicates them, pushes to a CRM, and auto-qualifies via a WhatsApp Business bot before handing off to a human agent.
-
-## Architecture
+## Architecture (v5)
 
 ```
-Inmuebles24.com
-      |
-      v
-[Scraper] --> [State DB] --> [CRM Adapter] --> [Client CRM]
-      |                            |
-      |                            v
-      |                   [WhatsApp Business API]
-      |                       |           ^
-      |                       v           |
-      |                  [Greeting]   [Lead replies]
-      v                                   |
-[Telegram Alerts]                  [Qualification Bot]
- (errors only)                    (budget/timeline/zone)
-                                          |
-                                          v
-                                 [Qualified Lead --> CRM + Agent WA]
+                     +-----------------+
+                     |   3 Lead Sources |
+                     +-----------------+
+                     /        |         \
+            Inmuebles24   EasyBroker   WhatsApp Direct
+          (scraper 2h)   (API 15min)   (bot number)
+                     \        |         /
+                      v       v        v
+                  +---------------------+
+                  |  n8n Workflow Engine |
+                  | (11 workflows, VPS) |
+                  +---------------------+
+                           |
+              +------------+------------+
+              |                         |
+         Day (8AM-9PM)           Night (9PM-8AM)
+              |                         |
+      TOMO Auction               AI Bot (OpenRouter)
+    to 2 on-duty agents          + Night Queue
+              |                         |
+      Agent claims via WA        8AM Morning Report
+      -> human handoff           -> auto-TOMO at 8:05
+              |                         |
+              +------------+------------+
+                           |
+                  +---------------------+
+                  |    Supabase (DB)    |
+                  |  9 tables + RLS     |
+                  +---------------------+
+                           |
+                  +---------------------+
+                  |  Next.js Dashboard  |
+                  |  (Vercel)           |
+                  +---------------------+
 ```
 
-## Features
+### Lead Sources
 
-- **Automated scraping** of Inmuebles24 Interesados inbox (all tabs: messages, phone, WhatsApp)
-- **Lead deduplication** via SQLite-backed state store (WAL mode, concurrent-safe)
-- **Pluggable CRM adapter** layer (webhook, HubSpot, or custom)
-- **WhatsApp Business bot** with multi-step qualification flow (intent, budget, timeline, zone)
-- **Natural language parsing** for Mexican Spanish (budget: "2 millones", timeline: "3 meses")
-- **Agent handoff** with full lead brief via WhatsApp
-- **Session recovery** with automatic re-authentication on stale sessions
-- **Error resilience** with exponential backoff retries and screenshot capture on failures
-- **Telegram monitoring** for error alerts, heartbeats, stale-run detection, and daily summaries
-- **Structured JSON logging** for production log aggregation
-- **FastAPI webhook server** for receiving WhatsApp messages with HMAC-SHA256 signature verification
+| Source | Trigger | Workflow |
+|--------|---------|----------|
+| **Inmuebles24** | Scraper every 2h (Raspberry Pi) | WF10 webhook -> WF2 |
+| **EasyBroker** | API polling every 15 min | WF8 -> WF3a |
+| **WhatsApp Direct** | Incoming message to bot number | WF1 -> WF2 |
 
-## Requirements
+### Day vs Night
 
-- Python 3.12+
-- Google Chrome (system install)
-- A `.env` file with credentials (see below)
+- **Day (8 AM - 9 PM CDMX):** TOMO auction sent to 2 on-duty agents. First to reply `TOMO-XXXX` claims the lead. 5-min expiry escalates to manager.
+- **Night (9 PM - 8 AM CDMX):** AI bot responds with property info (OpenRouter/Claude). Lead queued. 8:00 AM morning report to manager. 8:05 AM auto-TOMO for queued leads.
 
-## Quick Start
+### Team
+
+6 agents rotating in 2-per-shift schedule: Lupita, Paty, Yol, Gina, Carol, Moni. Manager always active.
+
+## Components
+
+| Component | Location | Tech |
+|-----------|----------|------|
+| Scraper | `src/inmobiliaria24/` | Python 3.12, Playwright, SQLite |
+| n8n Workflows (11) | `whatsapp-agent/workflows/` | n8n self-hosted on Hostinger VPS |
+| DB Schema (6 migrations) | `whatsapp-agent/migrations/` | Supabase (Postgres) |
+| Dashboard | `dashboard/` | Next.js 16, Vercel |
+| WhatsApp gateway | Evolution API | Hostinger VPS |
+| Deploy configs | `deploy/` | systemd, nginx, certbot |
+
+## n8n Workflows
+
+| # | Workflow | Role | Trigger |
+|---|----------|------|---------|
+| WF1 | Inbound Router | Classifies WhatsApp messages, routes to appropriate handler | Webhook (Evolution) |
+| WF2 | Lead Intake | Creates conversation, checks returning leads, routes day/night | Called by WF1/WF10 |
+| WF3a | Auction Launcher | Creates TOMO auction, notifies on-duty agents | Called by WF2/WF8/WF10 |
+| WF3b | Claim Handler | Processes agent TOMO claims (atomic), confirms winner | Called by WF1 |
+| WF3c | Expiry Sweeper | Finds expired auctions, escalates to manager | Schedule (every 1 min) |
+| WF4 | AI Conversation | Handles AI bot responses via OpenRouter | Called by WF1 |
+| WF5 | Human Handoff | Transfers conversation from AI to human agent | Called by WF4 |
+| WF6 | Guard Schedule | Syncs `agents.on_shift` from `agent_schedule` table | Schedule (shift changes) |
+| WF7 | Morning Report | Sends overnight summary to manager, auto-TOMOs queued leads | Schedule (8:00 + 8:05 AM) |
+| WF8 | EasyBroker Polling | Polls EasyBroker API for new unassigned contacts | Schedule (every 15 min) |
+| WF10 | Scraper Intake | Receives leads from scraper webhook, routes day/night | Webhook |
+
+## Dashboard
+
+Next.js 16 app deployed on Vercel with password auth.
+
+| Page | Description |
+|------|-------------|
+| `/` | Overview KPIs: leads today, active auctions, unassigned leads |
+| `/leads` | All leads with status, source, assigned agent |
+| `/agentes` | Agent list with shift status, availability |
+| `/subastas` | Active and historical TOMO auctions |
+| `/calendario` | Interactive guard schedule editor (saves to Supabase) |
+| `/nocturno` | Night queue: AI bot conversations waiting for morning |
+| `/login` | Password authentication |
+
+## Scraper
+
+Python/Playwright scraper for Inmuebles24's "Interesados" inbox.
+
+- **Deduplication** via SQLite state store (WAL mode)
+- **3 tabs**: Messages, Phone, WhatsApp
+- **Retry logic** with exponential backoff
+- **Session recovery** on stale detection
+- **Screenshot capture** on failures
+- **Telegram monitoring** for errors and heartbeats
+
+### Run
 
 ```bash
-# Clone the repository
-git clone https://github.com/estebanmorenoit/inmuebles24_bygrealestate.git
-cd inmuebles24_bygrealestate
-
-# Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate   # Windows
-
-# Install dependencies
 pip install -e ".[dev]"
-
-# Install Playwright browsers (only needed once)
 playwright install chromium
 
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your credentials
-
-# Run a dry-run to verify authentication
+# Dry run (no webhook)
 inmobiliaria24 --dry-run
 
-# Run the full scraper
+# Full run
 inmobiliaria24
 
-# Run with visible browser (debugging)
+# Debug with visible browser
 inmobiliaria24 --headful
 ```
 
-## Configuration
-
-Copy `.env.example` to `.env` and fill in your values:
-
-```bash
-# Required — Inmuebles24 credentials
-INMUEBLES24_EMAIL=your_email@example.com
-INMUEBLES24_PASSWORD=your_password_here
-
-# State database path (default: data/state.db)
-# STATE_DB_PATH=data/state.db
-
-# CRM adapter — webhook (default) or hubspot
-# WEBHOOK_URL=https://your-n8n-instance.com/webhook/your-id
-# CRM_API_KEY=              # HubSpot API key
-
-# WhatsApp Business API
-# WA_API_KEY=               # Meta / BSP access token
-# WA_PHONE_NUMBER_ID=       # WhatsApp phone number ID
-# WA_WEBHOOK_VERIFY_TOKEN=inmobiliaria24_verify
-# WA_WEBHOOK_SECRET=        # Webhook signature secret
-
-# Bot configuration
-# BOT_AGENT_PHONE=+521234567890
-# BOT_AGENT_NAME=Carlos
-# BOT_TIMEOUT_HOURS=24
-
-# Monitoring — Telegram (errors only)
-# TELEGRAM_BOT_TOKEN=123456:ABC-DEF
-# TELEGRAM_ALERT_CHAT_ID=1234567890
-```
-
-## Project Structure
-
-```
-src/inmobiliaria24/
-  auth.py            # Chrome launch, login, Cloudflare handling
-  config.py          # Settings from environment variables
-  main.py            # CLI entrypoint with logging and error handling
-  scraper.py         # SPA navigation, lead extraction, webhook
-  state.py           # SQLite-backed lead dedup and run tracking
-  monitor.py         # Telegram alerts, heartbeats, daily summary
-  pipeline.py        # Lead processing: scrape -> dedup -> CRM push
-  server.py          # FastAPI webhook server for WhatsApp
-  crm/
-    base.py          # CRMAdapter interface + Lead data model
-    webhook.py       # Generic webhook CRM adapter
-    hubspot.py       # HubSpot API v3 adapter (template)
-  whatsapp/
-    client.py        # WhatsApp Cloud API client
-    templates.py     # Meta-approved message templates
-    parser.py        # NL parser for Spanish (budget, timeline, intent)
-    conversation_store.py  # SQLite conversation state persistence
-    bot.py           # Qualification state machine
-
-deploy/
-  deploy.sh                    # Pull, install, restart services
-  inmobiliaria24.service       # Systemd service (scraper)
-  inmobiliaria24.timer         # Systemd timer (every 2h, business hours)
-  inmobiliaria24-server.service # Systemd service (webhook server)
-  nginx-webhook.conf           # Nginx reverse proxy config
-
-tests/                         # 49 tests (pytest)
-```
-
-## Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run with verbose output
-pytest -v
-
-# Run a specific test file
-pytest tests/test_pipeline_integration.py -v
-```
-
-## Production Deployment
-
-### Systemd (scraper on timer)
+### Deploy (Raspberry Pi)
 
 ```bash
 sudo cp deploy/inmobiliaria24.service /etc/systemd/system/
@@ -166,49 +135,41 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now inmobiliaria24.timer
 ```
 
-### Webhook Server (WhatsApp)
+## Database Schema
+
+9 tables in Supabase with RLS enabled:
+
+| Table | Purpose |
+|-------|---------|
+| `agents` | 7 agents (6 + manager), shift status, contact info |
+| `conversations` | Lead conversations with mode (ai/human/tomo), source, property |
+| `messages` | Full message history linked to conversations |
+| `auctions` | TOMO auction records with status and claimed_by |
+| `night_queue` | Overnight leads waiting for morning processing |
+| `agent_schedule` | Monthly guard calendar (2 agents per shift per day) |
+| `listings` | Cached property listings from scraper |
+| `properties_cache` | Property details for AI bot context |
+| `scrape_logs` | Scraper run history and stats |
+
+Key functions: `classify_sender()`, `is_daytime()`, `current_shift()`, `get_on_shift_agents()`, `find_returning_lead()`, `save_month_schedule()`, `generate_tomo_code()`.
+
+## Testing
 
 ```bash
-sudo cp deploy/inmobiliaria24-server.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now inmobiliaria24-server
+# 112 tests
+pytest
+
+# Verbose
+pytest -v
 ```
 
-### Nginx Reverse Proxy
+## Go-Live
 
-```bash
-sudo cp deploy/nginx-webhook.conf /etc/nginx/sites-available/inmobiliaria24
-sudo ln -s /etc/nginx/sites-available/inmobiliaria24 /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-```
+See [GO_LIVE_CHECKLIST.md](GO_LIVE_CHECKLIST.md) for the 11-stage deployment plan (~4 days once client provides data).
 
-### Deploy Updates
+## Configuration
 
-```bash
-bash deploy/deploy.sh
-```
-
-## WhatsApp Bot Flow
-
-```
-NEW_LEAD
-  -> Send greeting + property context
-  -> "Estas interesado en comprar o rentar?"
-
-AWAITING_INTENT -> Capture: comprar/rentar
-AWAITING_BUDGET -> Capture: budget ("2 millones", "$500k", range)
-AWAITING_TIMELINE -> Capture: inmediato / 1-3 meses / 3-6 meses / explorando
-AWAITING_ZONE -> Capture: zone preference
-
-QUALIFIED
-  -> Push qualification data to CRM
-  -> Notify agent via WhatsApp with lead brief
-  -> Agent takes over conversation
-
-TIMEOUT (24h no response)
-  -> Follow-up template
-  -> 2nd timeout -> mark as cold in CRM
-```
+Copy `.env.example` to `.env` for the scraper. n8n environment variables are configured in n8n Settings. Dashboard uses `.env.local` (not tracked).
 
 ## License
 

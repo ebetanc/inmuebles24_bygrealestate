@@ -593,7 +593,7 @@ git log --all -p | grep -i "api_key\|password\|secret" | head -20
 | # | Item | Status |
 |---|------|--------|
 | 1 | Agentes con numeros reales en DB | [ ] |
-| 2 | Google Sheet de guardias llena para el mes | [ ] |
+| 2 | Calendario de guardias llenado desde dashboard /calendario | [ ] |
 | 3 | WF6 ejecutado — agent_schedule poblado | [ ] |
 | 4 | WhatsApp conectado (Evolution state = open) | [ ] |
 | 5 | Webhook de Evolution apunta a WF1 | [ ] |
@@ -646,7 +646,7 @@ git log --all -p | grep -i "api_key\|password\|secret" | head -20
 - [ ] Ajustar timeout de subastas si es necesario (5 min default)
 - [ ] Ajustar prompts de AI bot si las respuestas no son optimas
 - [ ] Ajustar scraper frequency si hay muchos o pocos leads
-- [ ] Verificar que Google Sheets sync funciona a medianoche + 2 PM
+- [ ] Verificar que WF6 guard schedule sync ejecuta correctamente en cada cambio de turno
 
 ### 11.3 Dia 5-7: Estabilizacion
 

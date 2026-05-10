@@ -1,45 +1,66 @@
 # PLAN DE VALIDACION COMPLETO — Inmobiliaria24
 
-> **Fecha**: 2026-05-09
+> **Fecha**: 2026-05-09 (actualizado 2026-05-10)
 > **Autor**: Claude (analisis exhaustivo de todo el codigo, SQL, workflows y DB)
 > **Objetivo**: Cero leads perdidos. Cero errores silenciosos. Sistema perfecto antes de go-live.
 
 ---
 
-## RESUMEN DE HALLAZGOS
+## ESTADO DE CORRECCION (actualizado 2026-05-10)
 
-### BUGS CRITICOS (deben corregirse ANTES de go-live)
+| Bug | Status | Commit / Migration |
+|-----|--------|-------------------|
+| C1 classify_sender LATERAL | FIXED | Migration 0006, commit `e8d3532` |
+| C2 WF6 DST timezone | FIXED | WF6 rewrite, commit `d7234c2` |
+| C3 Message linking | FIXED | WF1 update, commit `e8d3532` |
+| C4 night_queued handler | FIXED | WF1 update, commit `e8d3532` |
+| C5 Atomic calendar RPC | FIXED | Migration 0006 + dashboard, commit `e8d3532` |
+| C6 SECURITY DEFINER | FIXED | Migration 0006, commit `e8d3532` |
+| M1 human_forward linking | FIXED | Fixed by C3 |
+| M2 TOMO code collision | FIXED | Migration 0007 (generate_tomo_code), commit `5aba88d` |
+| M3 Evolution error tracking | FIXED | WF3a update, commit `5aba88d` |
+| M4 find_returning_lead | DEFERRED | Low risk, monitor post-go-live |
+| M5 Property search narrowed | FIXED | WF2 update, commit `5aba88d` |
+| M6 Scraper 30s wait | DEFERRED | Performance only, not blocking |
+| W1 Legacy index name | FIXED | Migration 0008, applied 2026-05-10 |
+| W2-W6 | EXPECTED | Will resolve at go-live (data population, credential config) |
+
+---
+
+## RESUMEN DE HALLAZGOS (original)
+
+### BUGS CRITICOS — ALL FIXED (May 9)
 
 | # | Bug | Impacto | Donde |
 |---|-----|---------|-------|
-| C1 | **classify_sender() retorna multiples filas** para leads recurrentes | WF1 podria enrutar al lead a la conversacion EQUIVOCADA (la mas vieja, no la mas reciente) | `0004_evolution.sql`, WF1 |
-| C2 | **WF6 cron no se ajusta a DST** — durante CST (nov-mar), agentes NUNCA se activan correctamente | 4 meses al ano, el sistema de turnos falla. Morning agents llegan 1 hr tarde, afternoon NUNCA se activan | WF6 cron `0 2,13,19 * * *` |
-| C3 | **Mensajes de leads recurrentes quedan con conversation_id=NULL** | Historial de conversacion incompleto, AI bot no ve mensajes previos, dashboard no muestra mensajes | WF1 dedup SQL |
-| C4 | **WF1 no maneja mode='night_queued'** para scraper leads nocturnos | Si un scraper lead nocturno escribe por WA, su mensaje se IGNORA | WF1 "Classify & Route" code |
-| C5 | **Calendar editor delete+insert NO es atomico** | Si el INSERT falla despues del DELETE, se PIERDE todo el calendario del mes | `dashboard/calendario/actions.ts` |
-| C6 | **Dashboard Supabase key ambigua** — el env var dice service_role pero podria ser anon | Si es anon: el calendario NO puede escribir (no hay policies INSERT/DELETE). Si es service_role: el dashboard tiene acceso total sin RLS | `dashboard/src/lib/supabase.ts` |
+| C1 | ~~**classify_sender() retorna multiples filas**~~ | ~~WF1 podria enrutar al lead a la conversacion EQUIVOCADA~~ | `0006_critical_fixes.sql` |
+| C2 | ~~**WF6 cron no se ajusta a DST**~~ | ~~4 meses al ano, el sistema de turnos falla~~ | WF6 rewritten with timezone |
+| C3 | ~~**Mensajes de leads recurrentes quedan con conversation_id=NULL**~~ | ~~Historial incompleto~~ | WF1 updated |
+| C4 | ~~**WF1 no maneja mode='night_queued'**~~ | ~~Mensaje se IGNORA~~ | WF1 updated |
+| C5 | ~~**Calendar editor delete+insert NO es atomico**~~ | ~~Calendario se PIERDE~~ | save_month_schedule RPC |
+| C6 | ~~**Dashboard Supabase key ambigua**~~ | ~~Acceso no controlado~~ | SECURITY DEFINER on functions |
 
-### BUGS MEDIOS (corregir antes o durante go-live)
+### BUGS MEDIOS — 4/6 FIXED, 2 DEFERRED
 
-| # | Bug | Impacto | Donde |
-|---|-----|---------|-------|
-| M1 | **WF1 human_forward no actualiza conversation_id del mensaje** | Mensajes en modo humano quedan huerfanos en la tabla messages | WF1 "Build Forward Message" path |
-| M2 | **TOMO short_code tiene 65K combinaciones** — colision silenciosa | Con alto volumen, el INSERT fallaria por UNIQUE constraint y la subasta no se crea | WF3a "Create Auction Row" |
-| M3 | **WF3a no reintenta si Evolution API falla** | continueOnFail=true traga el error. Agente nunca recibe TOMO notification | WF3a "Send via Evolution" |
-| M4 | **find_returning_lead() busca por email OR phone** sin priorizar | Un email compartido entre familiares podria linkear leads incorrectamente | `0005_v5_24h_system.sql` |
-| M5 | **WF2 "Find Matching Property" usa ILIKE con search_terms** | Busqueda demasiado amplia — "casa" matchea CUALQUIER propiedad con "casa" en titulo | WF2 "Find Matching Property" SQL |
-| M6 | **Scraper espera 30 segundos por tab** — run total puede ser >2 min | Con 3 tabs, el scraper tarda 90s+ solo en esperar. Timeout del systemd timer podria matarlo | `scraper.py` lines 289, 300 |
+| # | Bug | Status | Donde |
+|---|-----|--------|-------|
+| M1 | ~~**human_forward conversation_id**~~ | FIXED by C3 | WF1 |
+| M2 | ~~**TOMO short_code collision**~~ | FIXED | `0007_medium_fixes.sql` |
+| M3 | ~~**WF3a Evolution API error tracking**~~ | FIXED | WF3a updated |
+| M4 | **find_returning_lead() email/phone priority** | DEFERRED | Low risk |
+| M5 | ~~**WF2 property search too broad**~~ | FIXED | WF2 updated |
+| M6 | **Scraper 30s wait per tab** | DEFERRED | Perf only |
 
 ### ADVERTENCIAS (monitorear post-go-live)
 
-| # | Advertencia | Donde |
-|---|-------------|-------|
-| W1 | `messages.msg_external_id` index aun se llama `messages_twilio_sid_key` (legacy) | DB indexes |
-| W2 | `properties_cache` vacia — AI bot no tendra contexto de propiedades hasta que se cachee | DB |
-| W3 | `listings` vacia — WF2 "Find Matching Property" siempre retornara vacio hasta primer scrape | DB |
-| W4 | `agent_schedule` tiene 28 filas de test que deben limpiarse | DB |
-| W5 | Todos los Postgres nodes tienen `"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID"` — hay que reconfigurar manualmente | Todos los WF JSONs |
-| W6 | `scrape_logs` no se esta usando desde los workflows — solo desde el scraper local | DB/WFs |
+| # | Advertencia | Status |
+|---|-------------|--------|
+| W1 | ~~`messages_twilio_sid_key` legacy index name~~ | FIXED (migration 0008, May 10) |
+| W2 | `properties_cache` vacia — AI bot no tendra contexto hasta primer cacheo | Expected at go-live |
+| W3 | `listings` vacia — Find Matching Property retorna vacio hasta primer scrape | Expected at go-live |
+| W4 | `agent_schedule` tiene 28 filas de test que deben limpiarse | Cleaned at go-live via 00_cleanup |
+| W5 | Postgres nodes tienen `REPLACE_WITH_POSTGRES_CREDENTIAL_ID` (46 total) | Set during n8n import |
+| W6 | `scrape_logs` not used by workflows, only by scraper | Informational |
 
 ---
 

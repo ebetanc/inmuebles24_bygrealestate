@@ -25,3 +25,4 @@ n8n-workflow-leads-telegram.json
 whatsapp-agent/workflows/live_*.json
 
 .vercel
+graphify-out/

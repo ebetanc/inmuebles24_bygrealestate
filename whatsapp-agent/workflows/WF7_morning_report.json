@@ -7,9 +7,14 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "0 13 * * *"
+              "expression": "0 8 * * *"
             }
           ]
+        },
+        "options": {
+          "cronTimezone": {
+            "timezone": "America/Mexico_City"
+          }
         }
       },
       "id": "wf7-0001-4000-8000-000000000001",
@@ -17,7 +22,7 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [200, 200],
-      "notes": "Fires at 8:00 AM CDMX = 13:00 UTC (CDT, Mar-Nov).\nAdjust for CST (Nov-Mar): change to 0 14 * * *\nGenerates the morning report and sends it to the manager."
+      "notes": "Fires at 8:00 AM CDMX. Uses cronTimezone to auto-adjust for DST."
     },
     {
       "parameters": {
@@ -25,9 +30,14 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "5 13 * * *"
+              "expression": "5 8 * * *"
             }
           ]
+        },
+        "options": {
+          "cronTimezone": {
+            "timezone": "America/Mexico_City"
+          }
         }
       },
       "id": "wf7-0002-4000-8000-000000000002",
@@ -35,7 +45,7 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [200, 700],
-      "notes": "Fires at 8:05 AM CDMX = 13:05 UTC (CDT, Mar-Nov).\nAdjust for CST (Nov-Mar): change to 5 14 * * *\nProcesses each pending night_queue lead via TOMO auction."
+      "notes": "Fires at 8:05 AM CDMX. Uses cronTimezone to auto-adjust for DST."
     },
     {
       "parameters": {

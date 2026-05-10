@@ -42,7 +42,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Fetch property data from cache or listings.\nSELECT\n  COALESCE(pc.payload, '{}'::jsonb) AS property_data,\n  l.title, l.price, l.currency, l.location, l.property_type,\n  l.operation_type, l.bedrooms, l.bathrooms, l.area_m2,\n  l.description, l.url\nFROM (SELECT $1 AS prop_id) AS input\nLEFT JOIN properties_cache pc ON pc.property_id = input.prop_id\nLEFT JOIN listings l ON l.listing_hash = input.prop_id OR l.url ILIKE '%' || input.prop_id || '%'\nLIMIT 1;",
+        "query": "-- Fetch property data from cache or listings.\nSELECT\n  COALESCE(pc.payload, '{}'::jsonb) AS property_data,\n  l.title, l.price, l.currency, l.location, l.property_type,\n  l.operation_type, l.bedrooms, l.bathrooms, l.area_m2,\n  l.description, l.url\nFROM (SELECT $1 AS prop_id) AS input\nLEFT JOIN properties_cache pc ON pc.property_id = input.prop_id\nLEFT JOIN listings l ON l.listing_hash = input.prop_id OR (length(input.prop_id) >= 5 AND l.url ILIKE '%' || input.prop_id || '%')\nLIMIT 1;",
         "options": {
           "queryReplacement": "={{ $json.current_property || 'unknown' }}"
         }
