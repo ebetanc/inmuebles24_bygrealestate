@@ -1,7 +1,7 @@
 # Inmobiliaria24 — TODO Tracker
 
 > **Legend:** `[ ]` pending | `[~]` in progress | `[x]` done | `[!]` blocked
-> **Last updated:** 2026-05-10
+> **Last updated:** 2026-05-21
 
 ---
 
@@ -119,18 +119,41 @@ All code, workflows, schema, and dashboard are built and audited. Deployment is 
 
 ---
 
-## Deployment Checklist (blocked on client)
+## Deployment Checklist (partial client data received 2026-05-20)
 
 | # | Item | Owner | Status |
 |---|------|-------|--------|
-| 1 | WhatsApp numbers for 6 agents + manager | BYG | [!] Pending |
-| 2 | EasyBroker emails per agent | BYG | [!] Pending |
-| 3 | Shift schedule confirmation | BYG | [!] Pending |
-| 4 | First month guard calendar | BYG | [!] Pending |
-| 5 | Bot WhatsApp number | BYG | [!] Pending |
-| 6 | Inmuebles24 credentials | BYG | [!] Pending |
+| 1 | WhatsApp numbers for 6 agents | BYG | [x] Received |
+| 1b | WhatsApp managers (Sandy ✓, Marusa ✓) | BYG | [x] Received |
+| 2 | Gmail per agent (5/6) | BYG | [~] Falta email Gina |
+| 2b | Confirm gmail = EasyBroker email | BYG | [!] Pending |
+| 2c | Email Marusa (Marusabobadilla@gmail.com) | BYG | [x] Received |
+| 3 | Shifts (Sandy L-V 8:30-18:00, Marusa L-V 18-22 + Sáb/Dom) | BYG | [x] Received |
+| 4 | First month guard calendar (6 agentes) | BYG | [!] Pending |
+| 5 | Bot WhatsApp number (5215529814996) | BYG | [x] Received — en `.env` |
+| 6 | Inmuebles24 credentials (citas.bygrealestate@gmail.com) | BYG | [x] Received — en `.env` |
+| 7 | Schema migration: support 2 managers with time-based routing | Dev | [!] Decision needed |
 
-Once received: execute GO_LIVE_CHECKLIST.md stages 1-10 (~4 days).
+Datos recibidos guardados en `whatsapp-agent/scripts/01_update_agents_real.sql`.
+
+Once remaining items received: execute GO_LIVE_CHECKLIST.md stages 1-10 (~4 days).
+
+---
+
+## Phase 8: Supabase CRM (replaces EasyBroker routing) — IN PROGRESS
+
+Backend complete. Frontend pending next session.
+
+- [x] Migration 0009 — `lead_status`, `lead_status_history`, `agent_metrics`, `sla_breaches` views, `update_lead_stage` RPC, trigger-based audit log (applied 2026-05-21)
+- [x] Migration 0010 — `mark_assigned`, `mark_first_response`, `record_sla_breach`, `get_sla_breaches` RPCs (applied 2026-05-21)
+- [x] Integration doc — `whatsapp-agent/docs/crm-integration.md` (WF1/WF3a/b/c/WF11 hook points + EasyBroker degradation plan)
+- [ ] WF1 patch — add `mark_first_response` call on outbound human branch
+- [ ] WF3a/b patch — add `mark_assigned` call at claim and escalation points
+- [ ] WF11 build — new SLA monitor workflow (cron 5m, get_sla_breaches → record_sla_breach + manager nudge with 30-min dedupe)
+- [ ] Dashboard: lead detail page with stage history timeline
+- [ ] Dashboard: Kanban pipeline view (`/leads/pipeline`)
+- [ ] Dashboard: SLA breach widget on overview
+- [ ] Dashboard: agent_metrics tab
 
 ---
 
