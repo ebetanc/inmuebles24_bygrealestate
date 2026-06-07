@@ -1,7 +1,7 @@
 # Inmobiliaria24 — TODO Tracker
 
 > **Legend:** `[ ]` pending | `[~]` in progress | `[x]` done | `[!]` blocked
-> **Last updated:** 2026-05-21
+> **Last updated:** 2026-06-07
 
 ---
 
@@ -79,10 +79,11 @@ All code, workflows, schema, and dashboard are built and audited. Deployment is 
 
 ## Phase 4: Database (Supabase) — DONE
 
-- [x] 6 migrations applied (0001-0006)
-- [x] 9 tables with RLS enabled
-- [x] 5 critical indexes
-- [x] Functions: classify_sender, is_daytime, current_shift, get_on_shift_agents, find_returning_lead, save_month_schedule, generate_tomo_code
+- [x] 9 migrations applied (0001-0010, sin 0003 dev seed ni 9999 rollback)
+- [x] 11 tables with RLS enabled
+- [x] Critical indexes + partial unique en auctions.short_code (open only)
+- [x] 15 functions: classify_sender, is_daytime, current_shift, get_on_shift_agents, find_returning_lead, save_month_schedule, generate_tomo_code, evolution_phone, update_updated_at_column, lead_status_log_change, update_lead_stage, mark_assigned, mark_first_response, record_sla_breach, get_sla_breaches
+- [x] 2 views: agent_metrics, sla_breaches
 - [x] Test data present (will be cleaned at go-live via 00_cleanup_test_data.sql)
 
 ---
@@ -154,6 +155,34 @@ Backend complete. Frontend pending next session.
 - [ ] Dashboard: Kanban pipeline view (`/leads/pipeline`)
 - [ ] Dashboard: SLA breach widget on overview
 - [ ] Dashboard: agent_metrics tab
+
+---
+
+## Phase 9: Migración a Proyecto Supabase Nuevo (2026-06-07) — IN PROGRESS
+
+Proyecto nuevo: `wkaeutndwawkdhswisqe` (https://wkaeutndwawkdhswisqe.supabase.co).
+Proyecto viejo: `eazzsvekwmkwmlylirja` (a retirar tras cutover).
+
+### Hecho (lado Claude/MCP)
+- [x] Schema completo replicado vía MCP: 9 migrations (0001-0010) aplicadas en orden
+- [x] 11 tablas con RLS, 15 funciones, 2 vistas, triggers, índices, extensión pgcrypto
+- [x] 7 agentes seed (placeholders `5215500000001`...099) — Lupita, Paty, Yol, Gina, Carol, Moni, Manager
+- [x] 2 políticas RLS (lead_status_read, lead_status_history_read)
+- [x] `dashboard/.env.local` → URL + anon key nuevos
+- [x] Verificado: list_tables, list_migrations, advisors (findings heredados del schema original, no regresiones)
+
+### Pendiente (lado usuario — atacar próxima sesión)
+- [ ] **n8n**: actualizar credencial Postgres → host `db.wkaeutndwawkdhswisqe.supabase.co` + database password del proyecto nuevo (Settings → Database)
+- [ ] **service_role key real**: agarrar de Dashboard → Settings → API → `service_role secret`; reemplazar en `dashboard/.env.local` y Vercel env. (Ahora usa anon key — funciona por SECURITY DEFINER pero no es prod-grade)
+- [ ] **Vercel**: actualizar `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` env vars → redeploy dashboard
+- [ ] Smoke test: dashboard lee tablas nuevas, RPC `save_month_schedule` escribe OK
+- [ ] Verificar `.mcp.json` ya apunta a `wkaeutndwawkdhswisqe` (hecho sesión previa)
+- [ ] Tras cutover validado: retirar/archivar proyecto viejo `eazzsvekwmkwmlylirja`
+
+### Opcional (hardening advisors — diferido, igual al schema viejo)
+- [ ] `search_path` fijo en funciones (function_search_path_mutable WARN)
+- [ ] Vistas a `security_invoker` (security_definer_view ERROR en agent_metrics/sla_breaches)
+- [ ] Revisar grant de `get_sla_breaches` a anon (intencional en 0010)
 
 ---
 
