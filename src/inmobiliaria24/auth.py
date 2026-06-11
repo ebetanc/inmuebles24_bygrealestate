@@ -40,7 +40,7 @@ HOME_URL = "https://www.inmuebles24.com/"
 AVISOS_URL = "https://www.inmuebles24.com/panel.bum"
 
 # Selectors (from live DOM inspection)
-BTN_INGRESAR = '[data-qa="HEADER_LOGIN"]'
+BTN_INGRESAR = '[data-qa="HEADER_LOGIN"] >> visible=true'
 INPUT_EMAIL = '[data-qa="input_usuario_login"]'
 BTN_CONTINUAR = '[data-qa="boton_continuar_login"]'
 INPUT_PASSWORD = '[data-qa="input_contraseña_login"]'
@@ -132,7 +132,9 @@ async def login(page: Page, settings: Settings) -> None:
     await asyncio.sleep(random.uniform(1.0, 2.5))
     try:
         await page.wait_for_selector(BTN_INGRESAR, timeout=15_000)
-        await page.click(BTN_INGRESAR)
+        # The header login button can sit outside the viewport (sticky header,
+        # negative y), so a normal click misses. JS click is position-agnostic.
+        await page.locator(BTN_INGRESAR).first.evaluate("e => e.click()")
     except Exception as e:
         raise AuthenticationError(f"Could not find/click 'Ingresar' button: {e}")
     await asyncio.sleep(random.uniform(1.0, 2.0))
@@ -260,6 +262,13 @@ async def launch_chrome(
     ]
     if headless:
         args.append("--headless=new")
+
+    # Optional upstream proxy (e.g. a local gost relay forwarding to a
+    # residential/mobile proxy). Set CHROME_PROXY to a no-auth proxy URL.
+    proxy = os.environ.get("CHROME_PROXY", "").strip()
+    if proxy:
+        args.append(f"--proxy-server={proxy}")
+        logger.info("Chrome using proxy {}", proxy)
 
     logger.info("Launching Chrome via CDP on port {}", CDP_PORT)
     proc = subprocess.Popen(
