@@ -186,6 +186,32 @@ Proyecto viejo: `eazzsvekwmkwmlylirja` (a retirar tras cutover).
 
 ---
 
+## Phase 10: Despliegue real + scraper E2E (2026-06-14) — IN PROGRESS
+
+Sesión grande. El sistema pasó de "code complete, blocked" a **scraper capturando leads end-to-end**.
+
+### Hecho ✅
+- **Scraper desplegado en Pi** (`/opt/inmobiliaria24`, user `inmobiliaria24`, venv py3.13, chromium ARM64, systemd service+timer). Corre headful bajo `xvfb-run`.
+- **Bloqueo Cloudflare resuelto**: el Pi está en Francia (IP geo-bloqueada). Solución: **proxy mobile MX de DataImpulse** vía relay local `gost` (`gost-proxy.service`, permanente, 127.0.0.1:18080). Residential estándar NO sirve (CF 1020); **mobile MX sí pasa**. Scraper `.env` tiene `CHROME_PROXY` + `WEBHOOK_URL`.
+- **Fixes scraper** (rama `fix/scraper-cloudflare-mobile-proxy`): selector `HEADER_LOGIN` visible, click JS del botón Ingresar (fuera de viewport), `launch_chrome` lee `CHROME_PROXY`. Login + extracción de 3 pestañas PROBADOS.
+- **Supabase cutover**: service_role real en `.env.local`, datos reales de 8 agentes (Sandy + Marusa managers; falta email Gina), data de prueba limpia. Vercel env vars + redeploy OK (dashboard prod lee proyecto nuevo).
+- **n8n configurado** (VPS Hostinger `ssh root@69.62.108.2`): n8n en Docker (`root-n8n-1`, compose `/root/docker-compose.yml`). Añadido al compose: `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (era el bloqueador de `$env`), `WF*_WORKFLOW_ID`, `MANAGER_PHONE`. Credencial Postgres `Postgres account BYG project` (id `dEHKygi1neTNvPtH`) apunta al pooler nuevo.
+- **WF6/WF8/WF10 creados vía API** (import manual fallaba: nodos switch v3.2 vs 3.4). IDs: WF10 `Obr38705ZZYS3FB8`, WF8 `ZI5mD6269xSZhltN`, WF6 `LHQukWVhcmSfPwQb`. Switches de WF8/WF10 agregados manualmente por el cliente.
+- **Bugs de n8n v2.7 arreglados vía API en TODOS los workflows** (el repo JSON aún los tiene): (1) credencial placeholder→real, (2) CTE `returning` reservado→`ret_lead`, (3) `executeWorkflow` workflowId string→resourceLocator, (4) `Record Notified Agents` queryReplacement array, (5) settings key `availableInMCP` rechazada por API PUT.
+- **PROBADO E2E**: scraper webhook → WF10 → conversación + subasta TOMO (código ej. `12D4`) → fan-out agentes. WF10 + WF3a `status=success`, todo verde.
+
+### Pendiente (siguiente sesión) ⏳
+- [ ] **Evolution API**: YA está corriendo en el VPS (`evolution-api-mlkp-api-1` + postgres + redis), solo falta crear instancia + **escanear QR** con bot `5215529814996` + webhook → `evolution-webhook` (WF1). Sin esto, los mensajes WhatsApp no se entregan.
+- [ ] Setear en n8n compose: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` → `docker compose up -d n8n`.
+- [ ] **Activar timer del scraper** en el Pi (`systemctl enable --now inmobiliaria24.timer`) — cada 2h. Limpiar `state.db` antes para capturar pendientes existentes.
+- [ ] Probar rutas WhatsApp-inbound (WF1) + AI (WF4) + handoff (WF5) tras conectar Evolution.
+- [ ] Bug pendiente ruta "returning": nodo `Get Agent Phone` (WF10/WF8) tiene issue de queryReplacement (ruta secundaria, lead recurrente).
+- [ ] **Reconciliar los JSON del repo** `whatsapp-agent/workflows/` con los fixes hechos en n8n (cred placeholder, CTE returning, executeWorkflow format, etc.) — el repo sigue con los bugs.
+- [ ] Email EasyBroker de Gina (cliente).
+- [ ] Llenar calendario de guardias del mes en dashboard `/calendario` → correr WF6.
+
+---
+
 ## Backlog (Future / Nice-to-Have)
 
 - [ ] Multi-account support (multiple Inmuebles24 accounts)
