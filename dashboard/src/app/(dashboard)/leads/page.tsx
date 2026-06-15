@@ -10,14 +10,12 @@ export default async function LeadsPage() {
     <div>
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-[#0F172A]">Leads en Vivo</h2>
-          <div className="text-xs text-[#94A3B8]">Actualizacion en tiempo real via Supabase Realtime</div>
+          <h2 className="font-display text-base font-bold text-foreground">Leads en Vivo</h2>
+          <div className="text-xs text-muted-foreground">Actualizacion en tiempo real via Supabase Realtime</div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-[#E2E8F0] bg-white overflow-hidden">
-        <LeadsTable conversations={conversations} />
-      </div>
+      <LeadsTable conversations={conversations} />
     </div>
   );
 }

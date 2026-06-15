@@ -30,7 +30,7 @@ export function AutoRefresh() {
   return (
     <button
       onClick={refresh}
-      className="flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#64748B] transition-all hover:border-[#3B82F6] hover:text-[#3B82F6] active:scale-95"
+      className="flex items-center gap-1.5 rounded-[var(--radius-sm)] border-2 border-foreground bg-card px-3 py-1.5 font-mono text-[12px] font-semibold text-foreground shadow-[var(--shadow-sm)] transition-[transform,box-shadow,background] duration-100 hover:-translate-x-px hover:-translate-y-px hover:bg-accent hover:shadow-[var(--shadow-hover)] active:translate-x-0 active:translate-y-0 active:shadow-[var(--shadow-sm)]"
       title="Actualizar datos"
     >
       <svg

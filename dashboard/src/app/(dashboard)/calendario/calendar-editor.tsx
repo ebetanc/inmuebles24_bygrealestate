@@ -29,7 +29,7 @@ const MONTH_NAMES = [
 ];
 
 const AGENT_COLORS: Record<string, string> = {};
-const PALETTE = ["#3B82F6", "#8B5CF6", "#F59E0B", "#EC4899", "#22C55E", "#06B6D4"];
+const PALETTE = ["var(--blue)", "var(--orchid)", "var(--amber)", "var(--rose)", "var(--green)", "var(--teal)"];
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month, 0).getDate();
@@ -214,21 +214,21 @@ export default function CalendarEditor({
       {/* Header */}
       <div className="mb-5 flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-base font-bold text-[#0F172A]">Calendario de Guardias</h2>
-          <div className="text-xs text-[#94A3B8]">
+          <h2 className="font-display text-base font-bold text-foreground">Calendario de Guardias</h2>
+          <div className="text-xs text-muted-foreground">
             Asigne 2 agentes por turno por dia — los cambios se guardan en Supabase
           </div>
         </div>
         <div className="flex items-center gap-2">
           {dirty && (
-            <span className="text-xs font-semibold text-[#F59E0B] bg-[#FFFBEB] px-2 py-1 rounded-md">
+            <span className="nb-chip is-accent">
               Sin guardar
             </span>
           )}
           <button
             onClick={handleSave}
             disabled={isPending || !dirty}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#22C55E] px-4 py-2 text-xs font-bold text-white hover:bg-[#16A34A] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border-2 border-foreground bg-primary px-4 py-2 font-display text-xs font-bold text-primary-foreground shadow-[var(--shadow-sm)] transition-[transform,box-shadow,background] duration-100 hover:-translate-x-px hover:-translate-y-px hover:bg-foreground hover:text-background hover:shadow-[var(--shadow-hover)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0"
           >
             {isPending ? "Guardando..." : "Guardar mes"}
           </button>
@@ -236,65 +236,65 @@ export default function CalendarEditor({
       </div>
 
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-[#E2E8F0] px-4 py-3 mb-4">
+      <div className="flex flex-wrap items-center gap-3 bg-card rounded-[var(--radius)] border-2 border-foreground shadow-[var(--shadow-sm)] px-4 py-3 mb-4">
         <button
           onClick={() => changeMonth(prevMonth.y, prevMonth.m)}
-          className="px-2.5 py-1 rounded-lg border border-[#E2E8F0] text-sm font-bold text-[#64748B] hover:bg-[#F8FAFC] transition-colors"
+          className="px-2.5 py-1 rounded-[var(--radius-sm)] border-2 border-foreground bg-card font-display text-sm font-bold text-foreground hover:bg-accent transition-colors"
         >
           &larr;
         </button>
-        <span className="text-sm font-bold text-[#0F172A] min-w-[140px] text-center">
+        <span className="font-display text-sm font-bold text-foreground min-w-[140px] text-center">
           {MONTH_NAMES[month - 1]} {year}
         </span>
         <button
           onClick={() => changeMonth(nextMonth.y, nextMonth.m)}
-          className="px-2.5 py-1 rounded-lg border border-[#E2E8F0] text-sm font-bold text-[#64748B] hover:bg-[#F8FAFC] transition-colors"
+          className="px-2.5 py-1 rounded-[var(--radius-sm)] border-2 border-foreground bg-card font-display text-sm font-bold text-foreground hover:bg-accent transition-colors"
         >
           &rarr;
         </button>
         <div className="flex-1" />
         <button
           onClick={autoFillRotation}
-          className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-xs font-semibold text-[#64748B] hover:bg-[#F8FAFC] transition-colors"
+          className="px-3 py-1.5 rounded-[var(--radius-sm)] border-2 border-foreground bg-card font-display text-xs font-bold text-foreground hover:bg-accent transition-colors"
         >
           Auto-rotacion
         </button>
         <button
           onClick={clearAll}
-          className="px-3 py-1.5 rounded-lg border border-[#FCA5A5] text-xs font-semibold text-[#EF4444] hover:bg-[#FEF2F2] transition-colors"
+          className="px-3 py-1.5 rounded-[var(--radius-sm)] border-2 border-foreground bg-destructive font-display text-xs font-bold text-destructive-foreground hover:bg-foreground hover:text-background transition-colors"
         >
           Limpiar
         </button>
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-4 mb-3 text-xs text-[#64748B]">
+      <div className="flex flex-wrap gap-4 mb-3 text-xs font-medium text-muted-foreground">
         <div className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded bg-[#FEF3C7]" /> Manana (8–14h)
+          <span className="w-3.5 h-3.5 rounded-[3px] border-2 border-foreground bg-[var(--accent-fill)]" /> Manana (8–14h)
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded bg-[#EDE9FE]" /> Tarde (14–21h)
+          <span className="w-3.5 h-3.5 rounded-[3px] border-2 border-foreground bg-[var(--neutral)]" /> Tarde (14–21h)
         </div>
-        <div className="ml-auto font-semibold text-[#0F172A]">{pct}% completo</div>
+        <div className="ml-auto font-mono font-bold text-foreground">{pct}% completo</div>
       </div>
 
       {/* Calendar grid */}
-      <div className="rounded-xl border border-[#E2E8F0] overflow-hidden bg-white">
+      <div className="rounded-[var(--radius)] border-2 border-foreground overflow-hidden bg-card shadow-[var(--shadow-sm)]">
         {/* Header row */}
-        <div className="grid grid-cols-[100px_1fr_1fr_1fr_1fr] border-b-2 border-[#E2E8F0] bg-[#F8FAFC]">
-          <div className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[#64748B]">
+        <div className="grid grid-cols-[100px_1fr_1fr_1fr_1fr] border-b-2 border-foreground bg-[var(--neutral)]">
+          <div className="px-3 py-2.5 font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground">
             Dia
           </div>
-          <div className="px-2 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[#B45309] border-l border-[#E2E8F0]">
+          <div className="px-2 py-2.5 font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground border-l-2 border-foreground">
             Manana 1
           </div>
-          <div className="px-2 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[#B45309] border-l border-[#E2E8F0]">
+          <div className="px-2 py-2.5 font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground border-l-2 border-foreground">
             Manana 2
           </div>
-          <div className="px-2 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[#7C3AED] border-l border-[#E2E8F0]">
+          <div className="px-2 py-2.5 font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground border-l-2 border-foreground">
             Tarde 1
           </div>
-          <div className="px-2 py-2.5 text-[11px] font-bold uppercase tracking-wide text-[#7C3AED] border-l border-[#E2E8F0]">
+          <div className="px-2 py-2.5 font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground border-l-2 border-foreground">
             Tarde 2
           </div>
         </div>
@@ -311,18 +311,18 @@ export default function CalendarEditor({
           return (
             <div
               key={date}
-              className={`grid grid-cols-[100px_1fr_1fr_1fr_1fr] border-b border-[#F1F5F9] last:border-b-0 ${
-                isToday ? "bg-[#EFF6FF]" : isWeekend ? "bg-[#FFFBEB]/40" : ""
+              className={`grid grid-cols-[100px_1fr_1fr_1fr_1fr] border-b border-[var(--line-2)] last:border-b-0 ${
+                isToday ? "bg-[var(--neutral)]" : isWeekend ? "bg-[var(--bg-3)]" : ""
               }`}
             >
               {/* Date cell */}
-              <div className="flex items-center gap-1.5 px-3 py-2 border-r border-[#F1F5F9] bg-[#FAFBFC]/60">
-                <span className="text-sm font-bold text-[#0F172A]">{d.getDate()}</span>
-                <span className={`text-[10px] uppercase ${isWeekend ? "text-[#F59E0B] font-bold" : "text-[#94A3B8]"}`}>
+              <div className="flex items-center gap-1.5 px-3 py-2 border-r-2 border-foreground">
+                <span className="font-mono text-sm font-bold text-foreground">{d.getDate()}</span>
+                <span className={`font-display text-[10px] font-bold uppercase ${isWeekend ? "text-[var(--amber)]" : "text-muted-foreground"}`}>
                   {DAY_NAMES[dow]}
                 </span>
                 {isToday && (
-                  <span className="rounded bg-[#1D4ED8] px-1 py-0.5 text-[9px] font-bold text-white ml-auto">
+                  <span className="rounded-[6px] border-2 border-foreground bg-primary px-1 py-0.5 font-display text-[9px] font-extrabold text-foreground ml-auto">
                     Hoy
                   </span>
                 )}
@@ -333,19 +333,19 @@ export default function CalendarEditor({
                 const isMorning = slot.startsWith("m");
                 const isDup = dup && day[slot] === dup;
                 return (
-                  <div key={slot} className="px-1.5 py-1.5 border-l border-[#F1F5F9]">
+                  <div key={slot} className="px-1.5 py-1.5 border-l border-[var(--line-2)]">
                     <select
                       value={day[slot]}
                       onChange={(e) => updateSlot(date, slot, e.target.value)}
-                      className={`w-full px-2 py-1.5 rounded-md text-xs font-semibold border transition-colors cursor-pointer ${
+                      className={`w-full px-2 py-1.5 rounded-[var(--radius-sm)] text-xs font-bold border-2 border-foreground transition-colors cursor-pointer ${
                         isDup
-                          ? "border-[#EF4444] bg-[#FEF2F2] text-[#EF4444]"
+                          ? "bg-destructive text-foreground"
                           : day[slot]
                           ? isMorning
-                            ? "border-[#FDE68A] bg-[#FEF3C7] text-[#92400E]"
-                            : "border-[#C4B5FD] bg-[#EDE9FE] text-[#5B21B6]"
-                          : "border-[#E2E8F0] bg-white text-[#94A3B8]"
-                      } focus:outline-none focus:ring-2 ${isMorning ? "focus:ring-[#F59E0B]/30" : "focus:ring-[#8B5CF6]/30"}`}
+                            ? "bg-[var(--accent-fill)] text-foreground"
+                            : "bg-[var(--neutral)] text-foreground"
+                          : "bg-card text-muted-foreground"
+                      } focus:outline-none focus:-translate-x-px focus:-translate-y-px focus:shadow-[var(--shadow-sm)]`}
                     >
                       <option value="">--</option>
                       {agents.map((a) => (
@@ -364,24 +364,24 @@ export default function CalendarEditor({
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mt-5">
-        <div className="bg-white rounded-xl border border-[#E2E8F0] p-4 text-center">
-          <div className="text-2xl font-extrabold text-[#3B82F6]">{pct}%</div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-[#94A3B8]">Completo</div>
+        <div className="nb nb-hover p-4 text-center">
+          <div className="font-mono text-2xl font-bold text-foreground">{pct}%</div>
+          <div className="font-display text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">Completo</div>
         </div>
         {agents.map((a) => {
           const s = stats[a.agent_id] || { morning: 0, afternoon: 0 };
           return (
-            <div key={a.agent_id} className="bg-white rounded-xl border border-[#E2E8F0] p-4 text-center">
-              <div className="text-2xl font-extrabold" style={{ color: AGENT_COLORS[a.agent_id] }}>
+            <div key={a.agent_id} className="nb nb-hover p-4 text-center">
+              <div className="font-mono text-2xl font-bold" style={{ color: AGENT_COLORS[a.agent_id] }}>
                 {s.morning + s.afternoon}
               </div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[#94A3B8]">
+              <div className="font-display text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground truncate">
                 {a.name}
               </div>
-              <div className="text-[10px] text-[#94A3B8] mt-0.5">
-                <span className="text-[#F59E0B]">{s.morning}m</span>
+              <div className="font-mono text-[10px] text-muted-foreground mt-0.5">
+                <span className="text-[var(--amber)]">{s.morning}m</span>
                 {" / "}
-                <span className="text-[#8B5CF6]">{s.afternoon}t</span>
+                <span className="text-[var(--orchid)]">{s.afternoon}t</span>
               </div>
             </div>
           );
@@ -390,7 +390,7 @@ export default function CalendarEditor({
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 bg-[#0F172A] text-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-lg animate-fade-in z-50">
+        <div className="fixed bottom-6 right-6 border-2 border-foreground bg-foreground text-background px-4 py-2.5 rounded-[var(--radius-sm)] font-display text-sm font-bold shadow-[var(--shadow-lg)] animate-fade-in z-50">
           {toast}
         </div>
       )}

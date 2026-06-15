@@ -4,25 +4,27 @@ interface LeadsTableProps {
   conversations: Conversation[];
 }
 
-const sourceStyles: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  inmuebles24: { bg: "bg-[#EFF6FF]", text: "text-[#2563EB]", dot: "bg-[#3B82F6]", label: "Inmuebles24" },
-  easybroker: { bg: "bg-[#FFFBEB]", text: "text-[#D97706]", dot: "bg-[#F59E0B]", label: "EasyBroker" },
-  whatsapp_direct: { bg: "bg-[#F5F3FF]", text: "text-[#7C3AED]", dot: "bg-[#8B5CF6]", label: "WhatsApp" },
+type ChipStyle = { fill: string; dot: string; label: string };
+
+const sourceStyles: Record<string, ChipStyle> = {
+  inmuebles24: { fill: "bg-[var(--neutral)]", dot: "bg-[var(--blue)]", label: "Inmuebles24" },
+  easybroker: { fill: "bg-[var(--accent-fill)]", dot: "bg-[var(--amber)]", label: "EasyBroker" },
+  whatsapp_direct: { fill: "bg-[var(--primary-fill)]", dot: "bg-[var(--orchid)]", label: "WhatsApp" },
 };
 
-const modeStyles: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  assigned: { bg: "bg-[#F0FDF4]", text: "text-[#16A34A]", dot: "bg-[#22C55E]", label: "Asignado" },
-  pending_assignment: { bg: "bg-[#FFFBEB]", text: "text-[#D97706]", dot: "bg-[#F59E0B]", label: "En subasta" },
-  ai: { bg: "bg-[#F5F3FF]", text: "text-[#7C3AED]", dot: "bg-[#8B5CF6]", label: "Bot AI" },
-  night_queued: { bg: "bg-[#F8FAFC]", text: "text-[#64748B]", dot: "bg-[#94A3B8]", label: "Cola nocturna" },
-  human: { bg: "bg-[#EFF6FF]", text: "text-[#2563EB]", dot: "bg-[#3B82F6]", label: "Humano" },
-  expired: { bg: "bg-[#FEF2F2]", text: "text-[#DC2626]", dot: "bg-[#EF4444]", label: "Expirado" },
+const modeStyles: Record<string, ChipStyle> = {
+  assigned: { fill: "bg-[var(--primary-fill)]", dot: "bg-[var(--green)]", label: "Asignado" },
+  pending_assignment: { fill: "bg-[var(--accent-fill)]", dot: "bg-[var(--amber)]", label: "En subasta" },
+  ai: { fill: "bg-[var(--neutral)]", dot: "bg-[var(--orchid)]", label: "Bot AI" },
+  night_queued: { fill: "bg-[var(--bg-3)]", dot: "bg-[var(--tx-lo)]", label: "Cola nocturna" },
+  human: { fill: "bg-[var(--neutral)]", dot: "bg-[var(--blue)]", label: "Humano" },
+  expired: { fill: "bg-[var(--alert-fill)]", dot: "bg-[var(--rose)]", label: "Expirado" },
 };
 
-function Badge({ style }: { style: { bg: string; text: string; dot: string; label: string } }) {
+function Chip({ style }: { style: ChipStyle }) {
   return (
-    <span className={`inline-flex items-center gap-[5px] rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold whitespace-nowrap ${style.bg} ${style.text} border-current/20`}>
-      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${style.dot}`} />
+    <span className={`inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border-2 border-foreground px-2.5 py-1 font-display text-[11px] font-extrabold uppercase tracking-[0.03em] text-foreground whitespace-nowrap ${style.fill}`}>
+      <span className={`h-2 w-2 rounded-full shrink-0 ${style.dot}`} />
       {style.label}
     </span>
   );
@@ -31,21 +33,21 @@ function Badge({ style }: { style: { bg: string; text: string; dot: string; labe
 export function LeadsTable({ conversations }: LeadsTableProps) {
   if (conversations.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center text-sm text-[#94A3B8]">
+      <div className="flex h-32 items-center justify-center font-display text-sm font-bold text-muted-foreground">
         No hay leads recientes
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-[var(--radius)] border-2 border-foreground shadow-[var(--shadow-sm)] bg-card">
       <table className="w-full border-collapse">
         <thead>
-          <tr>
+          <tr className="bg-[var(--neutral)] border-b-2 border-foreground">
             {["Hora", "Lead", "Propiedad", "Fuente", "Estado", "Agente"].map((h) => (
               <th
                 key={h}
-                className="border-b border-[#E2E8F0] bg-[#F8FAFC] px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-[#64748B]"
+                className="px-3.5 py-3 text-left font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground"
               >
                 {h}
               </th>
@@ -62,24 +64,24 @@ export function LeadsTable({ conversations }: LeadsTableProps) {
             const mode = modeStyles[c.mode] || modeStyles.assigned;
 
             return (
-              <tr key={c.conversation_id} className="transition-colors hover:bg-[#F8FAFC]">
-                <td className="border-b border-[#F1F5F9] px-3.5 py-3 text-[13px] font-semibold text-[#334155] tabular-nums">
+              <tr key={c.conversation_id} className="border-b border-[var(--line-2)] transition-colors hover:bg-muted last:border-0">
+                <td className="px-3.5 py-3 font-mono text-[13px] font-semibold text-foreground tabular-nums">
                   {time}
                 </td>
-                <td className="border-b border-[#F1F5F9] px-3.5 py-3">
-                  <div className="text-[13px] font-bold text-[#0F172A]">{c.lead_name || "Sin nombre"}</div>
-                  <div className="text-[11px] text-[#94A3B8]">{c.lead_phone}</div>
+                <td className="px-3.5 py-3">
+                  <div className="text-[13px] font-bold text-foreground">{c.lead_name || "Sin nombre"}</div>
+                  <div className="font-mono text-[11px] text-muted-foreground">{c.lead_phone}</div>
                 </td>
-                <td className="border-b border-[#F1F5F9] px-3.5 py-3 text-[13px] text-[#334155] max-w-[180px] truncate">
+                <td className="px-3.5 py-3 text-[13px] text-foreground max-w-[180px] truncate">
                   {c.current_property || "-"}
                 </td>
-                <td className="border-b border-[#F1F5F9] px-3.5 py-3">
-                  <Badge style={source} />
+                <td className="px-3.5 py-3">
+                  <Chip style={source} />
                 </td>
-                <td className="border-b border-[#F1F5F9] px-3.5 py-3">
-                  <Badge style={mode} />
+                <td className="px-3.5 py-3">
+                  <Chip style={mode} />
                 </td>
-                <td className="border-b border-[#F1F5F9] px-3.5 py-3 text-[13px] font-bold text-[#334155]">
+                <td className="px-3.5 py-3 text-[13px] font-bold text-foreground">
                   {c.agent_name || "-"}
                 </td>
               </tr>

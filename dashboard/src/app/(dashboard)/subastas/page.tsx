@@ -23,8 +23,8 @@ export default async function SubastasPage() {
     <div>
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-[#0F172A]">Subastas TOMO</h2>
-          <div className="text-xs text-[#94A3B8]">Sistema de subasta — primer agente en responder gana el lead</div>
+          <h2 className="font-display text-base font-bold text-foreground">Subastas TOMO</h2>
+          <div className="text-xs text-muted-foreground">Sistema de subasta — primer agente en responder gana el lead</div>
         </div>
       </div>
 
@@ -37,25 +37,17 @@ export default async function SubastasPage() {
           return (
             <div
               key={auction.auction_id}
-              className={`rounded-xl bg-white p-5 transition-shadow hover:shadow-md ${
-                isExpired
-                  ? "border border-[#E2E8F0]"
-                  : "border-2 border-[#3B82F6] animate-pulse-border"
+              className={`rounded-[var(--radius)] border-2 border-foreground bg-card p-5 shadow-[var(--shadow-sm)] ${
+                isExpired ? "" : "animate-pulse-border"
               }`}
             >
               {/* Top row */}
               <div className="flex items-center justify-between mb-3">
-                <span className="font-mono text-[13px] font-bold text-[#3B82F6]">
+                <span className="inline-flex items-center rounded-[var(--radius-sm)] border-2 border-foreground bg-[var(--neutral)] px-2.5 py-1 font-mono text-[13px] font-bold text-foreground">
                   {auction.short_code}
                 </span>
-                <span
-                  className={`inline-flex items-center gap-[5px] rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold ${
-                    isExpired
-                      ? "border-[#FECACA] bg-[#FEF2F2] text-[#DC2626]"
-                      : "border-[#BBF7D0] bg-[#F0FDF4] text-[#16A34A]"
-                  }`}
-                >
-                  <span className={`h-1.5 w-1.5 rounded-full ${isExpired ? "bg-[#EF4444]" : "bg-[#22C55E]"}`} />
+                <span className={`nb-chip ${isExpired ? "is-alert" : "is-primary"}`}>
+                  <span className={`h-2 w-2 rounded-full ${isExpired ? "bg-[var(--rose)]" : "bg-[var(--green)]"}`} />
                   {isExpired ? "Expirado" : "Activa"}
                 </span>
               </div>
@@ -63,34 +55,32 @@ export default async function SubastasPage() {
               {/* Meta */}
               <div className="flex gap-6 mb-3">
                 <div>
-                  <div className="text-[10.5px] font-medium uppercase tracking-wide text-[#94A3B8]">Lead</div>
-                  <div className="mt-0.5 text-[13px] font-semibold text-[#334155]">
+                  <div className="font-display text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">Lead</div>
+                  <div className="mt-0.5 text-[13px] font-semibold text-foreground">
                     {auction.lead_name || "Sin nombre"}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10.5px] font-medium uppercase tracking-wide text-[#94A3B8]">Propiedad</div>
-                  <div className="mt-0.5 text-[13px] font-semibold text-[#334155]">
+                  <div className="font-display text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">Propiedad</div>
+                  <div className="mt-0.5 text-[13px] font-semibold text-foreground">
                     {auction.property_title || auction.conversation_id}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10.5px] font-medium uppercase tracking-wide text-[#94A3B8]">Tiempo</div>
-                  <div className="mt-0.5 text-[13px] font-bold text-[#0F172A] tabular-nums">
+                  <div className="font-display text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">Tiempo</div>
+                  <div className="mt-0.5 font-mono text-[13px] font-bold text-foreground tabular-nums">
                     {remaining}
                   </div>
                 </div>
               </div>
 
               {/* Progress bar */}
-              <div className="h-1 rounded-full bg-[#E2E8F0] overflow-hidden">
+              <div className="h-3 rounded-[var(--radius-sm)] border-2 border-foreground bg-[var(--bg-3)] overflow-hidden">
                 <div
-                  className="h-full rounded-full transition-all duration-700"
+                  className="h-full transition-all duration-700"
                   style={{
                     width: `${pct}%`,
-                    background: isExpired
-                      ? "linear-gradient(90deg, #EF4444, #F97316)"
-                      : "linear-gradient(90deg, #3B82F6, #60A5FA)",
+                    background: isExpired ? "var(--alert-fill)" : "var(--primary-fill)",
                   }}
                 />
               </div>
@@ -100,7 +90,7 @@ export default async function SubastasPage() {
       </div>
 
       {auctions.length === 0 && (
-        <div className="rounded-xl border border-[#E2E8F0] bg-white p-12 text-center text-sm text-[#94A3B8]">
+        <div className="nb p-12 text-center font-display text-sm font-bold text-muted-foreground">
           No hay subastas activas en este momento
         </div>
       )}

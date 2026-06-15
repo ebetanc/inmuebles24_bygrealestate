@@ -59,25 +59,23 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-[100] flex w-[260px] flex-col bg-[#0F172A] text-[#E2E8F0]">
+    <aside className="fixed inset-y-0 left-0 z-[100] flex w-[260px] flex-col border-r-2 border-foreground bg-sidebar text-foreground">
       {/* Header */}
-      <div className="border-b border-[#1E293B] px-5 py-6">
+      <div className="border-b-2 border-foreground px-5 py-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-gradient-to-br from-[#3B82F6] to-[#6366F1] text-[16px] font-extrabold text-white tracking-tight">
-            BYG
-          </div>
+          <div className="brand-mark">BYG</div>
           <div className="flex flex-col">
-            <span className="text-[16px] font-bold text-[#F8FAFC]">BYG Real Estate</span>
-            <span className="text-[11px] text-[#64748B] tracking-wide">Sistema de Leads</span>
+            <span className="font-display text-[16px] font-bold text-foreground tracking-tight">BYG Real Estate</span>
+            <span className="text-[11px] font-semibold text-muted-foreground tracking-wide">Sistema de Leads</span>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 flex flex-col gap-0.5 px-3 py-4">
+      <nav className="flex-1 flex flex-col gap-1 px-3 py-4">
         {navSections.map((section) => (
           <div key={section.label}>
-            <div className="px-3 pb-2 pt-4 text-[10px] font-semibold uppercase tracking-[1.2px] text-[#475569]">
+            <div className="px-3 pb-2 pt-4 font-display text-[10px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
               {section.label}
             </div>
             {section.items.map((item) => {
@@ -86,10 +84,10 @@ export function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-[13.5px] font-medium transition-all duration-150 ${
+                  className={`flex items-center gap-3 rounded-[var(--radius-sm)] border-2 px-3.5 py-2.5 font-display text-[13.5px] font-bold transition-[transform,box-shadow,background] duration-100 ${
                     isActive
-                      ? "bg-[#1D4ED8] text-white shadow-[0_1px_3px_rgba(29,78,216,0.4)]"
-                      : "text-[#94A3B8] hover:bg-[#1E293B] hover:text-[#E2E8F0]"
+                      ? "border-foreground bg-primary text-foreground shadow-[var(--shadow-sm)]"
+                      : "border-transparent text-foreground/70 hover:-translate-x-px hover:-translate-y-px hover:border-foreground hover:bg-accent hover:text-foreground hover:shadow-[var(--shadow-sm)]"
                   }`}
                 >
                   <span className="flex w-5 h-5 items-center justify-center shrink-0">
@@ -104,12 +102,12 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-[#1E293B] p-4 flex flex-col gap-1.5">
-        <div className="inline-flex items-center gap-1.5 rounded-md bg-[rgba(34,197,94,0.1)] px-2.5 py-1 text-[10px] font-semibold tracking-wide text-[#22C55E] w-fit">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E] animate-pulse-dot" />
+      <div className="border-t-2 border-foreground p-4 flex flex-col gap-2">
+        <div className="nb-chip is-primary w-fit">
+          <span className="dot live" />
           Conectado — Produccion
         </div>
-        <div className="text-[11px] text-[#475569]">n8n + Supabase + Evolution API</div>
+        <div className="text-[11px] font-medium text-muted-foreground">n8n + Supabase + Evolution API</div>
       </div>
     </aside>
   );

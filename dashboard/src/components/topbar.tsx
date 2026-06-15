@@ -35,28 +35,26 @@ export function Topbar() {
   const title = pageTitles[pathname] || "Dashboard";
 
   return (
-    <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-[#E2E8F0] bg-white px-8">
+    <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b-2 border-foreground bg-card px-8">
       <div className="flex items-center gap-4">
-        <span className="text-lg font-bold text-[#0F172A]">{title}</span>
-        <div className="flex items-center gap-1.5 rounded-full border border-[#BBF7D0] bg-[#F0FDF4] px-3 py-1">
-          <span className="h-2 w-2 rounded-full bg-[#22C55E] animate-pulse-live" />
-          <span className="text-xs font-semibold text-[#16A34A]">En vivo</span>
+        <span className="font-display text-lg font-bold text-foreground">{title}</span>
+        <div className="nb-chip is-primary">
+          <span className="dot live" />
+          En vivo
         </div>
       </div>
       <div className="flex items-center gap-4">
         <AutoRefresh />
-        <span className="text-[13px] font-medium text-[#64748B] tabular-nums">{clock}</span>
+        <span className="font-mono text-[13px] font-medium text-muted-foreground tabular-nums">{clock}</span>
         <form action={logout}>
           <button
             type="submit"
-            className="flex h-9 items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 text-xs font-medium text-[#64748B] transition hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+            className="flex h-9 items-center gap-2 rounded-[var(--radius-sm)] border-2 border-foreground bg-card px-3 font-display text-xs font-bold text-foreground shadow-[var(--shadow-sm)] transition-[transform,box-shadow,background] duration-100 hover:-translate-x-px hover:-translate-y-px hover:bg-accent hover:shadow-[var(--shadow-hover)]"
           >
             Salir
           </button>
         </form>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] text-sm font-bold text-white">
-          BYG
-        </div>
+        <div className="brand-mark">BYG</div>
       </div>
     </header>
   );

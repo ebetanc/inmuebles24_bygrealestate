@@ -7,21 +7,20 @@ export default function LoginPage() {
   const [state, formAction, pending] = useActionState(login, null);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC]">
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="app-bg" />
       <div className="w-full max-w-sm">
-        <div className="rounded-2xl border border-[#E2E8F0] bg-white p-8 shadow-sm">
+        <div className="rounded-[var(--radius-lg)] border-2 border-foreground bg-card p-8 shadow-[var(--shadow-lg)]">
           <div className="mb-6 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6]">
-              <span className="text-lg font-bold text-white">B</span>
-            </div>
-            <h1 className="text-lg font-bold text-[#0F172A]">BYG Real Estate</h1>
-            <p className="mt-1 text-xs text-[#94A3B8]">Dashboard de monitoreo</p>
+            <div className="brand-mark mx-auto mb-3 h-12 w-12 text-2xl">B</div>
+            <h1 className="font-display text-lg font-bold text-foreground">BYG Real Estate</h1>
+            <p className="mt-1 text-xs font-semibold text-muted-foreground">Dashboard de monitoreo</p>
           </div>
 
           <form action={formAction}>
             <label
               htmlFor="password"
-              className="mb-1.5 block text-xs font-medium text-[#475569]"
+              className="mb-1.5 block font-display text-[11px] font-extrabold uppercase tracking-[0.06em] text-foreground"
             >
               Contrasena
             </label>
@@ -31,12 +30,12 @@ export default function LoginPage() {
               type="password"
               required
               autoFocus
-              className="mb-4 w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2.5 text-sm text-[#0F172A] outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20"
+              className="mb-4 w-full rounded-[var(--radius-sm)] border-2 border-foreground bg-card px-3 py-2.5 text-sm text-foreground outline-none transition-[box-shadow,transform] focus:-translate-x-px focus:-translate-y-px focus:shadow-[var(--shadow-sm)]"
               placeholder="Ingresa la contrasena"
             />
 
             {state?.error && (
-              <div className="mb-4 rounded-lg bg-[#FEF2F2] px-3 py-2 text-xs font-medium text-[#DC2626]">
+              <div className="mb-4 rounded-[var(--radius-sm)] border-2 border-foreground bg-destructive px-3 py-2 text-xs font-bold text-destructive-foreground">
                 {state.error}
               </div>
             )}
@@ -44,7 +43,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={pending}
-              className="w-full rounded-lg bg-gradient-to-r from-[#3B82F6] to-[#6366F1] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              className="w-full rounded-[var(--radius-sm)] border-2 border-foreground bg-primary px-4 py-2.5 font-display text-sm font-bold text-primary-foreground shadow-[var(--shadow-sm)] transition-[transform,box-shadow,background,color] duration-100 hover:-translate-x-px hover:-translate-y-px hover:bg-foreground hover:text-background hover:shadow-[var(--shadow-hover)] active:translate-x-0 active:translate-y-0 active:shadow-[var(--shadow-sm)] disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none"
             >
               {pending ? "Verificando..." : "Entrar"}
             </button>

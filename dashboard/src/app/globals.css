@@ -7,9 +7,12 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+
+  --font-sans: var(--font-montserrat);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-display: var(--font-space-grotesk);
+  --font-heading: var(--font-space-grotesk);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -27,6 +30,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -39,55 +43,118 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --radius-lg: var(--radius-lg);
+  --radius-md: var(--radius);
+  --radius-sm: var(--radius-sm);
+  --radius-xl: calc(var(--radius-lg) * 1.4);
+  --radius-2xl: calc(var(--radius-lg) * 1.8);
+  --radius-3xl: calc(var(--radius-lg) * 2.2);
+  --radius-4xl: calc(var(--radius-lg) * 2.6);
 }
 
 :root {
-  --background: oklch(0.98 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.714);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* ===== Neo-brutalist palette (edit these 7 to recolor everything) ===== */
+  --dark:    #020309;   /* ink — borders + primary text */
+  --canvas:  #faf3e3;   /* page */
+  --surface: #fdfaf1;   /* cards / panels */
+  --neutral: #e5f5f9;   /* light blue fill */
+  --primary-fill: #d2ecd0; /* mint */
+  --accent-fill:  #fdeec4; /* cream yellow */
+  --alert-fill:   #f3c1c0; /* pink */
+
+  /* ----- Surfaces ----- */
+  --bg-0: var(--canvas);
+  --bg-1: var(--surface);
+  --bg-2: var(--surface);
+  --bg-3: #f3ead2;
+  --bg-4: var(--primary-fill);
+
+  /* ----- Hairlines / dividers (ink alphas) ----- */
+  --line:   rgba(2, 3, 9, 0.10);
+  --line-2: rgba(2, 3, 9, 0.18);
+  --line-3: rgba(2, 3, 9, 0.30);
+
+  /* ----- Text ----- */
+  --tx-hi:  #020309;
+  --tx-md:  #4a4a52;
+  --tx-lo:  #6a6a72;
+  --tx-dim: #8a8a90;
+
+  /* ----- Status: text tone + pastel fill pairs ----- */
+  --blue:   #2563a8;
+  --teal:   #1f7a52;
+  --amber:  #9a6b12;
+  --rose:   #b23b48;
+  --green:  #1f7a52;
+  --orchid: #7a4dc0;
+
+  --live-fill:  var(--primary-fill);
+  --human-fill: var(--accent-fill);
+  --risk-fill:  var(--alert-fill);
+  --info-fill:  var(--neutral);
+  --ok-fill:    var(--primary-fill);
+
+  --live:  var(--teal);
+  --human: var(--amber);
+  --risk:  var(--rose);
+  --info:  var(--blue);
+  --ok:    var(--green);
+
+  /* ----- Brutalist primitives ----- */
+  --bd: 2px solid var(--dark);
+  --shadow-sm:    4px 4px 0 var(--dark);
+  --shadow-hover: 6px 6px 0 var(--dark);
+  --shadow-lg:    12px 12px 0 var(--dark);
+
+  --radius:    14px;
+  --radius-sm: 10px;
+  --radius-lg: 18px;
+
+  /* ===== shadcn semantic tokens mapped to the brutalist palette ===== */
+  --background: var(--canvas);
+  --foreground: var(--tx-hi);
+  --card: var(--surface);
+  --card-foreground: var(--tx-hi);
+  --popover: var(--surface);
+  --popover-foreground: var(--tx-hi);
+  --primary: var(--primary-fill);
+  --primary-foreground: var(--dark);
+  --secondary: var(--surface);
+  --secondary-foreground: var(--tx-hi);
+  --muted: var(--bg-3);
+  --muted-foreground: var(--tx-md);
+  --accent: var(--accent-fill);
+  --accent-foreground: var(--dark);
+  --destructive: var(--alert-fill);
+  --destructive-foreground: var(--dark);
+  --border: var(--dark);
+  --input: var(--dark);
+  --ring: var(--dark);
+
+  /* charts → pastel fills */
+  --chart-1: var(--primary-fill);
+  --chart-2: var(--neutral);
+  --chart-3: var(--accent-fill);
+  --chart-4: var(--alert-fill);
+  --chart-5: var(--bg-3);
+
+  /* sidebar → brutalist surface + ink */
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--tx-hi);
+  --sidebar-primary: var(--primary-fill);
+  --sidebar-primary-foreground: var(--dark);
+  --sidebar-accent: var(--accent-fill);
+  --sidebar-accent-foreground: var(--dark);
+  --sidebar-border: var(--dark);
+  --sidebar-ring: var(--dark);
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; }
+/* Scrollbar — ink on canvas */
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+::-webkit-scrollbar-thumb { background: var(--dark); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--tx-md); }
 
 /* Animations */
 @keyframes pulse-dot {
@@ -95,16 +162,21 @@
   50% { opacity: 0.5; transform: scale(0.8); }
 }
 @keyframes pulse-live {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
-  50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(31,122,82,0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(31,122,82,0); }
 }
 @keyframes pulse-border {
-  0%, 100% { border-color: #3B82F6; }
-  50% { border-color: #93C5FD; }
+  0%, 100% { border-color: var(--dark); }
+  50% { border-color: var(--teal); }
 }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(31, 122, 82, 0.5); }
+  70%  { box-shadow: 0 0 0 6px rgba(31, 122, 82, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(31, 122, 82, 0); }
 }
 
 .animate-pulse-dot { animation: pulse-dot 2s infinite; }
@@ -117,10 +189,65 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    text-rendering: optimizeLegibility;
   }
   html {
     @apply font-sans;
     font-size: 14px;
   }
 }
+
+/* ===== Page background — flat canvas + faint ink dot-grid ===== */
+.app-bg {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: var(--canvas);
+}
+.app-bg::after {
+  content: ""; position: absolute; inset: 0;
+  background-image: radial-gradient(rgba(2, 3, 9, 0.05) 1.4px, transparent 1.4px);
+  background-size: 26px 26px;
+  opacity: 0.7;
+}
+
+/* ===== Brand mark — flat mint square lettermark ===== */
+.brand-mark {
+  width: 38px; height: 38px; border-radius: var(--radius-sm);
+  background: var(--primary-fill);
+  border: var(--bd);
+  box-shadow: var(--shadow-sm);
+  display: grid; place-items: center;
+  font-family: var(--font-display, "Space Grotesk", system-ui, sans-serif);
+  font-weight: 800; font-size: 20px; color: var(--dark);
+  overflow: hidden;
+}
+
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--dark); }
+.dot.live { background: var(--green); box-shadow: 0 0 0 0 rgba(31, 122, 82, 0.6); animation: pulse 2s infinite; }
+
+/* ===== Reusable brutalist utilities ===== */
+.nb {
+  border: var(--bd);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  background: var(--surface);
+}
+.nb-hover {
+  transition: transform 80ms ease, box-shadow 80ms ease, background 80ms ease;
+}
+.nb-hover:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-hover);
+}
+.nb-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-display, "Space Grotesk", system-ui, sans-serif);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.02em;
+  padding: 4px 10px; border: 2px solid var(--dark); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--dark); white-space: nowrap;
+}
+.nb-chip.is-primary { background: var(--primary-fill); }
+.nb-chip.is-accent  { background: var(--accent-fill); }
+.nb-chip.is-alert   { background: var(--alert-fill); }
+.nb-chip.is-blue    { background: var(--neutral); }
