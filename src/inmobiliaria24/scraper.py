@@ -540,10 +540,13 @@ async def send_to_webhook(leads: list[dict], webhook_url: str = "") -> None:
 # ---------------------------------------------------------------------------
 
 
-async def scrape_and_send(page: Page, *, webhook_url: str = "") -> list[dict]:
-    """Full flow: Interesados inbox -> detail per Pendiente lead -> webhook.
+async def scrape_pendiente_leads(page: Page) -> list[dict]:
+    """Extract all Pendiente leads (with full detail) from the Interesados inbox.
 
-    Returns all extracted leads (before dedup). Caller handles dedup via StateStore.
+    Returns all extracted leads (before dedup). The caller handles dedup via
+    StateStore and is responsible for sending only the new leads to the webhook —
+    this keeps the scraper from re-posting a lead that stays Pendiente on the
+    portal across runs.
     Includes session staleness detection and screenshot capture on failures.
     """
     # Step 1: Get Pendiente leads from the inbox.
@@ -557,7 +560,7 @@ async def scrape_and_send(page: Page, *, webhook_url: str = "") -> list[dict]:
         )
 
     if not pendiente_leads:
-        logger.warning("No Pendiente leads found — nothing to send")
+        logger.warning("No Pendiente leads found — nothing to extract")
         return []
 
     results: list[dict] = []
@@ -615,9 +618,5 @@ async def scrape_and_send(page: Page, *, webhook_url: str = "") -> list[dict]:
     if not results:
         logger.warning("No lead details extracted — nothing to send")
         return []
-
-    # Step 2: Send to webhook.
-    logger.info("Sending {} Pendiente leads to webhook", len(results))
-    await send_to_webhook(results, webhook_url=webhook_url)
 
     return results

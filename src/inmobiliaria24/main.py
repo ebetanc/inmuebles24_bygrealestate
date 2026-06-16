@@ -23,7 +23,11 @@ from playwright.async_api import async_playwright
 from inmobiliaria24.auth import AuthenticationError, launch_chrome, load_or_login
 from inmobiliaria24.config import Settings
 from inmobiliaria24.monitor import check_stale_runs, send_error_alert, send_heartbeat
-from inmobiliaria24.scraper import SessionStaleError, scrape_and_send
+from inmobiliaria24.scraper import (
+    SessionStaleError,
+    scrape_pendiente_leads,
+    send_to_webhook,
+)
 from inmobiliaria24.state import StateStore
 
 # ---------------------------------------------------------------------------
@@ -108,26 +112,32 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
 
                 # Scrape all Pendiente leads (with session recovery).
                 try:
-                    all_leads = await scrape_and_send(
-                        page, webhook_url=settings.webhook_url
-                    )
+                    all_leads = await scrape_pendiente_leads(page)
                 except SessionStaleError:
                     logger.warning("Session stale — re-authenticating and retrying")
                     from inmobiliaria24.auth import login, navigate_to_avisos
 
                     await login(page, settings)
                     await navigate_to_avisos(page)
-                    all_leads = await scrape_and_send(
-                        page, webhook_url=settings.webhook_url
-                    )
+                    all_leads = await scrape_pendiente_leads(page)
                 total = len(all_leads)
 
-                # Dedup: filter to only new leads.
+                # Dedup: only send leads we have not already pushed. A lead stays
+                # Pendiente on the portal until an agent attends it, so without
+                # this filter the same lead would be re-sent on every run.
                 new_leads = store.filter_new(all_leads)
                 new_count = len(new_leads)
 
-                # Mark all extracted leads as seen.
-                store.mark_seen(all_leads)
+                # Send only new leads, then mark them seen. Marking AFTER a
+                # successful POST means a webhook failure is retried next run
+                # instead of being silently dropped.
+                if new_leads:
+                    await send_to_webhook(
+                        new_leads, webhook_url=settings.webhook_url
+                    )
+                    store.mark_seen(new_leads)
+                else:
+                    logger.info("No new leads to send — all already pushed")
 
                 print(f"Scraped {total} Pendiente leads, {new_count} new")
                 for lead in new_leads:
