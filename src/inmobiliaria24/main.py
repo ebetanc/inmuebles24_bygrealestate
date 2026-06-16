@@ -81,6 +81,12 @@ def _parse_args() -> argparse.Namespace:
         dest="dry_run",
         help="Authenticate and validate the session, then exit without running extraction",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Only scrape and send the first N Pendiente leads (0 = all). Useful for a single-lead test.",
+    )
     return parser.parse_args()
 
 
@@ -112,14 +118,14 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
 
                 # Scrape all Pendiente leads (with session recovery).
                 try:
-                    all_leads = await scrape_pendiente_leads(page)
+                    all_leads = await scrape_pendiente_leads(page, limit=args.limit)
                 except SessionStaleError:
                     logger.warning("Session stale — re-authenticating and retrying")
                     from inmobiliaria24.auth import login, navigate_to_avisos
 
                     await login(page, settings)
                     await navigate_to_avisos(page)
-                    all_leads = await scrape_pendiente_leads(page)
+                    all_leads = await scrape_pendiente_leads(page, limit=args.limit)
                 total = len(all_leads)
 
                 # Dedup: only send leads we have not already pushed. A lead stays

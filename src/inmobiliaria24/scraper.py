@@ -540,13 +540,16 @@ async def send_to_webhook(leads: list[dict], webhook_url: str = "") -> None:
 # ---------------------------------------------------------------------------
 
 
-async def scrape_pendiente_leads(page: Page) -> list[dict]:
+async def scrape_pendiente_leads(page: Page, *, limit: int = 0) -> list[dict]:
     """Extract all Pendiente leads (with full detail) from the Interesados inbox.
 
     Returns all extracted leads (before dedup). The caller handles dedup via
     StateStore and is responsible for sending only the new leads to the webhook —
     this keeps the scraper from re-posting a lead that stays Pendiente on the
     portal across runs.
+
+    If ``limit`` > 0, only the first ``limit`` Pendiente leads are detail-scraped
+    (useful for a controlled single-lead test run).
     Includes session staleness detection and screenshot capture on failures.
     """
     # Step 1: Get Pendiente leads from the inbox.
@@ -562,6 +565,13 @@ async def scrape_pendiente_leads(page: Page) -> list[dict]:
     if not pendiente_leads:
         logger.warning("No Pendiente leads found — nothing to extract")
         return []
+
+    if limit and limit > 0 and len(pendiente_leads) > limit:
+        logger.info(
+            "Limiting to first {} of {} Pendiente lead(s)",
+            limit, len(pendiente_leads),
+        )
+        pendiente_leads = pendiente_leads[:limit]
 
     results: list[dict] = []
 
