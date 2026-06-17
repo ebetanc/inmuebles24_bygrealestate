@@ -404,7 +404,15 @@ _EXTRACT_LEAD_DETAIL_JS = """
     );
     if (propMatch) property = propMatch[0].trim();
 
+    // EasyBroker advertiser code, e.g. "Cód. del anunciante: EB-VK1013".
+    // Used to resolve the owner agent via EasyBroker tags (owner-first routing).
+    // Empty if the page does not expose it -> downstream routes to manager.
+    let propertyPublicId = '';
+    const ebMatch = text.match(/EB-[A-Z0-9]{4,}/i);
+    if (ebMatch) propertyPublicId = ebMatch[0].toUpperCase();
+
     return { name, email, phone, message, listing_id: listingId, status, property,
+             property_public_id: propertyPublicId,
              page_text: text.substring(0, 1500) };
 }
 """
