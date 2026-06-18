@@ -17,7 +17,10 @@ The client wants:
 2. Progress recorded step-by-step in the database (questions about the sale process).
 3. A weekly report to the gerente.
 
-Applies to both **venta** and **renta** leads (`conversations.listing_type`).
+Applies to both **venta** and **renta** leads. NOTE: `conversations` has no
+`listing_type` column — the operation (venta/renta) is sourced best-effort from
+`properties_cache.payload->>'operation_type'` via `conversations.current_property`,
+and omitted from the message if absent.
 
 ## What already exists (reuse, do not rebuild)
 
@@ -32,8 +35,15 @@ From migrations `0009_supabase_crm.sql` and `0011_owner_routing.sql`:
 - `agent_metrics` view — per-agent leads volume, avg response time, outcomes, SLA breaches.
 - `sla_breaches` view — leads with no reply > 15 min.
 - `conversations.assigned_agent_id` / `owner_agent_id` — who owns the lead.
-- `agents.whatsapp` — agent phone numbers.
-- Evolution API send + WF4 IA conversation node pattern (free-text interpretation).
+- `agents.whatsapp_number` — agent phone numbers (plain digits, no `+`, Evolution format).
+- `classify_sender(phone)` — **already used by WF1**; returns `is_agent`, `agent_id`,
+  `agent_name`. WF1 already routes agent inbound messages; non-TOMO agent messages
+  currently hit `route: 'ignore'` (reason `agent_non_claim_message`). The follow-up
+  reply path reuses this — no new sender detection needed.
+- Evolution API send (HTTP, `n8n-nodes-base.httpRequest` v4.2, env `EVOLUTION_API_URL`/
+  `EVOLUTION_INSTANCE`/`EVOLUTION_API_KEY`).
+- OpenRouter IA call pattern from WF4 (HTTP POST `https://openrouter.ai/api/v1/chat/completions`,
+  `Authorization: Bearer $env.OPENROUTER_API_KEY`, model `$env.OPENROUTER_MODEL`).
 
 ## Decisions (locked)
 
@@ -95,8 +105,10 @@ weekly report. RLS read-only; writes via service_role.
 
 ### WF15 — Agent Reply Handler
 
-- **Router change (WF1):** if inbound `from_phone` ∈ `agents.whatsapp` → **agent branch**
-  (not the lead conversation branch).
+- **Router change (WF1):** WF1 already classifies agents via `classify_sender`. In the
+  `Classify & Route` code node, the agent non-TOMO branch currently returns
+  `route: 'ignore'`. Change it to `route: 'agent_followup_reply'`, add a switch output,
+  and add a `Call WF15` executeWorkflow node.
 - Match reply to that agent's most-recent `pending` followup
   (`ORDER BY prompt_sent_at DESC LIMIT 1`).
 - IA node interprets free text → `{stage, note, next_action, next_action_at}`.
