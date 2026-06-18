@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Seguimiento de Leads · Propuesta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ivory:#f6f1e7;
+    --ivory-2:#efe7d7;
+    --ink:#23271f;
+    --forest:#1f3d2f;
+    --forest-2:#2c5440;
+    --gold:#bc8a3c;
+    --gold-soft:#e7c982;
+    --terra:#b9522f;
+    --paper:#fffdf8;
+    --line:rgba(35,39,31,.14);
+    --shadow:0 18px 40px -22px rgba(31,61,47,.55);
+    --r:18px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:"Hanken Grotesk",sans-serif;
+    background:var(--ivory);
+    color:var(--ink);
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;
+    background:
+      radial-gradient(900px 500px at 85% -8%, rgba(188,138,60,.14), transparent 60%),
+      radial-gradient(800px 600px at -10% 110%, rgba(31,61,47,.10), transparent 55%);
+  }
+  /* grain */
+  body::after{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.04;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .wrap{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:0 22px}
+  .display{font-family:"Fraunces",serif;font-weight:600;line-height:1.04;letter-spacing:-.01em}
+
+  /* ---------- HERO ---------- */
+  header{padding:64px 0 30px;text-align:center}
+  .kicker{
+    display:inline-flex;align-items:center;gap:9px;
+    font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;font-weight:700;
+    color:var(--forest);background:var(--paper);border:1px solid var(--line);
+    padding:8px 16px;border-radius:999px;box-shadow:var(--shadow);
+  }
+  .kicker .dot{width:7px;height:7px;border-radius:50%;background:var(--terra);box-shadow:0 0 0 4px rgba(185,82,47,.18)}
+  h1{font-size:clamp(2.5rem,7vw,4.4rem);margin:22px 0 14px;color:var(--forest)}
+  h1 em{font-style:italic;color:var(--gold)}
+  .lede{max-width:600px;margin:0 auto;font-size:clamp(1.02rem,2.4vw,1.18rem);color:#4a4d42}
+  .scroll-hint{margin-top:34px;font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;color:#8a8576;display:flex;flex-direction:column;align-items:center;gap:8px}
+  .scroll-hint span{display:block;width:1px;height:34px;background:linear-gradient(var(--gold),transparent);animation:drop 1.8s ease-in-out infinite}
+  @keyframes drop{0%,100%{transform:scaleY(.4);opacity:.3}50%{transform:scaleY(1);opacity:1}}
+
+  section{padding:46px 0}
+  .eyebrow{font-family:"Fraunces",serif;font-style:italic;color:var(--terra);font-size:1.05rem;margin-bottom:6px}
+  .h2{font-size:clamp(1.7rem,4.5vw,2.5rem);color:var(--forest);margin-bottom:14px}
+  .sub{max-width:640px;color:#55584c;font-size:1.02rem}
+
+  /* ---------- PROBLEM/SOLUTION ---------- */
+  .ps{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:26px}
+  .card{
+    background:var(--paper);border:1px solid var(--line);border-radius:var(--r);
+    padding:24px;box-shadow:var(--shadow);
+  }
+  .card .tag{font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+  .card.bad .tag{color:var(--terra)} .card.good .tag{color:var(--forest-2)}
+  .card h3{font-family:"Fraunces",serif;font-size:1.35rem;margin:8px 0 8px;color:var(--ink)}
+  .card p{color:#55584c;font-size:.98rem}
+
+  /* ---------- PIPELINE ---------- */
+  .pipe-stage-bar{display:flex;flex-wrap:wrap;gap:10px;margin:30px 0 22px}
+  .chip{
+    cursor:pointer;border:1px solid var(--line);background:var(--paper);
+    border-radius:999px;padding:11px 17px;font-weight:600;font-size:.95rem;color:var(--ink);
+    display:flex;align-items:center;gap:9px;transition:.25s;position:relative;
+  }
+  .chip .num{
+    width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+    font-size:.72rem;font-weight:700;color:#fff;background:var(--forest);transition:.25s;
+  }
+  .chip:hover{transform:translateY(-2px)}
+  .chip.active{background:var(--forest);color:#fff;border-color:var(--forest);box-shadow:0 12px 26px -14px rgba(31,61,47,.8)}
+  .chip.active .num{background:var(--gold);color:var(--forest)}
+  .chip.won.active{background:var(--forest-2)} .chip.lost.active{background:var(--terra);border-color:var(--terra)}
+  .chip.lost.active .num{background:#fff;color:var(--terra)}
+
+  .detail{
+    background:var(--paper);border:1px solid var(--line);border-radius:var(--r);
+    box-shadow:var(--shadow);overflow:hidden;
+  }
+  .detail-top{display:flex;align-items:center;gap:16px;padding:22px 24px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(231,201,130,.16),transparent)}
+  .badge{
+    flex:none;width:54px;height:54px;border-radius:14px;display:grid;place-items:center;
+    font-family:"Fraunces",serif;font-size:1.5rem;font-weight:700;color:#fff;background:var(--forest);
+  }
+  .detail-top h3{font-family:"Fraunces",serif;font-size:1.5rem;color:var(--forest);line-height:1.1}
+  .detail-top .meaning{color:#55584c;font-size:.96rem;margin-top:2px}
+  .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  .detail-grid > div{padding:20px 24px}
+  .detail-grid > div:first-child{border-right:1px solid var(--line)}
+  .detail-grid h4{font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:7px}
+  .detail-grid p{font-size:.97rem;color:#3f4238}
+  .ask-eg{font-style:italic;color:var(--forest-2)}
+
+  /* ---------- WHATSAPP MOCKUP ---------- */
+  .demo{display:grid;grid-template-columns:1fr 1.05fr;gap:30px;align-items:center;margin-top:26px}
+  .toggle{display:inline-flex;background:var(--ivory-2);border:1px solid var(--line);border-radius:999px;padding:4px;margin-bottom:18px}
+  .toggle button{border:0;background:transparent;font-family:inherit;font-weight:600;font-size:.9rem;color:#6a6c5f;padding:8px 18px;border-radius:999px;cursor:pointer;transition:.2s}
+  .toggle button.on{background:var(--forest);color:#fff;box-shadow:var(--shadow)}
+  .phone{
+    width:300px;max-width:100%;margin:0 auto;background:#0b140f;border-radius:34px;padding:12px;
+    box-shadow:0 40px 70px -30px rgba(11,20,15,.7), 0 0 0 1px rgba(255,255,255,.04) inset;
+  }
+  .screen{background:#0d1c14;border-radius:24px;overflow:hidden;height:540px;display:flex;flex-direction:column;
+    background-image:radial-gradient(circle at 20% 12%, rgba(188,138,60,.12),transparent 40%);}
+  .wa-top{background:#15291d;color:#eafff2;padding:14px 16px;display:flex;align-items:center;gap:11px}
+  .wa-av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--terra));display:grid;place-items:center;font-weight:700;color:#fff;font-size:.85rem}
+  .wa-top b{font-size:.92rem;display:block}.wa-top small{font-size:.7rem;color:#7fb89a}
+  .wa-body{flex:1;padding:16px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+  .wa-body::-webkit-scrollbar{width:0}
+  .bub{max-width:82%;padding:9px 12px;border-radius:14px;font-size:.86rem;line-height:1.45;position:relative;opacity:0;transform:translateY(8px);animation:pop .4s forwards}
+  .bub.in{background:#21382a;color:#eafff2;align-self:flex-start;border-bottom-left-radius:4px}
+  .bub.out{background:#caf0c0;color:#16301a;align-self:flex-end;border-bottom-right-radius:4px}
+  .bub small{display:block;font-size:.62rem;opacity:.6;margin-top:3px;text-align:right}
+  @keyframes pop{to{opacity:1;transform:none}}
+  .replay{margin-top:14px;display:inline-flex;align-items:center;gap:8px;cursor:pointer;border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:9px 16px;font-weight:600;font-size:.85rem;color:var(--forest)}
+  .demo-copy h3{font-family:"Fraunces",serif;font-size:1.6rem;color:var(--forest);margin-bottom:10px}
+  .demo-copy ol{margin:14px 0 0;padding-left:18px;color:#4a4d42;font-size:.97rem}
+  .demo-copy ol li{margin-bottom:9px}
+  .demo-copy b{color:var(--ink)}
+
+  /* ---------- CADENCE ---------- */
+  .cad{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:24px}
+  .cad .card{display:flex;gap:14px;align-items:flex-start;padding:18px 20px}
+  .cad .ic{flex:none;width:42px;height:42px;border-radius:12px;background:var(--ivory-2);display:grid;place-items:center;font-size:1.3rem}
+  .cad h4{font-family:"Fraunces",serif;font-size:1.1rem;color:var(--forest);margin-bottom:2px}
+  .cad p{font-size:.92rem;color:#55584c}
+
+  /* ---------- REPORT ---------- */
+  .report{margin-top:24px;background:var(--forest);color:#eaf3ec;border-radius:var(--r);padding:30px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .report::before{content:"";position:absolute;inset:0;opacity:.4;background:radial-gradient(500px 300px at 100% 0,rgba(231,201,130,.25),transparent 55%)}
+  .report > *{position:relative}
+  .report .eyebrow{color:var(--gold-soft)}
+  .report h3{font-family:"Fraunces",serif;font-size:1.5rem;margin-bottom:16px;color:#fff}
+  .rep-line{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dashed rgba(255,255,255,.16);font-size:.96rem}
+  .rep-line b{color:var(--gold-soft)}
+
+  /* ---------- DECISION ---------- */
+  .decide{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:30px;margin-top:24px}
+  .stage-list{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 22px}
+  .pill{display:flex;align-items:center;gap:8px;background:var(--ivory);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-weight:600;font-size:.92rem}
+  .pill .n{color:var(--gold);font-family:"Fraunces",serif;font-weight:700}
+  .optional{border-top:1px solid var(--line);padding-top:20px;margin-top:6px}
+  .opt-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+  .opt{background:var(--ivory);border:1px dashed var(--gold);border-radius:12px;padding:16px}
+  .opt b{font-family:"Fraunces",serif;color:var(--forest);font-size:1.05rem;display:block;margin-bottom:4px}
+  .opt span{font-size:.88rem;color:#55584c}
+  .cta{margin-top:24px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:linear-gradient(120deg,var(--forest),var(--forest-2));color:#fff;border-radius:14px;padding:20px 24px}
+  .cta b{font-family:"Fraunces",serif;font-size:1.15rem}
+  .cta p{font-size:.92rem;color:#cfe0d4;margin-top:2px}
+
+  footer{text-align:center;padding:40px 0 60px;color:#8a8576;font-size:.82rem}
+
+  /* reveal on scroll */
+  .reveal{opacity:0;transform:translateY(22px);transition:.7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.show{opacity:1;transform:none}
+
+  @media(max-width:760px){
+    .ps,.detail-grid,.demo,.cad,.opt-cards{grid-template-columns:1fr}
+    .detail-grid > div:first-child{border-right:0;border-bottom:1px solid var(--line)}
+    .demo{gap:22px}
+    .phone{order:-1}
+  }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <div class="kicker"><span class="dot"></span> Propuesta · Seguimiento de Ventas</div>
+  <h1 class="display">Que ningún lead<br><em>se enfríe</em> otra vez</h1>
+  <p class="lede">Un asistente por WhatsApp le pregunta a cada asesor cómo va con sus leads, registra el avance solo, y te manda un reporte cada semana. Así se vería.</p>
+  <div class="scroll-hint">Desliza para ver<span></span></div>
+</header>
+
+<!-- PROBLEM / SOLUTION -->
+<section class="wrap reveal">
+  <div class="eyebrow">Por qué</div>
+  <div class="h2 display">Hoy no hay forma de saber en qué va cada venta</div>
+  <div class="ps">
+    <div class="card bad">
+      <div class="tag">● Ahora</div>
+      <h3>El lead se asigna… y silencio</h3>
+      <p>Le pasamos el lead al asesor, pero nadie registra si lo llamó, si agendó visita o si ya se perdió. No hay seguimiento ni visibilidad.</p>
+    </div>
+    <div class="card good">
+      <div class="tag">● Con esto</div>
+      <h3>El bot pregunta y anota por ti</h3>
+      <p>El asistente le escribe al asesor por WhatsApp, entiende su respuesta en lenguaje normal y mueve el lead de etapa automáticamente. Tú lo ves todo.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PIPELINE -->
+<section class="wrap reveal">
+  <div class="eyebrow">El recorrido de un lead</div>
+  <div class="h2 display">Las 7 etapas de la venta</div>
+  <p class="sub">Toca cada etapa para ver qué significa y cuándo el bot le pregunta al asesor. Aplica igual para <b>venta</b> y <b>renta</b>.</p>
+
+  <div class="pipe-stage-bar" id="chips"></div>
+  <div class="detail" id="detail"></div>
+</section>
+
+<!-- WHATSAPP DEMO -->
+<section class="wrap reveal">
+  <div class="eyebrow">Así lo vive el asesor</div>
+  <div class="h2 display">Una conversación real</div>
+  <p class="sub">El asesor no aprende nada nuevo: solo responde un WhatsApp como siempre. El bot hace el resto.</p>
+  <div class="toggle" id="toggle">
+    <button data-mode="venta" class="on">🏠 Venta</button>
+    <button data-mode="renta">🔑 Renta</button>
+  </div>
+  <div class="demo">
+    <div class="phone">
+      <div class="screen">
+        <div class="wa-top">
+          <div class="wa-av">24</div>
+          <div><b>Asistente Inmobiliaria24</b><small>en línea</small></div>
+        </div>
+        <div class="wa-body" id="chat"></div>
+      </div>
+    </div>
+    <div class="demo-copy">
+      <h3>3 pasos, cero esfuerzo</h3>
+      <ol>
+        <li><b>El bot pregunta</b> por un lead a la vez, con el nombre y la propiedad.</li>
+        <li><b>El asesor contesta normal</b> — "ya le marqué, agendamos el viernes".</li>
+        <li><b>El bot lo entiende</b>, mueve la etapa y confirma. Queda registrado.</li>
+      </ol>
+      <div class="replay" id="replay">↻ Volver a reproducir</div>
+    </div>
+  </div>
+</section>
+
+<!-- CADENCE -->
+<section class="wrap reveal">
+  <div class="eyebrow">Sin ser molesto</div>
+  <div class="h2 display">¿Cada cuándo pregunta?</div>
+  <p class="sub">El ritmo se ajusta a la etapa: insiste cuando hace falta, deja en paz cuando ya hay avance. Solo en horario laboral.</p>
+  <div class="cad">
+    <div class="card"><div class="ic">🆕</div><div><h4>Lead nuevo sin contactar</h4><p>Recordatorio a las 2 horas, y de nuevo al día siguiente.</p></div></div>
+    <div class="card"><div class="ic">📞</div><div><h4>Ya en proceso</h4><p>Si no hay avance en 2–3 días, pregunta "¿cómo va?".</p></div></div>
+    <div class="card"><div class="ic">📅</div><div><h4>Visita agendada</h4><p>Recordatorio el día de la cita para saber cómo salió.</p></div></div>
+    <div class="card"><div class="ic">✅</div><div><h4>Lead cerrado</h4><p>Sale del seguimiento. Ya no se le pregunta al asesor.</p></div></div>
+  </div>
+</section>
+
+<!-- REPORT -->
+<section class="wrap reveal">
+  <div class="eyebrow">Para ti, cada lunes</div>
+  <div class="h2 display">Tu reporte semanal</div>
+  <p class="sub">Un resumen claro llega a tu WhatsApp. Sin entrar a ningún sistema.</p>
+  <div class="report">
+    <div class="eyebrow">📊 Reporte semanal de seguimiento</div>
+    <h3>Resumen de la semana</h3>
+    <div class="rep-line"><span>Leads activos en proceso</span><b>18</b></div>
+    <div class="rep-line"><span>Visitas agendadas</span><b>5</b></div>
+    <div class="rep-line"><span>Cerradas (ganadas)</span><b>2</b></div>
+    <div class="rep-line"><span>Asesores con leads sin responder</span><b>1</b></div>
+    <div class="rep-line" style="border:0"><span>Leads estancados (sin avance)</span><b>3</b></div>
+  </div>
+</section>
+
+<!-- DECISION -->
+<section class="wrap reveal">
+  <div class="eyebrow">Tu decisión</div>
+  <div class="h2 display">¿Te parecen bien estas etapas?</div>
+  <p class="sub">Esta es la propuesta. Puedes <b>aceptarla tal cual</b>, <b>quitar</b> la que no uses o <b>agregar</b> alguna. Lo dejamos cerrado antes de arrancar.</p>
+  <div class="decide">
+    <div class="stage-list" id="pills"></div>
+    <div class="optional">
+      <h4 style="font-family:'Fraunces',serif;color:var(--terra);font-size:1.1rem">Opcionales que podemos agregar</h4>
+      <p class="sub" style="margin-top:4px">Si en BYG manejan estos pasos, los sumamos:</p>
+      <div class="opt-cards">
+        <div class="opt"><b>Apartado</b><span>Renta: el cliente dejó depósito / apartó la propiedad.</span></div>
+        <div class="opt"><b>Contrato / Firma</b><span>Entre la oferta y el cierre: en proceso de papeleo y firma.</span></div>
+        <div class="opt"><b>Documentación</b><span>Recopilando comprobantes, crédito o requisitos.</span></div>
+      </div>
+    </div>
+    <div class="cta">
+      <div style="flex:1;min-width:220px">
+        <b>¿Lista para arrancar?</b>
+        <p>Respóndeme por WhatsApp: "acepto las 7" — o dime cuál quitar / agregar.</p>
+      </div>
+      <div style="font-family:'Fraunces',serif;font-size:1.8rem;color:var(--gold-soft)">✓</div>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap">Inmobiliaria24 · BYG Real Estate — Propuesta de seguimiento de leads · {fecha}</footer>
+
+<script>
+const STAGES=[
+  {n:1,key:'new',name:'Nuevo',cls:'',mean:'El lead acaba de asignarse al asesor. Aún no lo contacta.',ask:'A las 2 horas y al día siguiente, si no hay contacto.',eg:'"Tienes un lead nuevo: Juan por la casa en Lomas. ¿Ya lo contactaste?"'},
+  {n:2,key:'contacted',name:'Contactado',cls:'',mean:'El asesor ya le marcó o le escribió. Hay primer contacto.',ask:'Si no avanza en 2–3 días.',eg:'"¿Cómo va Juan? ¿Qué sigue con él?"'},
+  {n:3,key:'qualified',name:'Calificado',cls:'',mean:'Es un lead serio: tiene interés y presupuesto reales.',ask:'Si se queda estancado en esta etapa.',eg:'"¿Ya definieron presupuesto o fecha para avanzar?"'},
+  {n:4,key:'visit',name:'Visita agendada',cls:'',mean:'Hay una cita para ver la propiedad.',ask:'El mismo día de la cita.',eg:'"Hoy es la visita con Juan. ¿Sigue en pie? Avísame cómo salió."'},
+  {n:5,key:'offer',name:'Oferta',cls:'',mean:'El cliente hizo una oferta o están negociando precio.',ask:'Si no hay movimiento en un par de días.',eg:'"¿En qué quedó la oferta de Juan?"'},
+  {n:6,key:'won',name:'Cerrado · ganado',cls:'won',mean:'¡Se vendió o se rentó! Operación cerrada con éxito.',ask:'Ya no se pregunta. El lead sale del seguimiento.',eg:'🎉 Registrado como venta cerrada.'},
+  {n:7,key:'lost',name:'Cerrado · perdido',cls:'lost',mean:'No procedió: sin interés, compró otra, o se cayó.',ask:'Ya no se pregunta. El lead sale del seguimiento.',eg:'Registrado como perdido, con el motivo.'}
+];
+
+const chips=document.getElementById('chips');
+const detail=document.getElementById('detail');
+STAGES.forEach((s,i)=>{
+  const c=document.createElement('button');
+  c.className='chip '+s.cls+(i===0?' active':'');
+  c.innerHTML='<span class="num">'+s.n+'</span>'+s.name;
+  c.onclick=()=>{document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');render(s);};
+  chips.appendChild(c);
+});
+function render(s){
+  detail.innerHTML=
+  '<div class="detail-top"><div class="badge" style="background:'+(s.key==='lost'?'var(--terra)':s.key==='won'?'var(--forest-2)':'var(--forest)')+'">'+s.n+'</div>'+
+  '<div><h3>'+s.name+'</h3><div class="meaning">'+s.mean+'</div></div></div>'+
+  '<div class="detail-grid"><div><h4>Cuándo pregunta el bot</h4><p>'+s.ask+'</p></div>'+
+  '<div><h4>Ejemplo de mensaje</h4><p class="ask-eg">'+s.eg+'</p></div></div>';
+}
+render(STAGES[0]);
+
+// pills in decision
+const pills=document.getElementById('pills');
+STAGES.forEach(s=>{const p=document.createElement('div');p.className='pill';p.innerHTML='<span class="n">'+s.n+'</span>'+s.name;pills.appendChild(p);});
+
+// WhatsApp demo
+const SCRIPTS={
+  venta:[
+    {t:'in',x:'🔔 Tienes un lead nuevo: <b>Juan Pérez</b> por la casa en Lomas (venta). ¿Ya lo contactaste? ¿Cuál es el próximo paso?',d:'09:02'},
+    {t:'out',x:'Ya le marqué, le interesó. Agendamos visita el viernes 4pm',d:'09:14'},
+    {t:'in',x:'✅ Anotado: <b>visita agendada</b> para el viernes. Te recuerdo ese día. Si algo cambia, escríbeme.',d:'09:14'}
+  ],
+  renta:[
+    {t:'in',x:'🔔 Tienes un lead nuevo: <b>Ana López</b> por el depa en Del Valle (renta). ¿Ya la contactaste?',d:'10:20'},
+    {t:'out',x:'Sí, ya dejó apartado. Falta que mande comprobantes',d:'10:31'},
+    {t:'in',x:'✅ Anotado: avanza a <b>documentación</b>. Te recuerdo en 2 días si no hay novedad.',d:'10:31'}
+  ]
+};
+let mode='venta';
+const chat=document.getElementById('chat');
+function play(){
+  chat.innerHTML='';
+  SCRIPTS[mode].forEach((m,i)=>{
+    const b=document.createElement('div');
+    b.className='bub '+m.t;
+    b.style.animationDelay=(i*1.1+.3)+'s';
+    b.innerHTML=m.x+'<small>'+m.d+'</small>';
+    chat.appendChild(b);
+  });
+}
+document.querySelectorAll('#toggle button').forEach(btn=>{
+  btn.onclick=()=>{document.querySelectorAll('#toggle button').forEach(x=>x.classList.remove('on'));btn.classList.add('on');mode=btn.dataset.mode;play();};
+});
+document.getElementById('replay').onclick=play;
+
+// scroll reveal + autoplay demo when visible
+const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('show');if(e.target.querySelector('#chat'))play();}})},{threshold:.18});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+// date
+document.querySelector('footer').innerHTML=document.querySelector('footer').innerHTML.replace('{fecha}',new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long'}));
+</script>
+</body>
+</html>
