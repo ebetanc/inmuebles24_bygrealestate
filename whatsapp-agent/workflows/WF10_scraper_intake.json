@@ -214,10 +214,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Prepare data for WF3a auction call.\nconst lead = $('Route Decision').first().json;\nconst conv = $input.first().json;\n\n// Build cache payload from scraper data\nconst cachePayload = {\n  title: lead.property_title,\n  price: lead.property_price,\n  location: lead.property_address,\n  operation_type: lead.listing_type,\n  source: 'inmuebles24_scraper'\n};\n\nreturn [{\n  json: {\n    // For WF3a\n    conversation_id: conv.conversation_id,\n    lead_phone: conv.lead_phone,\n    lead_name: conv.lead_name || lead.name,\n    property_id: lead.listing_id || 'unknown',\n    property_title: lead.property_title,\n    property_price: lead.property_price,\n    assigned_agent_id: null,\n    // For caching\n    cache_property_id: lead.listing_id || 'unknown',\n    cache_payload: cachePayload\n  }\n}];"
+        "jsCode": "// Owner-first routing: build cache payload + resolver input.\n// Carries property_public_id (EB code from scraper) so WF12 can resolve\n// the per-property owner agent. listing_id is the inmuebles24 id.\nconst lead = $('Route Decision').first().json;\nconst conv = $input.first().json;\n\nconst cachePayload = {\n  title: lead.property_title,\n  price: lead.property_price,\n  location: lead.property_address,\n  operation_type: lead.listing_type,\n  source: 'inmuebles24_scraper'\n};\n\nreturn [{\n  json: {\n    // Identity for resolver + downstream\n    conversation_id: conv.conversation_id,\n    property_public_id: lead.property_public_id || null,\n    // Lead + property context (passed to WF13)\n    lead_phone: conv.lead_phone,\n    lead_name: conv.lead_name || lead.name,\n    property_id: lead.listing_id || 'unknown',\n    property_title: lead.property_title,\n    property_price: lead.property_price,\n    // For caching\n    cache_property_id: lead.listing_id || 'unknown',\n    cache_payload: cachePayload\n  }\n}];"
       },
       "id": "b1b2c3d4-0011-4000-8000-000000000011",
-      "name": "Prepare Auction Data",
+      "name": "Prepare Routing Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1640, 300]
@@ -234,7 +234,7 @@
       "name": "Cache Property",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1860, 220],
+      "position": [1860, 200],
       "credentials": {
         "postgres": {
           "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
@@ -246,14 +246,112 @@
     {
       "parameters": {
         "source": "database",
-        "workflowId": "={{ $env.WF3A_WORKFLOW_ID }}",
+        "workflowId": "={{ $env.WF12_WORKFLOW_ID }}",
         "options": {}
       },
       "id": "b1b2c3d4-0013-4000-8000-000000000013",
-      "name": "Call WF3a: TOMO Auction",
+      "name": "Call WF12: Owner Resolver",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1860, 380]
+      "position": [1860, 380],
+      "notes": "Resolves owner agent from EasyBroker tags.\nInput: { property_public_id, conversation_id } (passthrough).\nOutput: { owner_agent_id, owner_name, owner_number, resolved }.\nSet env WF12_WORKFLOW_ID to the imported WF12 id (w7yJr7naWoxPq6Pw)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "owner-resolved",
+              "leftValue": "={{ $json.resolved }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1b2c3d4-0017-4000-8000-000000000017",
+      "name": "Owner Resolved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2080, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Owner resolved -> build the WF13 directed-notify payload by merging\n// the resolver output (owner_*) with the lead/property context.\nconst r = $('Prepare Routing Data').first().json;\nconst o = $input.first().json;\n\nreturn [{\n  json: {\n    conversation_id: r.conversation_id,\n    lead_phone: r.lead_phone,\n    lead_name: r.lead_name,\n    property_id: r.property_public_id || r.property_id,\n    property_title: r.property_title,\n    property_price: r.property_price,\n    owner_agent_id: o.owner_agent_id,\n    owner_name: o.owner_name,\n    owner_number: o.owner_number\n  }\n}];"
+      },
+      "id": "b1b2c3d4-0018-4000-8000-000000000018",
+      "name": "Prepare WF13 Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2300, 280]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "={{ $env.WF13_WORKFLOW_ID }}",
+        "options": {}
+      },
+      "id": "b1b2c3d4-0019-4000-8000-000000000019",
+      "name": "Call WF13: Owner Notify",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [2520, 280],
+      "notes": "NIVEL owner. Creates a 2-min owner-scoped auction and DMs the owner a\nTOMO claim code (owner claims via WF3b). On no-claim, WF3c escalates to\nthe guard auction. Set env WF13_WORKFLOW_ID to the imported WF13 id."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Owner unresolvable (no tag / lookup failed / agent w/o WhatsApp):\n-- route directly to the manager tier.\nUPDATE conversations\nSET routing_tier = 'manager', tier_notified_at = NOW()\nWHERE conversation_id = $1::uuid\nRETURNING conversation_id;",
+        "options": {
+          "queryReplacement": "={{ $('Prepare Routing Data').first().json.conversation_id }}"
+        }
+      },
+      "id": "b1b2c3d4-0020-4000-8000-000000000020",
+      "name": "Set Manager Tier",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2300, 480],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the manager alert for an unresolved (ownerless) lead.\nconst r = $('Prepare Routing Data').first().json;\n\nconst text = [\n  `\\u26A0\\uFE0F Lead sin asesor asignado`,\n  `\\u{1F3E0} ${r.property_title || 'Propiedad'} \\u2014 ${r.property_price || 'Precio por confirmar'}`,\n  `\\u{1F464} ${r.lead_name || 'Sin nombre'} (${r.lead_phone || 's/n'})`,\n  ``,\n  `No se encontro owner en EasyBroker (sin tag o lookup fallido). Asignalo manualmente.`\n].join('\\n');\n\nreturn [{\n  json: {\n    text,\n    conversation_id: r.conversation_id\n  }\n}];"
+      },
+      "id": "b1b2c3d4-0021-4000-8000-000000000021",
+      "name": "Prepare Manager Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2520, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $env.MANAGER_PHONE }}\",\n  \"text\": {{ JSON.stringify($json.text) }}\n}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "b1b2c3d4-0022-4000-8000-000000000022",
+      "name": "Notify Manager (Unresolved)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2740, 480],
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -267,7 +365,7 @@
       "name": "Create Night Conversation",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1420, 540],
+      "position": [1420, 600],
       "credentials": {
         "postgres": {
           "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
@@ -287,7 +385,7 @@
       "name": "Insert Night Queue",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1640, 540],
+      "position": [1640, 600],
       "credentials": {
         "postgres": {
           "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
@@ -301,7 +399,7 @@
       "name": "End (Skip/Fallback)",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1420, 720]
+      "position": [1420, 760]
     }
   ],
   "connections": {
@@ -418,14 +516,14 @@
       "main": [
         [
           {
-            "node": "Prepare Auction Data",
+            "node": "Prepare Routing Data",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Prepare Auction Data": {
+    "Prepare Routing Data": {
       "main": [
         [
           {
@@ -434,7 +532,69 @@
             "index": 0
           },
           {
-            "node": "Call WF3a: TOMO Auction",
+            "node": "Call WF12: Owner Resolver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF12: Owner Resolver": {
+      "main": [
+        [
+          {
+            "node": "Owner Resolved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Owner Resolved?": {
+      "main": [
+        [
+          {
+            "node": "Prepare WF13 Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Manager Tier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare WF13 Payload": {
+      "main": [
+        [
+          {
+            "node": "Call WF13: Owner Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Manager Tier": {
+      "main": [
+        [
+          {
+            "node": "Prepare Manager Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Manager Alert": {
+      "main": [
+        [
+          {
+            "node": "Notify Manager (Unresolved)",
             "type": "main",
             "index": 0
           }
