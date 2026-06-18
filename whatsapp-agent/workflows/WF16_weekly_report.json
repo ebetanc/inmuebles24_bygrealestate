@@ -25,7 +25,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Format the weekly report text for the gerente.\nconst r = ($input.first().json.report) || {};\nconst pl = r.pipeline || {};\nconst stages = ['new','contacted','qualified','visit_scheduled','offer'];\nconst labels = { new:'Nuevos', contacted:'Contactados', qualified:'Calificados', visit_scheduled:'Con visita', offer:'Con oferta' };\nconst plLines = stages.filter(s=>pl[s]).map(s=>`  \\u2022 ${labels[s]}: ${pl[s]}`).join('\\n') || '  (sin leads activos)';\nconst agents = r.agents || [];\nconst agLines = agents.length\n  ? agents.map(a=>`  \\u2022 ${a.name}: ${a.answered} resp, ${a.pending} pend, ${a.expired} sin responder`).join('\\n')\n  : '  (todos al d\\u00eda)';\nconst text = [\n  `\\u{1F4CA} *Reporte semanal de seguimiento*`,\n  ``,\n  `*Pipeline activo:*`,\n  plLines,\n  ``,\n  `*Esta semana:* ${r.visits_7d||0} visitas agendadas, ${r.won_7d||0} cerradas, ${r.lost_7d||0} perdidas`,\n  ``,\n  `*Respuesta de asesores:*`,\n  agLines\n].join('\\n');\nreturn [{ json: { number: $env.MANAGER_PHONE, text } }];"
+        "jsCode": "// Format the weekly report text for the gerente.\nconst r = ($input.first().json.report) || {};\nconst pl = r.pipeline || {};\nconst stages = ['new','contacted','qualified','visit_scheduled','offer'];\nconst labels = { new:'Nuevos', contacted:'Contactados', qualified:'Calificados', visit_scheduled:'Con visita', offer:'Con oferta' };\nconst plLines = stages.filter(s=>pl[s]).map(s=>`  \\u2022 ${labels[s]}: ${pl[s]}`).join('\\n') || '  (sin leads activos)';\nconst agents = r.agents || [];\nconst agLines = agents.length\n  ? agents.map(a=>`  \\u2022 ${a.name}: ${a.answered} resp, ${a.pending} pend, ${a.expired} sin responder`).join('\\n')\n  : '  (todos al d\\u00eda)';\nconst text = [\n  `\\u{1F4CA} *Reporte semanal de seguimiento*`,\n  ``,\n  `*Pipeline activo:*`,\n  plLines,\n  ``,\n  `*Esta semana:* ${r.visits_7d||0} visitas agendadas, ${r.won_7d||0} cerradas, ${r.lost_7d||0} perdidas`,\n  ``,\n  `*Respuesta de asesores:*`,\n  agLines\n].join('\\n');\nreturn [{ json: { text } }];"
       },
       "id": "16161616-0003-4000-8000-000000000003",
       "name": "Build Report",
@@ -41,7 +41,7 @@
         "headerParameters": { "parameters": [ { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" } ] },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $json.number }}\",\n  \"text\": {{ JSON.stringify($json.text) }}\n}",
+        "jsonBody": "={\n  \"number\": \"{{ $env.MANAGER_PHONE }}\",\n  \"text\": {{ JSON.stringify($json.text) }}\n}",
         "options": { "timeout": 15000 }
       },
       "id": "16161616-0004-4000-8000-000000000004",

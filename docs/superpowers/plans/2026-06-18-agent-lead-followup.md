@@ -897,3 +897,45 @@ Column `agents.whatsapp_number` (not `whatsapp`) used throughout. No `conversati
 **Placeholders:** Only intentional `REPLACE_WITH_POSTGRES_CREDENTIAL_ID` (matches existing
 workflow convention, resolved at import per Task 8). No TODO/TBD.
 ```
+
+---
+
+## Post-Implementation Notes (executed 2026-06-18)
+
+Built on branch `feature/agent-followup-phase10`. Migration 0012 applied to **production**
+(per user decision; additive only). All DB-touching queries were live-verified against the
+empty prod DB inside rolled-back transactions.
+
+### Fixes applied after the final code review (the workflow files differ from the task blocks above)
+
+1. **WF15 `Advance Stage + Answer` (CRITICAL):** the original wrapped `update_lead_stage()`
+   and `answer_followup()` in **unreferenced** SELECT CTEs, which Postgres prunes — agent
+   replies silently no-op'd. Rewritten as `INSERT...SELECT ... FROM ans LEFT JOIN upd ON true`
+   so both side-effecting CTEs are referenced. Verified: valid stage advances + answers;
+   empty stage keeps stage, still answers + logs. (Task 4's WF14 `Record + Log` already used
+   the correct referenced pattern.)
+
+2. **Cadence view `new_24h` arm:** added `AND EXISTS (new_2h already recorded)` so `new_2h`
+   and `new_24h` can never emit together in one view eval (which would double-send and trip
+   the one-pending unique index). Verified a 30h fresh lead emits only `new_2h`.
+
+3. **WF14 send-failure gate:** added a `Send OK?` IF node after the Evolution send. The
+   pending tracker row is only written when the send succeeded (no `error` on the item),
+   so a failed send no longer silently blocks a lead for 3 days — it reappears next sweep.
+
+4. **WF16 `$env` in Code node:** moved `MANAGER_PHONE` out of the `Build Report` Code node
+   (n8n Code nodes have no reliable `$env` access) into the `Send to Gerente` httpRequest
+   field as `{{ $env.MANAGER_PHONE }}`, matching the WF3c pattern.
+
+### Review findings rejected (with reasons)
+- "WF1 human_forward regression" — WF1 never relayed agent→lead; agent messages always went
+  through the `is_agent` branch (TOMO or ignore). No path was broken.
+- WF15 IF `loose` typeValidation / bigint-as-string — `exists` is type-agnostic; gate works.
+- WF15 `Send Confirmation` back-references `Parse LLM JSON` — necessary (preceding node
+  outputs only `conversation_id`).
+- Saturday cron — intentional (agents work Sat). No `WF14_WORKFLOW_ID` — correct, cron-triggered.
+
+### Known pre-existing issue (out of scope, not introduced here)
+`update_lead_stage` (migration 0009) writes a spurious `NULL→stage` history row on its
+`INSERT...ON CONFLICT` update path (BEFORE-INSERT trigger fires before the conflict resolves).
+Affects the dashboard too. Left as-is.

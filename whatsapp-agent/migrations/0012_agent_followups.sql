@@ -83,11 +83,15 @@ WHERE b.stage IN ('new','contacted')
   AND NOT EXISTS (SELECT 1 FROM lead_followups f
                   WHERE f.conversation_id=b.conversation_id AND f.prompt_kind='new_2h')
 UNION ALL
--- new_24h: same, but 24h escalation
+-- new_24h: 24h escalation. Only AFTER a new_2h was already recorded, so the two
+-- arms never emit together in one view eval (which would double-send and trip the
+-- one-pending unique index).
 SELECT b.*, 'new_24h' FROM base b
 WHERE b.stage IN ('new','contacted')
   AND b.first_response_at IS NULL
   AND b.assigned_at <= NOW() - INTERVAL '24 hours'
+  AND EXISTS (SELECT 1 FROM lead_followups f
+              WHERE f.conversation_id=b.conversation_id AND f.prompt_kind='new_2h')
   AND NOT EXISTS (SELECT 1 FROM lead_followups f
                   WHERE f.conversation_id=b.conversation_id AND f.prompt_kind='new_24h')
 UNION ALL

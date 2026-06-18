@@ -83,6 +83,23 @@
       "position": [1400, 300],
       "credentials": { "postgres": { "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase" } },
       "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "send-ok-0001", "leftValue": "={{ $json.error }}", "rightValue": "", "operator": { "type": "object", "operation": "notExists", "singleValue": true } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "f1f2f3f4-0007-4000-8000-000000000007",
+      "name": "Send OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1280, 300],
+      "notes": "Only record the pending tracker row if Evolution accepted the send. On failure (continueOnFail puts an `error` object on the item) the lead is left untracked so it reappears next sweep."
     }
   ],
   "connections": {
@@ -90,7 +107,8 @@
     "Expire Stale Pendings": { "main": [[{ "node": "Select Due Leads", "type": "main", "index": 0 }]] },
     "Select Due Leads": { "main": [[{ "node": "Build Question", "type": "main", "index": 0 }]] },
     "Build Question": { "main": [[{ "node": "Send Question via Evolution", "type": "main", "index": 0 }]] },
-    "Send Question via Evolution": { "main": [[{ "node": "Record + Log", "type": "main", "index": 0 }]] }
+    "Send Question via Evolution": { "main": [[{ "node": "Send OK?", "type": "main", "index": 0 }]] },
+    "Send OK?": { "main": [[{ "node": "Record + Log", "type": "main", "index": 0 }], []] }
   },
   "settings": { "executionOrder": "v1", "saveExecutionProgress": true, "saveManualExecutions": true }
 }
