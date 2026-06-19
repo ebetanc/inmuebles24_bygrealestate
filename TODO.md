@@ -131,7 +131,7 @@ All code, workflows, schema, and dashboard are built and audited. Deployment is 
 | 2c | Email Marusa (Marusabobadilla@gmail.com) | BYG | [x] Received |
 | 3 | Shifts (Sandy L-V 8:30-18:00, Marusa L-V 18-22 + Sáb/Dom) | BYG | [x] Received |
 | 4 | First month guard calendar (6 agentes) | BYG | [!] Pending |
-| 5 | Bot WhatsApp number (5215529814996) | BYG | [x] Received — en `.env` |
+| 5 | Bot WhatsApp number (5215620516625, conectado 2026-06-19; reemplazó 5215529814996 por conflictos) | BYG | [x] Conectado — instancia Evolution `byg_bot_n8n` (state=open) |
 | 6 | Inmuebles24 credentials (citas.bygrealestate@gmail.com) | BYG | [x] Received — en `.env` |
 | 7 | Schema migration: support 2 managers with time-based routing | Dev | [!] Decision needed |
 
@@ -201,7 +201,7 @@ Sesión grande. El sistema pasó de "code complete, blocked" a **scraper captura
 - **PROBADO E2E**: scraper webhook → WF10 → conversación + subasta TOMO (código ej. `12D4`) → fan-out agentes. WF10 + WF3a `status=success`, todo verde.
 
 ### Pendiente (siguiente sesión) ⏳
-- [ ] **Evolution API**: YA está corriendo en el VPS (`evolution-api-mlkp-api-1` + postgres + redis), solo falta crear instancia + **escanear QR** con bot `5215529814996` + webhook → `evolution-webhook` (WF1). Sin esto, los mensajes WhatsApp no se entregan.
+- [x] **Evolution API**: corriendo en el VPS (`evolution-api-mlkp-api-1`). Instancia `byg_bot_n8n` **CONECTADA** (state=open) con bot `5215620516625` (número nuevo; el viejo `5215529814996` daba conflictos `device_removed`). Webhook → `evolution-webhook` (WF1). El sistema direcciona por `EVOLUTION_INSTANCE`, no por número, así que cambiar de teléfono no requirió cambios de código.
 - [ ] Setear en n8n compose: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` → `docker compose up -d n8n`.
 - [ ] **Activar timer del scraper** en el Pi (`systemctl enable --now inmobiliaria24.timer`) — cada 2h. Limpiar `state.db` antes para capturar pendientes existentes.
 - [ ] Probar rutas WhatsApp-inbound (WF1) + AI (WF4) + handoff (WF5) tras conectar Evolution.

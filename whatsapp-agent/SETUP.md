@@ -114,7 +114,7 @@ In n8n: **Settings > Environment Variables** (or via docker env):
 
 ```
 EVOLUTION_API_URL=https://your-evolution-url.com
-EVOLUTION_INSTANCE=inmobiliaria24
+EVOLUTION_INSTANCE=byg_bot_n8n
 EVOLUTION_API_KEY=your_api_key
 MANAGER_PHONE=5215500000099
 OPENROUTER_API_KEY=your_openrouter_key

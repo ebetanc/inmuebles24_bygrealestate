@@ -154,7 +154,7 @@ Establecer TODAS las siguientes en **Settings > Environment Variables**:
 ```
 # Evolution API
 EVOLUTION_API_URL=https://[TU_URL_EVOLUTION]
-EVOLUTION_INSTANCE=inmobiliaria24
+EVOLUTION_INSTANCE=byg_bot_n8n
 EVOLUTION_API_KEY=[TU_API_KEY]
 
 # Manager
