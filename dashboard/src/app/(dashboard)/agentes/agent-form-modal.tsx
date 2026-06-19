@@ -100,9 +100,9 @@ export default function AgentFormModal({ agent, aliases, onClose, onToast }: Pro
               className={`${inputClass} font-mono`}
               value={whatsapp}
               onChange={(e) => setWhatsapp(e.target.value)}
-              placeholder="5215554132332"
+              placeholder="5554132332"
             />
-            <span className="text-[10px] text-muted-foreground">Formato 52 + 10 digitos</span>
+            <span className="text-[10px] text-muted-foreground">10 digitos del numero (se guarda como 521…)</span>
           </div>
 
           <div className="flex flex-col gap-1.5">

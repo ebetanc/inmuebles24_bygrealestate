@@ -23,13 +23,15 @@ function slugify(input: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-function normalizeWhatsapp(raw: string): string {
-  return raw.replace(/[^\d]/g, "");
-}
-
-// Mexico E.164: 52 + 10-digit number. (52 1 ... mobile prefix => 13 digits also allowed.)
-function isValidWhatsapp(digits: string): boolean {
-  return /^52\d{10}$/.test(digits) || /^521\d{10}$/.test(digits);
+// Canonical stored format = 521 + 10-digit national (Evolution send format, matches
+// every existing row). Manager enters the 10-digit local number; we also accept a pasted
+// 521... (13) or 52... (12) and canonicalize. Returns null if not 10 national digits.
+function canonicalWhatsapp(raw: string): string | null {
+  const d = (raw || "").replace(/[^\d]/g, "");
+  if (/^\d{10}$/.test(d)) return `521${d}`;
+  if (/^521\d{10}$/.test(d)) return d;
+  if (/^52\d{10}$/.test(d)) return `521${d.slice(2)}`;
+  return null;
 }
 
 function normalizeAliases(tags: string[]): string[] {
@@ -45,12 +47,13 @@ function normalizeAliases(tags: string[]): string[] {
   return out;
 }
 
-function validate(input: AgentInput): string | null {
-  if (!input.name?.trim()) return "El nombre es obligatorio";
-  const wa = normalizeWhatsapp(input.whatsapp_number || "");
-  if (!wa) return "El numero de WhatsApp es obligatorio";
-  if (!isValidWhatsapp(wa)) return "WhatsApp invalido — usar formato 52XXXXXXXXXX (10 digitos)";
-  return null;
+// Returns { wa } on success or { error } on failure.
+function validate(input: AgentInput): { wa: string } | { error: string } {
+  if (!input.name?.trim()) return { error: "El nombre es obligatorio" };
+  if (!input.whatsapp_number?.trim()) return { error: "El numero de WhatsApp es obligatorio" };
+  const wa = canonicalWhatsapp(input.whatsapp_number);
+  if (!wa) return { error: "WhatsApp invalido — escribe los 10 digitos del numero" };
+  return { wa };
 }
 
 // Replace the agent's full alias set. tag_normalized is a global PK (one tag -> one
@@ -90,14 +93,13 @@ async function writeAliases(
 }
 
 export async function createAgent(input: AgentInput): Promise<Result> {
-  const err = validate(input);
-  if (err) return { success: false, error: err };
+  const v = validate(input);
+  if ("error" in v) return { success: false, error: v.error };
+  const wa = v.wa;
 
   const supabase = createSupabaseServer();
   const agentId = (input.agent_id?.trim() || `agent_${slugify(input.name)}`).trim();
   if (!agentId || agentId === "agent_") return { success: false, error: "agent_id invalido" };
-
-  const wa = normalizeWhatsapp(input.whatsapp_number);
 
   const { error } = await supabase.from("agents").insert({
     agent_id: agentId,
@@ -121,11 +123,11 @@ export async function createAgent(input: AgentInput): Promise<Result> {
 }
 
 export async function updateAgent(agentId: string, input: AgentInput): Promise<Result> {
-  const err = validate(input);
-  if (err) return { success: false, error: err };
+  const v = validate(input);
+  if ("error" in v) return { success: false, error: v.error };
+  const wa = v.wa;
 
   const supabase = createSupabaseServer();
-  const wa = normalizeWhatsapp(input.whatsapp_number);
 
   const { error } = await supabase
     .from("agents")
