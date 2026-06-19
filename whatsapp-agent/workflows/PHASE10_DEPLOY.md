@@ -18,10 +18,13 @@ smoke test passes.
 
 ## Smoke test (manual, before activating crons)
 
-Run against PROD. The crons do NOT need to be active for this test: WF14 and WF16 are run
-via **Execute Workflow**, and WF15 is invoked by WF1 by ID (sub-workflows don't need active
-state). Required: WF14/15/16 imported, `WF15_WORKFLOW_ID` set, and the edited WF1 re-imported
-+ active (WF1 owns the Evolution webhook). Use a **test agent whose WhatsApp you control**
+Run against PROD. WF14 and WF16 are run via **Execute Workflow**. **WF15 MUST be active** —
+in n8n 2.7 an `executeWorkflow` call to an inactive sub-workflow fails with "Workflow is not
+active and cannot be executed", so WF1's Call WF15 node silently no-ops unless WF15 is active.
+Required: WF14/15/16 imported, **WF15 active**, `WF15_WORKFLOW_ID` set, and the edited WF1
+re-imported + active (WF1 owns the Evolution webhook). NOTE: `n8n import:workflow` resets
+`active=false` — after every import run `n8n update:workflow --id=<id> --active=true` and
+`docker compose restart n8n`. Use a **test agent whose WhatsApp you control**
 (e.g. your own number temporarily set on a throwaway agent, or the gerente). All test rows
 are torn down in step 6 — the unique test UUID below ensures nothing real is touched.
 

@@ -5,6 +5,7 @@ export interface Agent {
   easybroker_email: string | null;
   is_available: boolean;
   on_shift: boolean;
+  shift_slot: "morning" | "afternoon" | null;
 }
 
 export interface Conversation {
