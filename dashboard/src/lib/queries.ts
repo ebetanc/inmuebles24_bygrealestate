@@ -76,6 +76,32 @@ export async function getAgents(): Promise<Agent[]> {
   return (data || []) as Agent[];
 }
 
+// Full roster incl. deactivated agents — for the management UI only.
+// (getAgents() stays active-only; calendar + routing depend on that filter.)
+export async function getAllAgents(): Promise<Agent[]> {
+  const supabase = db();
+  const { data } = await supabase
+    .from("agents")
+    .select("*")
+    .order("is_available", { ascending: false })
+    .order("name");
+  return (data || []) as Agent[];
+}
+
+// agent_id -> list of property tags (property_agent_alias) for owner routing.
+export async function getAgentAliases(): Promise<Record<string, string[]>> {
+  const supabase = db();
+  const { data } = await supabase
+    .from("property_agent_alias")
+    .select("tag_normalized, agent_id")
+    .order("tag_normalized");
+  const map: Record<string, string[]> = {};
+  for (const row of (data || []) as { tag_normalized: string; agent_id: string }[]) {
+    (map[row.agent_id] ||= []).push(row.tag_normalized);
+  }
+  return map;
+}
+
 export async function getAgentStats(agentId: string) {
   const supabase = db();
   const weekStart = new Date();
