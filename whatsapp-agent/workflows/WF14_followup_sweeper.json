@@ -73,7 +73,7 @@
         "operation": "executeQuery",
         "query": "-- Record the sent prompt (creates the pending tracker row) and log the outbound message.\nWITH ins AS (\n  SELECT record_followup_sent($1::uuid, $2, $3) AS followup_id\n)\nINSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nSELECT $1::uuid, 'outbound', 'system', $4, $5,\n       jsonb_build_object('purpose','followup_question','prompt_kind',$3,'followup_id',ins.followup_id)\nFROM ins\nRETURNING conversation_id;",
         "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $json.agent_id }},={{ $json.prompt_kind }},={{ $json.number }},={{ $json.text }}"
+          "queryReplacement": "={{ [$('Build Question').item.json.conversation_id, $('Build Question').item.json.agent_id, $('Build Question').item.json.prompt_kind, $('Build Question').item.json.number, $('Build Question').item.json.text] }}"
         }
       },
       "id": "f1f2f3f4-0006-4000-8000-000000000006",
