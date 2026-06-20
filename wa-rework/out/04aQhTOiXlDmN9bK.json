@@ -26,7 +26,7 @@
         "operation": "executeQuery",
         "query": "WITH new_auction AS (\n  INSERT INTO auctions (conversation_id, property_id, short_code, expires_at)\n  VALUES (\n    $1::uuid,\n    $2,\n    UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 4)),\n    NOW() + INTERVAL '5 minutes'\n  )\n  RETURNING auction_id, short_code, expires_at\n)\nSELECT * FROM new_auction;",
         "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $json.property_id }}"
+          "queryReplacement": "={{ [$json.conversation_id, $json.property_id] }}"
         }
       },
       "id": "355ea205-2b66-4a72-a1e9-789867b047fd",
@@ -134,7 +134,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nVALUES ($1::uuid, 'outbound', 'system', $2, $3, $4::jsonb);",
         "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $json.number }},={{ $json.text }},={{ JSON.stringify({ purpose: 'auction_notify', auction_id: $json.auction_id, agent_id: $json.agent_id }) }}"
+          "queryReplacement": "={{ [$json.conversation_id, $json.number, $json.text, JSON.stringify({ purpose: 'auction_notify', auction_id: $json.auction_id, agent_id: $json.agent_id })] }}"
         }
       },
       "id": "3a609e21-49a9-4a9a-8ebb-6efa1c80d1b8",

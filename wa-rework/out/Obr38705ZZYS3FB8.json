@@ -42,7 +42,7 @@
         "operation": "executeQuery",
         "query": "-- Check if this is a returning lead and whether it's day or night.\n-- Uses LEFT JOIN to ensure is_daytime() always executes even if no returning lead.\nWITH time_ctx AS (\n  SELECT is_daytime() AS is_day, current_shift() AS current_shift\n),\nret_lead AS (\n  SELECT * FROM find_returning_lead($1, $2, $3) LIMIT 1\n)\nSELECT\n  r.conversation_id AS existing_conv_id,\n  r.assigned_agent_id,\n  r.current_property AS existing_property,\n  r.same_property,\n  r.mode AS existing_mode,\n  t.is_day,\n  t.current_shift\nFROM time_ctx t\nLEFT JOIN ret_lead r ON TRUE;",
         "options": {
-          "queryReplacement": "={{ $json.phone }},={{ $json.email }},={{ $json.listing_id }}"
+          "queryReplacement": "={{ [$json.phone, $json.email, $json.listing_id] }}"
         }
       },
       "id": "b1b2c3d4-0003-4000-8000-000000000003",
@@ -172,7 +172,7 @@
         "operation": "executeQuery",
         "query": "-- Create new conversation for scraper lead (day mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'pending_assignment', $5, 'day')\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
         "options": {
-          "queryReplacement": "={{ $json.phone }},={{ $json.name }},={{ $json.email }},={{ $json.listing_id }},={{ $json.source }}"
+          "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source] }}"
         }
       },
       "id": "b1b2c3d4-0010-4000-8000-000000000010",
@@ -208,7 +208,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO properties_cache (property_id, payload)\nVALUES ($1, $2::jsonb)\nON CONFLICT (property_id) DO UPDATE\n  SET payload = EXCLUDED.payload, fetched_at = NOW();",
         "options": {
-          "queryReplacement": "={{ $json.cache_property_id }},={{ JSON.stringify($json.cache_payload) }}"
+          "queryReplacement": "={{ [$json.cache_property_id, JSON.stringify($json.cache_payload)] }}"
         }
       },
       "id": "b1b2c3d4-0012-4000-8000-000000000012",
@@ -254,7 +254,7 @@
         "operation": "executeQuery",
         "query": "-- Create new conversation for scraper lead (night mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'night_queued', $5, 'night')\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
         "options": {
-          "queryReplacement": "={{ $json.phone }},={{ $json.name }},={{ $json.email }},={{ $json.listing_id }},={{ $json.source }}"
+          "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source] }}"
         }
       },
       "id": "b1b2c3d4-0014-4000-8000-000000000014",
@@ -277,7 +277,7 @@
         "operation": "executeQuery",
         "query": "-- Insert into night queue for morning auto-TOMO at 8:05 AM.\nINSERT INTO night_queue (conversation_id, source, lead_phone, lead_name, property_id, lead_email)\nVALUES ($1::uuid, $2, $3, $4, $5, $6);",
         "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $('Route Decision').first().json.source }},={{ $json.lead_phone }},={{ $json.lead_name }},={{ $json.current_property }},={{ $('Route Decision').first().json.email }}"
+          "queryReplacement": "={{ [$json.conversation_id, $('Route Decision').first().json.source, $json.lead_phone, $json.lead_name, $json.current_property, $('Route Decision').first().json.email] }}"
         }
       },
       "id": "b1b2c3d4-0015-4000-8000-000000000015",

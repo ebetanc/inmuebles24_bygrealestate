@@ -143,7 +143,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nVALUES ($1::uuid, 'outbound', 'system', $2, $3, '{\"purpose\": \"handoff\"}'::jsonb);",
         "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $json.number }},={{ $json.text }}"
+          "queryReplacement": "={{ [$json.conversation_id, $json.number, $json.text] }}"
         }
       },
       "id": "68369788-74cc-411f-a543-be211d532ccd",

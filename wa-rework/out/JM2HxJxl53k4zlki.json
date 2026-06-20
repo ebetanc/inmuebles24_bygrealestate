@@ -26,7 +26,7 @@
         "operation": "executeQuery",
         "query": "-- ATOMIC CLAIM: WHERE status='open' ensures first-reply-wins.\nWITH claim AS (\n  UPDATE auctions\n  SET status='claimed', winner_agent_id=$1, claimed_at=NOW()\n  WHERE short_code=$2 AND status='open' AND expires_at > NOW()\n  RETURNING auction_id, conversation_id, property_id, winner_agent_id, notified_agents\n)\nSELECT c.*, conv.lead_phone, conv.lead_name, pc.payload AS property_payload\nFROM claim c\nJOIN conversations conv ON conv.conversation_id = c.conversation_id\nLEFT JOIN properties_cache pc ON pc.property_id = c.property_id;",
         "options": {
-          "queryReplacement": "={{ $json.agent_id }},={{ $json.short_code }}"
+          "queryReplacement": "={{ [$json.agent_id, $json.short_code] }}"
         }
       },
       "id": "86c01b28-9da5-4402-aeff-5ae13cf77363",
@@ -83,7 +83,7 @@
         "operation": "executeQuery",
         "query": "UPDATE conversations\nSET assigned_agent_id=$1, mode='ai'\nWHERE conversation_id=$2::uuid\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
         "options": {
-          "queryReplacement": "={{ $('When Called by WF1').item.json.agent_id }},={{ $json.conversation_id }}"
+          "queryReplacement": "={{ [$('When Called by WF1').item.json.agent_id, $json.conversation_id] }}"
         }
       },
       "id": "03d4ff26-bb45-4baa-96d9-0031c56c877e",

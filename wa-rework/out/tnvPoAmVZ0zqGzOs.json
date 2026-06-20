@@ -26,7 +26,7 @@
         "operation": "executeQuery",
         "query": "-- Update last_message_at and log the inbound message.\nUPDATE conversations SET last_message_at = NOW() WHERE conversation_id = $1::uuid;\n\nUPDATE messages\nSET conversation_id = $1::uuid, sender_type = 'lead'\nWHERE msg_external_id = $2;",
         "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $json.messageId }}"
+          "queryReplacement": "={{ [$json.conversation_id, $json.messageId] }}"
         }
       },
       "id": "3f988639-0d24-4267-8544-a8e0be50eb58",
@@ -191,7 +191,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nVALUES ($1::uuid, 'outbound', 'ai', $2, $3, $4::jsonb);",
         "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $json.phone }},={{ $json.ai_response }},={{ JSON.stringify({ purpose: 'ai_response', needs_handoff: $json.needs_handoff }) }}"
+          "queryReplacement": "={{ [$json.conversation_id, $json.phone, $json.ai_response, JSON.stringify({ purpose: 'ai_response', needs_handoff: $json.needs_handoff })] }}"
         }
       },
       "id": "bca5bb88-fc35-4023-b6fa-90099cc8bb05",
