@@ -81,7 +81,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE conversations\nSET assigned_agent_id=$1, mode='ai'\nWHERE conversation_id=$2::uuid\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
+        "query": "UPDATE conversations\nSET assigned_agent_id=$1, mode='ai', assigned_at=NOW(), claimed_via='tomo_auction'\nWHERE conversation_id=$2::uuid\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
         "options": {
           "queryReplacement": "={{ [$('When Called by WF1').item.json.agent_id, $json.conversation_id] }}"
         }

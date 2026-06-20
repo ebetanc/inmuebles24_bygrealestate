@@ -134,7 +134,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nVALUES ($1::uuid, 'outbound', 'system', $2, $3, $4::jsonb);",
         "options": {
-          "queryReplacement": "={{ [$json.conversation_id, $json.number, $json.text, JSON.stringify({ purpose: 'auction_notify', auction_id: $json.auction_id, agent_id: $json.agent_id })] }}"
+          "queryReplacement": "={{ [$('Build Fan-out Messages').item.json.conversation_id, $('Build Fan-out Messages').item.json.number, $('Build Fan-out Messages').item.json.text, JSON.stringify({ purpose: 'auction_notify', auction_id: $('Build Fan-out Messages').item.json.auction_id, agent_id: $('Build Fan-out Messages').item.json.agent_id })] }}"
         }
       },
       "id": "3a609e21-49a9-4a9a-8ebb-6efa1c80d1b8",
@@ -155,7 +155,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst notifiedAgents = items.filter(i => i.json.agent_id).map(i => i.json.agent_id);\n\nreturn [{\n  json: {\n    auction_id: items[0]?.json?.auction_id,\n    conversation_id: items[0]?.json?.conversation_id,\n    short_code: items[0]?.json?.short_code,\n    notified_agents: notifiedAgents,\n    notified_count: notifiedAgents.length\n  }\n}];"
+        "jsCode": "const fanout = $('Build Fan-out Messages').all();\nconst notifiedAgents = fanout.map(i => i.json.agent_id).filter(Boolean);\nconst c = fanout[0] ? fanout[0].json : {};\nreturn [{ json: { auction_id: c.auction_id, conversation_id: c.conversation_id, short_code: c.short_code, notified_agents: notifiedAgents, notified_count: notifiedAgents.length } }];"
       },
       "id": "b31134fd-1e90-4253-82aa-5cf115fb7c95",
       "name": "Aggregate Results",

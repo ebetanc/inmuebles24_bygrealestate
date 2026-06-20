@@ -191,7 +191,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nVALUES ($1::uuid, 'outbound', 'ai', $2, $3, $4::jsonb);",
         "options": {
-          "queryReplacement": "={{ [$json.conversation_id, $json.phone, $json.ai_response, JSON.stringify({ purpose: 'ai_response', needs_handoff: $json.needs_handoff })] }}"
+          "queryReplacement": "={{ [$('Parse LLM Response').item.json.conversation_id, $('Parse LLM Response').item.json.phone, $('Parse LLM Response').item.json.ai_response, JSON.stringify({ purpose: 'ai_response', needs_handoff: $('Parse LLM Response').item.json.needs_handoff })] }}"
         }
       },
       "id": "bca5bb88-fc35-4023-b6fa-90099cc8bb05",
