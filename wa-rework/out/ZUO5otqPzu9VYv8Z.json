@@ -37,9 +37,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Create or get existing conversation for this lead.\n-- If the lead already has a conversation (edge case), return it.\nINSERT INTO conversations (lead_phone, lead_name, current_property, mode)\nVALUES ($1, $2, $3, 'pending_assignment')\nON CONFLICT (lead_phone) DO UPDATE\n  SET lead_name = COALESCE(EXCLUDED.lead_name, conversations.lead_name),\n      current_property = COALESCE(EXCLUDED.current_property, conversations.current_property),\n      last_message_at = NOW()\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
+        "query": "-- Get-or-create conversation for this lead (no ON CONFLICT: conversations.lead_phone has no unique constraint).\nWITH existing AS (\n  SELECT conversation_id, lead_phone, lead_name, current_property, mode\n  FROM conversations\n  WHERE lead_phone = $1\n  ORDER BY created_at DESC\n  LIMIT 1\n),\ninserted AS (\n  INSERT INTO conversations (lead_phone, lead_name, current_property, mode)\n  SELECT $1, $2, $3, 'pending_assignment'\n  WHERE NOT EXISTS (SELECT 1 FROM existing)\n  RETURNING conversation_id, lead_phone, lead_name, current_property, mode\n)\nSELECT conversation_id, lead_phone, lead_name, current_property, mode FROM inserted\nUNION ALL\nSELECT conversation_id, lead_phone, lead_name, current_property, mode FROM existing;",
         "options": {
-          "queryReplacement": "={{ $json.phone }},={{ $json.pushName || null }},={{ $json.extracted_property_id || null }}"
+          "queryReplacement": "={{ [$json.phone, $json.pushName || null, $json.extracted_property_id || null] }}"
         }
       },
       "id": "45d9e6f1-064e-4960-b36a-863f6e790e50",
@@ -62,7 +62,7 @@
         "operation": "executeQuery",
         "query": "-- Log the inbound message now that we have a conversation_id.\n-- Update the message row that WF1 already inserted (which had conversation_id=NULL).\nUPDATE messages\nSET conversation_id = $1::uuid, sender_type = 'lead'\nWHERE msg_external_id = $2\nRETURNING message_id;",
         "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $('When Called by WF1').first().json.messageId }}"
+          "queryReplacement": "={{ [$json.conversation_id, $('When Called by WF1').first().json.messageId] }}"
         }
       },
       "id": "d754bef1-b95d-47b5-ae78-be78249495e3",
@@ -86,7 +86,7 @@
         "operation": "executeQuery",
         "query": "-- Try to find a matching property from the listings table.\n-- Search by property ID first, then by text similarity.\nSELECT id, listing_hash, title, price, price_numeric, currency,\n       location, property_type, operation_type, bedrooms, bathrooms,\n       area_m2, description, url, image_url\nFROM listings\nWHERE is_active = true\n  AND (\n    listing_hash = $1\n    OR title ILIKE '%' || $2 || '%'\n    OR location ILIKE '%' || $2 || '%'\n    OR url ILIKE '%' || $1 || '%'\n  )\nORDER BY last_seen_at DESC\nLIMIT 1;",
         "options": {
-          "queryReplacement": "={{ $('Extract Property Context').first().json.extracted_property_id || '' }},={{ $('Extract Property Context').first().json.search_terms || '' }}"
+          "queryReplacement": "={{ [$('Extract Property Context').first().json.extracted_property_id || '', $('Extract Property Context').first().json.search_terms || ''] }}"
         }
       },
       "id": "3fa459c5-6807-4c5d-8057-dc83800c042c",
@@ -123,7 +123,7 @@
         "operation": "executeQuery",
         "query": "-- Cache the property for WF4 to use later.\nINSERT INTO properties_cache (property_id, payload)\nVALUES ($1, $2::jsonb)\nON CONFLICT (property_id) DO UPDATE\n  SET payload = EXCLUDED.payload, fetched_at = NOW();",
         "options": {
-          "queryReplacement": "={{ $json.cache_property_id }},={{ JSON.stringify($json.cache_payload || {}) }}"
+          "queryReplacement": "={{ [$json.cache_property_id, JSON.stringify($json.cache_payload || {})] }}"
         }
       },
       "id": "cc271a51-857c-4aa0-a2a8-92aa5c574da5",

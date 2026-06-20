@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-19T11:06:30.000Z",
+  "updatedAt": "2026-06-20T12:30:12.000Z",
   "createdAt": "2026-05-08T10:39:47.493Z",
   "id": "snF6Sr9CBJIevMVD",
   "name": "WF1 - Inbound Router (Evolution)",
@@ -7,28 +7,6 @@
   "active": true,
   "isArchived": false,
   "nodes": [
-    {
-      "parameters": {
-        "httpMethod": [
-          "GET",
-          "POST"
-        ],
-        "multipleMethods": true,
-        "path": "evolution-webhook",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "2dd402fb-2665-45d6-82c4-7d7cdb08242a",
-      "name": "WA Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [
-        -64,
-        304
-      ],
-      "webhookId": "18d79979-c54f-4687-9aa1-ed2ca88a754b",
-      "notes": "Meta WhatsApp Cloud API webhook. GET=hub.challenge verify, POST=inbound messages."
-    },
     {
       "parameters": {
         "jsCode": "// Parse Meta WhatsApp Cloud API inbound payload.\nconst body = $input.first().json.body || {};\nconst entry = (body.entry && body.entry[0]) || {};\nconst change = (entry.changes && entry.changes[0]) || {};\nconst value = change.value || {};\nif (value.statuses) {\n  return [{ json: { _action: 'ignore', reason: 'status_event' } }];\n}\nconst msg = value.messages && value.messages[0];\nif (!msg) {\n  return [{ json: { _action: 'ignore', reason: 'no_message' } }];\n}\nconst phone = msg.from || '';\nlet text = '';\nif (msg.type === 'text' && msg.text) { text = msg.text.body || ''; }\nelse if (msg.type === 'button' && msg.button) { text = msg.button.text || ''; }\nelse if (msg.type === 'interactive' && msg.interactive) {\n  const it = msg.interactive;\n  text = (it.button_reply && it.button_reply.title) || (it.list_reply && it.list_reply.title) || '';\n} else {\n  return [{ json: { _action: 'ignore', reason: 'unsupported_message_type' } }];\n}\nconst contact = (value.contacts && value.contacts[0]) || {};\nconst pushName = (contact.profile && contact.profile.name) || '';\nconst messageId = msg.id || '';\nconst timestamp = msg.timestamp ? parseInt(msg.timestamp, 10) : Math.floor(Date.now() / 1000);\nreturn [{ json: { _action: 'process', phone, text: String(text).trim(), pushName, messageId, timestamp, remoteJid: phone } }];"
@@ -456,69 +434,21 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "typeValidation": "strict",
-            "leftValue": ""
-          },
-          "conditions": [
-            {
-              "id": "c0ffee00-aaaa-4000-8000-000000000aaa",
-              "leftValue": "={{ ($json.query && $json.query['hub.mode']) ? 'yes' : 'no' }}",
-              "rightValue": "yes",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
+        "httpMethod": "POST",
+        "path": "evolution-webhook",
+        "responseMode": "onReceived",
         "options": {}
       },
-      "id": "c0ffee00-bbbb-4000-8000-000000000bbb",
-      "name": "Is GET Verify?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "id": "a1a1a1a1-post-4000-8000-000000000001",
+      "name": "WA Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
       "position": [
-        160,
+        -64,
         304
-      ]
-    },
-    {
-      "parameters": {
-        "respondWith": "text",
-        "responseBody": "={{ ($json.query && $json.query['hub.verify_token'] === $env.WA_VERIFY_TOKEN) ? $json.query['hub.challenge'] : '' }}",
-        "options": {
-          "responseCode": 200
-        }
-      },
-      "id": "c0ffee00-cccc-4000-8000-000000000ccc",
-      "name": "Verify Challenge",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        384,
-        160
-      ]
-    },
-    {
-      "parameters": {
-        "respondWith": "text",
-        "responseBody": "EVENT_RECEIVED",
-        "options": {
-          "responseCode": 200
-        }
-      },
-      "id": "c0ffee00-dddd-4000-8000-000000000ddd",
-      "name": "Ack 200",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        384,
-        304
-      ]
+      ],
+      "webhookId": "18d79979-c54f-4687-9aa1-ed2ca88a754b",
+      "notes": "Meta Cloud API inbound messages (POST). GET verification handled by separate workflow WA-Meta-Verify."
     }
   ],
   "connections": {
@@ -641,35 +571,6 @@
       "main": [
         [
           {
-            "node": "Is GET Verify?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Is GET Verify?": {
-      "main": [
-        [
-          {
-            "node": "Verify Challenge",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Ack 200",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Ack 200": {
-      "main": [
-        [
-          {
             "node": "Parse Evolution Payload",
             "type": "main",
             "index": 0
@@ -688,9 +589,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "5e1826da-a491-4451-9acf-f6cf39d221e0",
-  "activeVersionId": "5e1826da-a491-4451-9acf-f6cf39d221e0",
-  "versionCounter": 66,
+  "versionId": "bba52738-9d6b-4f50-bf66-0e43699fda8d",
+  "activeVersionId": "bba52738-9d6b-4f50-bf66-0e43699fda8d",
+  "versionCounter": 73,
   "triggerCount": 1,
   "tags": []
 }
