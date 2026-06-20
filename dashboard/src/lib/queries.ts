@@ -53,9 +53,13 @@ export async function getKPIs(): Promise<KPIs> {
 
 export async function getRecentConversations(limit = 20): Promise<Conversation[]> {
   const supabase = db();
+  // conversations has TWO FKs to agents (assigned_agent_id + owner_agent_id),
+  // so an unqualified `agents(name)` embed is ambiguous and PostgREST errors out
+  // (PGRST201) — which silently returned zero leads. Pin the embed to the
+  // assigned-agent FK by constraint name.
   const { data } = await supabase
     .from("conversations")
-    .select("*, agents(name)")
+    .select("*, agents!conversations_assigned_agent_id_fkey(name)")
     .order("created_at", { ascending: false })
     .limit(limit);
   return ((data || []) as (Conversation & { agents: { name: string } | null })[]).map(

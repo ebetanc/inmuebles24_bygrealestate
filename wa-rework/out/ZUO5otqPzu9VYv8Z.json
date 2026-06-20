@@ -1,0 +1,290 @@
+{
+  "updatedAt": "2026-06-14T15:26:26.042Z",
+  "createdAt": "2026-05-08T10:26:56.047Z",
+  "id": "ZUO5otqPzu9VYv8Z",
+  "name": "WF2 - Lead Intake (Evolution)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "60e4391a-4366-4e7f-8458-37ec1919faff",
+      "name": "When Called by WF1",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "notes": "Input from WF1 (new lead):\n{\n  phone: '5215512345678',\n  pushName: 'Maria Garcia',\n  text: 'Hola, me interesa la propiedad en Polanco',\n  messageId: '3EB0A0...'\n}"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Try to extract a property reference from the lead's first message.\n// Look for property IDs, URLs, or keywords that match listings.\nconst data = $input.first().json;\nconst text = data.text || '';\n\n// Pattern 1: EasyBroker ID (EB-XXXXX)\nconst ebMatch = text.match(/EB-[A-Z0-9]+/i);\n\n// Pattern 2: URL containing a property reference\nconst urlMatch = text.match(/https?:\\/\\/[^\\s]+/i);\n\n// Pattern 3: Keywords to search listings (location, property type)\nconst searchTerms = text\n  .replace(/hola|buenos dias|buenas tardes|hi|hello|me interesa|quiero|informacion|info/gi, '')\n  .trim();\n\nreturn [{\n  json: {\n    phone: data.phone,\n    pushName: data.pushName,\n    text: data.text,\n    messageId: data.messageId,\n    extracted_property_id: ebMatch ? ebMatch[0] : null,\n    extracted_url: urlMatch ? urlMatch[0] : null,\n    search_terms: searchTerms.substring(0, 100)\n  }\n}];"
+      },
+      "id": "5301e0db-b2e2-4b19-8e70-7d0e14c9e340",
+      "name": "Extract Property Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Get-or-create conversation for this lead (no ON CONFLICT: conversations.lead_phone has no unique constraint).\nWITH existing AS (\n  SELECT conversation_id, lead_phone, lead_name, current_property, mode\n  FROM conversations\n  WHERE lead_phone = $1\n  ORDER BY created_at DESC\n  LIMIT 1\n),\ninserted AS (\n  INSERT INTO conversations (lead_phone, lead_name, current_property, mode)\n  SELECT $1, $2, $3, 'pending_assignment'\n  WHERE NOT EXISTS (SELECT 1 FROM existing)\n  RETURNING conversation_id, lead_phone, lead_name, current_property, mode\n)\nSELECT conversation_id, lead_phone, lead_name, current_property, mode FROM inserted\nUNION ALL\nSELECT conversation_id, lead_phone, lead_name, current_property, mode FROM existing;",
+        "options": {
+          "queryReplacement": "={{ [$json.phone, $json.pushName || null, $json.extracted_property_id || null] }}"
+        }
+      },
+      "id": "45d9e6f1-064e-4960-b36a-863f6e790e50",
+      "name": "Create/Update Conversation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        640,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Log the inbound message now that we have a conversation_id.\n-- Update the message row that WF1 already inserted (which had conversation_id=NULL).\nUPDATE messages\nSET conversation_id = $1::uuid, sender_type = 'lead'\nWHERE msg_external_id = $2\nRETURNING message_id;",
+        "options": {
+          "queryReplacement": "={{ [$json.conversation_id, $('When Called by WF1').first().json.messageId] }}"
+        }
+      },
+      "id": "d754bef1-b95d-47b5-ae78-be78249495e3",
+      "name": "Link Message to Conversation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        860,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Try to find a matching property from the listings table.\n-- Search by property ID first, then by text similarity.\nSELECT id, listing_hash, title, price, price_numeric, currency,\n       location, property_type, operation_type, bedrooms, bathrooms,\n       area_m2, description, url, image_url\nFROM listings\nWHERE is_active = true\n  AND (\n    listing_hash = $1\n    OR title ILIKE '%' || $2 || '%'\n    OR location ILIKE '%' || $2 || '%'\n    OR url ILIKE '%' || $1 || '%'\n  )\nORDER BY last_seen_at DESC\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [$('Extract Property Context').first().json.extracted_property_id || '', $('Extract Property Context').first().json.search_terms || ''] }}"
+        }
+      },
+      "id": "3fa459c5-6807-4c5d-8057-dc83800c042c",
+      "name": "Find Matching Property",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1080,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for WF3a auction call and cache the property.\nconst conv = $('Create/Update Conversation').first().json;\nconst property = $('Find Matching Property').first().json;\nconst context = $('Extract Property Context').first().json;\n\nconst hasProperty = !!(property && property.title);\n\n// Build property info for auction notification\nconst propertyId = hasProperty\n  ? (property.listing_hash || `listing-${property.id}`)\n  : (context.extracted_property_id || 'unknown');\n\nconst propertyTitle = hasProperty\n  ? property.title\n  : 'Propiedad (pendiente de identificar)';\n\nconst propertyPrice = hasProperty\n  ? `${property.price || ''} ${property.currency || 'MXN'}`\n  : 'Precio por confirmar';\n\n// Cache payload for properties_cache\nconst cachePayload = hasProperty ? {\n  title: property.title,\n  price: property.price,\n  price_numeric: property.price_numeric,\n  currency: property.currency,\n  location: property.location,\n  property_type: property.property_type,\n  operation_type: property.operation_type,\n  bedrooms: property.bedrooms,\n  bathrooms: property.bathrooms,\n  area_m2: property.area_m2,\n  description: property.description,\n  url: property.url,\n  image_url: property.image_url\n} : null;\n\nreturn [{\n  json: {\n    // For WF3a\n    conversation_id: conv.conversation_id,\n    lead_phone: conv.lead_phone,\n    lead_name: conv.lead_name || context.pushName || null,\n    property_id: propertyId,\n    property_title: propertyTitle,\n    property_price: propertyPrice,\n    assigned_agent_id: null,\n    // For caching\n    cache_property_id: propertyId,\n    cache_payload: cachePayload,\n    has_property: hasProperty\n  }\n}];"
+      },
+      "id": "485ee193-3a66-479c-9f49-b68b052ace36",
+      "name": "Prepare Auction Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Cache the property for WF4 to use later.\nINSERT INTO properties_cache (property_id, payload)\nVALUES ($1, $2::jsonb)\nON CONFLICT (property_id) DO UPDATE\n  SET payload = EXCLUDED.payload, fetched_at = NOW();",
+        "options": {
+          "queryReplacement": "={{ [$json.cache_property_id, JSON.stringify($json.cache_payload || {})] }}"
+        }
+      },
+      "id": "cc271a51-857c-4aa0-a2a8-92aa5c574da5",
+      "name": "Cache Property Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1520,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.lead_phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"Hola{{ $json.lead_name ? ' ' + $json.lead_name.split(' ')[0] : '' }}! Gracias por tu interes. Estamos asignando un asesor para atenderte, en unos momentos te contactamos.\\n\\nHi{{ $json.lead_name ? ' ' + $json.lead_name.split(' ')[0] : '' }}! Thanks for your interest. We're assigning an agent to help you, we'll be in touch shortly.\"\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a82d4ff0-393e-4700-a895-06ce5786daae",
+      "name": "Send Acknowledgment to Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        400
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $env.WF3A_WORKFLOW_ID }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "bdc7a803-b600-48ef-803e-397a99a42d92",
+      "name": "Call WF3a: Auction Launcher",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1740,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "When Called by WF1": {
+      "main": [
+        [
+          {
+            "node": "Extract Property Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Property Context": {
+      "main": [
+        [
+          {
+            "node": "Create/Update Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create/Update Conversation": {
+      "main": [
+        [
+          {
+            "node": "Link Message to Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link Message to Conversation": {
+      "main": [
+        [
+          {
+            "node": "Find Matching Property",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Matching Property": {
+      "main": [
+        [
+          {
+            "node": "Prepare Auction Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Auction Data": {
+      "main": [
+        [
+          {
+            "node": "Cache Property Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Acknowledgment to Lead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Call WF3a: Auction Launcher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "51166893-78b2-4853-85b6-1be8ebe9e91f",
+  "activeVersionId": "51166893-78b2-4853-85b6-1be8ebe9e91f",
+  "versionCounter": 30,
+  "triggerCount": 0,
+  "tags": []
+}
