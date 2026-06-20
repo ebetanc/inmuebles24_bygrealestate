@@ -15,6 +15,13 @@ const agentFills = [
   "var(--primary-fill)",
 ];
 
+// Role -> card label. "owner" (Marusa) reads as "Dueña".
+const roleLabel: Record<string, string> = {
+  owner: "Dueña",
+  manager: "Manager",
+  asesor: "Asesor",
+};
+
 interface Props {
   agents: Agent[];
   aliases: Record<string, string[]>;
@@ -90,8 +97,16 @@ export default function AgentManager({ agents, aliases, stats }: Props) {
                   {initials}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-display text-[15px] font-bold text-foreground">{agent.name}</div>
-                  <div className="text-xs font-semibold text-muted-foreground">Asesor</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-display text-[15px] font-bold text-foreground">{agent.name}</span>
+                    {agent.role === "owner" && (
+                      <span className="nb-chip is-primary text-[9px] uppercase tracking-wide">Dueña</span>
+                    )}
+                    {agent.role === "manager" && (
+                      <span className="nb-chip text-[9px] uppercase tracking-wide">Manager</span>
+                    )}
+                  </div>
+                  <div className="text-xs font-semibold text-muted-foreground">{roleLabel[agent.role] ?? "Asesor"}</div>
                 </div>
                 {!agent.is_available ? (
                   <span className="nb-chip">Inactivo</span>

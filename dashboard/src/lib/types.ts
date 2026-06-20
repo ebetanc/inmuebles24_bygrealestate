@@ -1,3 +1,5 @@
+export type AgentRole = "owner" | "manager" | "asesor";
+
 export interface Agent {
   agent_id: string;
   name: string;
@@ -6,6 +8,7 @@ export interface Agent {
   is_available: boolean;
   on_shift: boolean;
   shift_slot: "morning" | "afternoon" | null;
+  role: AgentRole;
 }
 
 export interface Conversation {

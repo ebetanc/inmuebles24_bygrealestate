@@ -8,6 +8,7 @@ export interface AgentInput {
   whatsapp_number: string;
   easybroker_email: string | null;
   shift_slot: "morning" | "afternoon" | null;
+  role: "owner" | "manager" | "asesor";
   aliases: string[];
 }
 
@@ -107,12 +108,16 @@ export async function createAgent(input: AgentInput): Promise<Result> {
     whatsapp_number: wa,
     easybroker_email: input.easybroker_email?.trim() || null,
     shift_slot: input.shift_slot,
+    role: input.role,
     is_available: true,
     on_shift: false,
   });
 
   if (error) {
     if (error.code === "23505") {
+      if (error.message.includes("agents_single_owner")) {
+        return { success: false, error: "Ya existe una Dueña — solo puede haber una propietaria" };
+      }
       return { success: false, error: "Ya existe un agente con ese ID o numero de WhatsApp" };
     }
     return { success: false, error: error.message };
@@ -136,11 +141,15 @@ export async function updateAgent(agentId: string, input: AgentInput): Promise<R
       whatsapp_number: wa,
       easybroker_email: input.easybroker_email?.trim() || null,
       shift_slot: input.shift_slot,
+      role: input.role,
     })
     .eq("agent_id", agentId);
 
   if (error) {
     if (error.code === "23505") {
+      if (error.message.includes("agents_single_owner")) {
+        return { success: false, error: "Ya existe una Dueña — solo puede haber una propietaria" };
+      }
       return { success: false, error: "Ese numero de WhatsApp ya esta en uso" };
     }
     return { success: false, error: error.message };

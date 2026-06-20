@@ -26,6 +26,7 @@ export default function AgentFormModal({ agent, aliases, onClose, onToast }: Pro
   const [whatsapp, setWhatsapp] = useState(agent?.whatsapp_number ?? "");
   const [email, setEmail] = useState(agent?.easybroker_email ?? "");
   const [shiftSlot, setShiftSlot] = useState<string>(agent?.shift_slot ?? "");
+  const [role, setRole] = useState<string>(agent?.role ?? "asesor");
   const [aliasText, setAliasText] = useState(aliases.join(", "));
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +37,7 @@ export default function AgentFormModal({ agent, aliases, onClose, onToast }: Pro
       whatsapp_number: whatsapp,
       easybroker_email: email || null,
       shift_slot: shiftSlot === "" ? null : (shiftSlot as "morning" | "afternoon"),
+      role: role as "owner" | "manager" | "asesor",
       aliases: aliasText
         .split(",")
         .map((t) => t.trim())
@@ -113,6 +115,16 @@ export default function AgentFormModal({ agent, aliases, onClose, onToast }: Pro
               onChange={(e) => setEmail(e.target.value)}
               placeholder="opcional"
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className={labelClass}>Rol</label>
+            <select className={`${inputClass} cursor-pointer`} value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="asesor">Asesor</option>
+              <option value="manager">Manager</option>
+              <option value="owner">Dueña</option>
+            </select>
+            <span className="text-[10px] text-muted-foreground">Solo puede haber una Dueña (Marusa)</span>
           </div>
 
           <div className="flex flex-col gap-1.5">
