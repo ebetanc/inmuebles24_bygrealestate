@@ -16,10 +16,8 @@ interface ScheduleRow {
 }
 
 interface DayData {
-  m1: string;
-  m2: string;
-  t1: string;
-  t2: string;
+  m: string;
+  t: string;
 }
 
 const DAY_NAMES = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
@@ -45,26 +43,16 @@ function buildInitialState(
 
   for (let d = 1; d <= days; d++) {
     const date = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    state[date] = { m1: "", m2: "", t1: "", t2: "" };
+    state[date] = { m: "", t: "" };
   }
 
-  // Group existing data by date+shift
-  const byDateShift = new Map<string, string[]>();
+  // Group existing data by date+shift (first agent per shift wins)
   for (const row of existing) {
-    const key = `${row.schedule_date}|${row.shift}`;
-    if (!byDateShift.has(key)) byDateShift.set(key, []);
-    byDateShift.get(key)!.push(row.agent_id);
-  }
-
-  for (const [key, agents] of byDateShift) {
-    const [date, shift] = key.split("|");
-    if (!state[date]) continue;
-    if (shift === "morning") {
-      state[date].m1 = agents[0] || "";
-      state[date].m2 = agents[1] || "";
+    if (!state[row.schedule_date]) continue;
+    if (row.shift === "morning") {
+      if (!state[row.schedule_date].m) state[row.schedule_date].m = row.agent_id;
     } else {
-      state[date].t1 = agents[0] || "";
-      state[date].t2 = agents[1] || "";
+      if (!state[row.schedule_date].t) state[row.schedule_date].t = row.agent_id;
     }
   }
 
@@ -75,22 +63,10 @@ function countShifts(schedule: Record<string, DayData>, agents: Agent[]) {
   const counts: Record<string, { morning: number; afternoon: number }> = {};
   for (const a of agents) counts[a.agent_id] = { morning: 0, afternoon: 0 };
   for (const day of Object.values(schedule)) {
-    if (day.m1 && counts[day.m1]) counts[day.m1].morning++;
-    if (day.m2 && counts[day.m2]) counts[day.m2].morning++;
-    if (day.t1 && counts[day.t1]) counts[day.t1].afternoon++;
-    if (day.t2 && counts[day.t2]) counts[day.t2].afternoon++;
+    if (day.m && counts[day.m]) counts[day.m].morning++;
+    if (day.t && counts[day.t]) counts[day.t].afternoon++;
   }
   return counts;
-}
-
-function hasDuplicate(day: DayData): string | null {
-  const slots = [day.m1, day.m2, day.t1, day.t2].filter(Boolean);
-  const seen = new Set<string>();
-  for (const s of slots) {
-    if (seen.has(s)) return s;
-    seen.add(s);
-  }
-  return null;
 }
 
 export default function CalendarEditor({
@@ -145,24 +121,15 @@ export default function CalendarEditor({
   };
 
   const autoFillRotation = () => {
-    const pairs: [string, string][] = [];
-    for (let i = 0; i < agents.length; i += 2) {
-      if (agents[i + 1]) {
-        pairs.push([agents[i].agent_id, agents[i + 1].agent_id]);
-      }
-    }
-    if (pairs.length < 2) return;
+    if (agents.length < 2) return;
 
     const newSchedule = { ...schedule };
     let idx = 0;
     for (const date of Object.keys(newSchedule).sort()) {
-      const mPair = pairs[idx % pairs.length];
-      const tPair = pairs[(idx + 1) % pairs.length];
+      // Morning agent and afternoon agent are always different people
       newSchedule[date] = {
-        m1: mPair[0],
-        m2: mPair[1],
-        t1: tPair[0],
-        t2: tPair[1],
+        m: agents[idx % agents.length].agent_id,
+        t: agents[(idx + 1) % agents.length].agent_id,
       };
       idx++;
     }
@@ -180,8 +147,8 @@ export default function CalendarEditor({
   const handleSave = () => {
     const data = Object.entries(schedule).map(([date, day]) => ({
       date,
-      morning: [day.m1, day.m2].filter(Boolean),
-      afternoon: [day.t1, day.t2].filter(Boolean),
+      morning: [day.m].filter(Boolean),
+      afternoon: [day.t].filter(Boolean),
     }));
 
     startTransition(async () => {
@@ -200,10 +167,10 @@ export default function CalendarEditor({
   const today = new Date().toISOString().split("T")[0];
   const stats = countShifts(schedule, agents);
   const filledSlots = Object.values(schedule).reduce(
-    (n, d) => n + [d.m1, d.m2, d.t1, d.t2].filter(Boolean).length,
+    (n, d) => n + [d.m, d.t].filter(Boolean).length,
     0
   );
-  const totalSlots = dates.length * 4;
+  const totalSlots = dates.length * 2;
   const pct = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
 
   const prevMonth = month === 1 ? { y: year - 1, m: 12 } : { y: year, m: month - 1 };
@@ -216,7 +183,7 @@ export default function CalendarEditor({
         <div>
           <h2 className="font-display text-base font-bold text-foreground">Calendario de Guardias</h2>
           <div className="text-xs text-muted-foreground">
-            Asigne 2 agentes por turno por dia — los cambios se guardan en Supabase
+            Asigne 1 agente por turno por dia — los cambios se guardan en Supabase
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -281,21 +248,15 @@ export default function CalendarEditor({
       {/* Calendar grid */}
       <div className="rounded-[var(--radius)] border-2 border-foreground overflow-hidden bg-card shadow-[var(--shadow-sm)]">
         {/* Header row */}
-        <div className="grid grid-cols-[100px_1fr_1fr_1fr_1fr] border-b-2 border-foreground bg-[var(--neutral)]">
+        <div className="grid grid-cols-[100px_1fr_1fr] border-b-2 border-foreground bg-[var(--neutral)]">
           <div className="px-3 py-2.5 font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground">
             Dia
           </div>
           <div className="px-2 py-2.5 font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground border-l-2 border-foreground">
-            Manana 1
+            Manana
           </div>
           <div className="px-2 py-2.5 font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground border-l-2 border-foreground">
-            Manana 2
-          </div>
-          <div className="px-2 py-2.5 font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground border-l-2 border-foreground">
-            Tarde 1
-          </div>
-          <div className="px-2 py-2.5 font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground border-l-2 border-foreground">
-            Tarde 2
+            Tarde
           </div>
         </div>
 
@@ -306,12 +267,11 @@ export default function CalendarEditor({
           const isWeekend = dow === 0 || dow === 6;
           const isToday = date === today;
           const day = schedule[date];
-          const dup = hasDuplicate(day);
 
           return (
             <div
               key={date}
-              className={`grid grid-cols-[100px_1fr_1fr_1fr_1fr] border-b border-[var(--line-2)] last:border-b-0 ${
+              className={`grid grid-cols-[100px_1fr_1fr] border-b border-[var(--line-2)] last:border-b-0 ${
                 isToday ? "bg-[var(--neutral)]" : isWeekend ? "bg-[var(--bg-3)]" : ""
               }`}
             >
@@ -329,18 +289,15 @@ export default function CalendarEditor({
               </div>
 
               {/* Slot selects */}
-              {(["m1", "m2", "t1", "t2"] as const).map((slot) => {
-                const isMorning = slot.startsWith("m");
-                const isDup = dup && day[slot] === dup;
+              {(["m", "t"] as const).map((slot) => {
+                const isMorning = slot === "m";
                 return (
                   <div key={slot} className="px-1.5 py-1.5 border-l border-[var(--line-2)]">
                     <select
                       value={day[slot]}
                       onChange={(e) => updateSlot(date, slot, e.target.value)}
                       className={`w-full px-2 py-1.5 rounded-[var(--radius-sm)] text-xs font-bold border-2 border-foreground transition-colors cursor-pointer ${
-                        isDup
-                          ? "bg-destructive text-foreground"
-                          : day[slot]
+                        day[slot]
                           ? isMorning
                             ? "bg-[var(--accent-fill)] text-foreground"
                             : "bg-[var(--neutral)] text-foreground"
