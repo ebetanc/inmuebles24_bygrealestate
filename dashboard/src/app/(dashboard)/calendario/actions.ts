@@ -13,6 +13,23 @@ export async function saveMonthSchedule(scheduleData: DaySchedule[]) {
 
   if (scheduleData.length === 0) return { success: false, error: "No data" };
 
+  // Business rule: the same agent cannot cover both morning and afternoon on
+  // the same day (one person on guard in the morning, a different one in the
+  // afternoon). Enforced here so a stale client cannot bypass the UI check.
+  const conflicts = scheduleData
+    .filter((d) => {
+      const m = d.morning.filter(Boolean);
+      const t = d.afternoon.filter(Boolean);
+      return m.length > 0 && t.length > 0 && m.some((a) => t.includes(a));
+    })
+    .map((d) => d.date);
+  if (conflicts.length > 0) {
+    return {
+      success: false,
+      error: `Mismo agente en manana y tarde: ${conflicts.join(", ")}`,
+    };
+  }
+
   // Extract month range from the data
   const dates = scheduleData.map((d) => d.date).sort();
   const firstDate = dates[0];
