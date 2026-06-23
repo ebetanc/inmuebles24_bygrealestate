@@ -84,7 +84,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const ctx = $('Merge Auction + Lead Context').first().json;\nconst agents = $input.all();\n\nreturn agents.map(item => {\n  const agent = item.json;\n  const body = [\n    `\\u{1F3E0} Nuevo lead para ${ctx.property_title}`,\n    `\\u{1F4B0} ${ctx.property_price}`,\n    `\\u{1F464} Lead: ${ctx.lead_name || 'Sin nombre'}`,\n    ``,\n    `Responde *TOMO-${ctx.short_code}* para asignartelo.`,\n    `(Expira en 5 min)`\n  ].join('\\n');\n\n  return {\n    json: {\n      agent_id: agent.agent_id,\n      agent_name: agent.name,\n      number: agent.whatsapp_number,\n      text: body,\n      auction_id: ctx.auction_id,\n      short_code: ctx.short_code,\n      conversation_id: ctx.conversation_id\n    }\n  };\n});"
+        "jsCode": "const ctx = $('Merge Auction + Lead Context').first().json;\nconst agents = $input.all();\n\nreturn agents.map(item => {\n  const agent = item.json;\n  const body = [\n    `\\u{1F3E0} Nuevo lead para ${ctx.property_title}`,\n    `\\u{1F4B0} ${ctx.property_price}`,\n    `\\u{1F464} Lead: ${ctx.lead_name || 'Sin nombre'}`,\n    ``,\n    `Responde *TOMO-${ctx.short_code}* para asignartelo.`,\n    `(Expira en 5 min)`\n  ].join('\\n');\n\n  return {\n    json: {\n      agent_id: agent.agent_id,\n      agent_name: agent.name,\n      number: agent.whatsapp_number,\n      text: body,\n      t_propiedad: String(ctx.property_title || 'Propiedad'),\n      t_precio: String(ctx.property_price || 'Sin precio'),\n      t_nombre: String(ctx.lead_name || 'Sin nombre'),\n      t_codigo: `TOMO-${ctx.short_code}`,\n      t_minutos: '5',\n      auction_id: ctx.auction_id,\n      short_code: ctx.short_code,\n      conversation_id: ctx.conversation_id\n    }\n  };\n});"
       },
       "id": "592d7ee4-342c-484a-9eda-49c9c5d9dfb0",
       "name": "Build Fan-out Messages",
@@ -114,7 +114,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": {{ JSON.stringify($json.text) }}\n  }\n}",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"lead_subasta_notify\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_propiedad) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_precio) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_nombre) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_codigo) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_minutos) }} }\n        ]\n      }\n    ]\n  }\n}",
         "options": {
           "timeout": 15000
         }

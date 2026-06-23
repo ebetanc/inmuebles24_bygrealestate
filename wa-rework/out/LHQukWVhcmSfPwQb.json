@@ -94,6 +94,7 @@
   },
   "settings": {
     "executionOrder": "v1",
+    "timezone": "America/Mexico_City",
     "saveExecutionProgress": true,
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner",

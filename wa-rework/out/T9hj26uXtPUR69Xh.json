@@ -30,7 +30,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- One JSON blob with everything the report needs.\nSELECT jsonb_build_object(\n  'pipeline', (SELECT jsonb_object_agg(stage, n) FROM (\n     SELECT COALESCE(stage,'new') AS stage, count(*) n FROM lead_status\n     WHERE stage NOT IN ('closed_won','closed_lost') GROUP BY 1) p),\n  'won_7d',  (SELECT count(*) FROM lead_status_history WHERE to_stage='closed_won'  AND changed_at >= NOW()-INTERVAL '7 days'),\n  'lost_7d', (SELECT count(*) FROM lead_status_history WHERE to_stage='closed_lost' AND changed_at >= NOW()-INTERVAL '7 days'),\n  'visits_7d',(SELECT count(*) FROM lead_status_history WHERE to_stage='visit_scheduled' AND changed_at >= NOW()-INTERVAL '7 days'),\n  'agents', (SELECT jsonb_agg(jsonb_build_object('name',agent_name,'pending',pending_count,'expired',expired_7d,'answered',answered_7d) ORDER BY pending_count DESC)\n             FROM weekly_followup_summary WHERE pending_count>0 OR expired_7d>0 OR answered_7d>0)\n) AS report;",
+        "query": "-- One JSON blob with everything the report needs.\nSELECT jsonb_build_object(\n  'pipeline', (SELECT jsonb_object_agg(stage, n) FROM (\n     SELECT COALESCE(stage,'new') AS stage, count(*) n FROM lead_status\n     WHERE stage NOT IN ('closed_won','closed_lost') GROUP BY 1) p),\n  'new_7d', (SELECT count(*) FROM conversations WHERE created_at >= NOW()-INTERVAL '7 days'),\n  'won_7d',  (SELECT count(*) FROM lead_status_history WHERE to_stage='closed_won'  AND changed_at >= NOW()-INTERVAL '7 days'),\n  'lost_7d', (SELECT count(*) FROM lead_status_history WHERE to_stage='closed_lost' AND changed_at >= NOW()-INTERVAL '7 days'),\n  'visits_7d',(SELECT count(*) FROM lead_status_history WHERE to_stage='visit_scheduled' AND changed_at >= NOW()-INTERVAL '7 days'),\n  'agents', (SELECT jsonb_agg(jsonb_build_object('name',agent_name,'pending',pending_count,'expired',expired_7d,'answered',answered_7d) ORDER BY pending_count DESC)\n             FROM weekly_followup_summary WHERE pending_count>0 OR expired_7d>0 OR answered_7d>0)\n) AS report;",
         "options": {}
       },
       "id": "16161616-0002-4000-8000-000000000002",
@@ -51,7 +51,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Format the weekly report text for the gerente.\nconst r = ($input.first().json.report) || {};\nconst pl = r.pipeline || {};\nconst stages = ['new','contacted','qualified','visit_scheduled','offer'];\nconst labels = { new:'Nuevos', contacted:'Contactados', qualified:'Calificados', visit_scheduled:'Con visita', offer:'Con oferta' };\nconst plLines = stages.filter(s=>pl[s]).map(s=>`  \\u2022 ${labels[s]}: ${pl[s]}`).join('\\n') || '  (sin leads activos)';\nconst agents = r.agents || [];\nconst agLines = agents.length\n  ? agents.map(a=>`  \\u2022 ${a.name}: ${a.answered} resp, ${a.pending} pend, ${a.expired} sin responder`).join('\\n')\n  : '  (todos al d\\u00eda)';\nconst text = [\n  `\\u{1F4CA} *Reporte semanal de seguimiento*`,\n  ``,\n  `*Pipeline activo:*`,\n  plLines,\n  ``,\n  `*Esta semana:* ${r.visits_7d||0} visitas agendadas, ${r.won_7d||0} cerradas, ${r.lost_7d||0} perdidas`,\n  ``,\n  `*Respuesta de asesores:*`,\n  agLines\n].join('\\n');\nreturn [{ json: { text } }];"
+        "jsCode": "// Format the weekly report text for the gerente.\nconst r = ($input.first().json.report) || {};\nconst pl = r.pipeline || {};\nconst stages = ['new','contacted','qualified','visit_scheduled','offer'];\nconst labels = { new:'Nuevos', contacted:'Contactados', qualified:'Calificados', visit_scheduled:'Con visita', offer:'Con oferta' };\nconst plLines = stages.filter(s=>pl[s]).map(s=>`  \\u2022 ${labels[s]}: ${pl[s]}`).join('\\n') || '  (sin leads activos)';\nconst agents = r.agents || [];\nconst agLines = agents.length\n  ? agents.map(a=>`  \\u2022 ${a.name}: ${a.answered} resp, ${a.pending} pend, ${a.expired} sin responder`).join('\\n')\n  : '  (todos al d\\u00eda)';\nconst text = [\n  `\\u{1F4CA} *Reporte semanal de seguimiento*`,\n  ``,\n  `*Pipeline activo:*`,\n  plLines,\n  ``,\n  `*Esta semana:* ${r.visits_7d||0} visitas agendadas, ${r.won_7d||0} cerradas, ${r.lost_7d||0} perdidas`,\n  ``,\n  `*Respuesta de asesores:*`,\n  agLines\n].join('\\n');\nreturn [{ json: { text, t_nuevos: String(r.new_7d||0), t_won: String(r.won_7d||0), t_lost: String(r.lost_7d||0), t_visitas: String(r.visits_7d||0) } }];"
       },
       "id": "16161616-0003-4000-8000-000000000003",
       "name": "Build Report",
@@ -81,7 +81,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $env.MANAGER_PHONE }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": {{ JSON.stringify($json.text) }}\n  }\n}",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $env.MANAGER_PHONE }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"reporte_semanal_marusa\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_nuevos) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_won) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_lost) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_visitas) }} }\n        ]\n      }\n    ]\n  }\n}",
         "options": {
           "timeout": 15000
         }
@@ -134,6 +134,7 @@
   },
   "settings": {
     "executionOrder": "v1",
+    "timezone": "America/Mexico_City",
     "saveExecutionProgress": true,
     "saveManualExecutions": true
   },

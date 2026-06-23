@@ -100,7 +100,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $env.MANAGER_PHONE }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"\\u26A0\\uFE0F Lead sin asignar\\n\\nPropiedad: {{ $json.property_id }}\\nLead: {{ $json.lead_name || 'Sin nombre' }} ({{ $json.lead_phone }})\\nSubasta: {{ $json.short_code }}\\n\\nNingun asesor respondio en 5 min. Asignacion manual requerida.\"\n  }\n}",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $env.MANAGER_PHONE }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"lead_escalacion_manager\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.property_id || 'Propiedad')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_name || 'Sin nombre')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_phone || 'N/D')) }} }\n        ]\n      }\n    ]\n  }\n}",
         "options": {
           "timeout": 10000
         }
