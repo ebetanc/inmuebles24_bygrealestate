@@ -3,6 +3,7 @@
 import { useState, useCallback, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { saveMonthSchedule } from "./actions";
+import { mxToday } from "@/lib/datetime";
 
 interface Agent {
   agent_id: string;
@@ -178,7 +179,7 @@ export default function CalendarEditor({
   };
 
   const dates = Object.keys(schedule).sort();
-  const today = new Date().toISOString().split("T")[0];
+  const today = mxToday();
   const stats = countShifts(schedule, agents);
   const filledSlots = Object.values(schedule).reduce(
     (n, d) => n + [d.m, d.t].filter(Boolean).length,

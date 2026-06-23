@@ -1,4 +1,5 @@
 import type { Conversation } from "@/lib/types";
+import { formatMx } from "@/lib/datetime";
 
 interface LeadsTableProps {
   conversations: Conversation[];
@@ -56,7 +57,7 @@ export function LeadsTable({ conversations }: LeadsTableProps) {
         </thead>
         <tbody>
           {conversations.map((c) => {
-            const time = new Date(c.created_at).toLocaleTimeString("es-MX", {
+            const time = formatMx(c.created_at, {
               hour: "2-digit",
               minute: "2-digit",
             });

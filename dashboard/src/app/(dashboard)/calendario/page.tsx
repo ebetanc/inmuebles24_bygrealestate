@@ -1,4 +1,5 @@
 import { getMonthSchedule, getAgents } from "@/lib/queries";
+import { mxToday } from "@/lib/datetime";
 import CalendarEditor from "./calendar-editor";
 
 export const dynamic = "force-dynamic";
@@ -9,9 +10,10 @@ export default async function CalendarioPage({
   searchParams: Promise<{ y?: string; m?: string }>;
 }) {
   const params = await searchParams;
-  const now = new Date();
-  const year = params.y ? parseInt(params.y) : now.getFullYear();
-  const month = params.m ? parseInt(params.m) : now.getMonth() + 1;
+  // Default to the current CDMX month (not the UTC server month).
+  const [mxYear, mxMonth] = mxToday().split("-").map(Number);
+  const year = params.y ? parseInt(params.y) : mxYear;
+  const month = params.m ? parseInt(params.m) : mxMonth;
 
   const [schedule, agents] = await Promise.all([
     getMonthSchedule(year, month),

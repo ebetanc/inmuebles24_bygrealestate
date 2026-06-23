@@ -1,4 +1,5 @@
 import { getNightQueue } from "@/lib/queries";
+import { formatMx } from "@/lib/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export default async function NocturnoPage() {
       <div className="flex flex-col gap-3">
         {queue.map((item) => {
           const fill = tempFills[item.temperature || "unknown"];
-          const time = new Date(item.queued_at).toLocaleTimeString("es-MX", {
+          const time = formatMx(item.queued_at, {
             hour: "2-digit",
             minute: "2-digit",
           });

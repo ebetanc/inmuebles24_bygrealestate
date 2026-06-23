@@ -1,4 +1,5 @@
 import { getScrapeRuns } from "@/lib/queries";
+import { formatMx, mxStartOfToday } from "@/lib/datetime";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ function sourceOf(run: { metadata: Record<string, unknown> | null; run_id: strin
 }
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleString("es-MX", {
+  return formatMx(iso, {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
@@ -39,8 +40,7 @@ function duration(started: string, completed: string | null) {
 export default async function LogsPage() {
   const runs = await getScrapeRuns();
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const todayStart = mxStartOfToday();
   const runsToday = runs.filter((r) => new Date(r.started_at) >= todayStart);
   const leadsToday = runsToday.reduce((sum, r) => sum + (r.new_listings || 0), 0);
   const lastRun = runs[0];

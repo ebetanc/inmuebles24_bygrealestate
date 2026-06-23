@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AutoRefresh } from "./auto-refresh";
 import { logout } from "@/app/login/actions";
+import { MX_TZ } from "@/lib/datetime";
 
 const pageTitles: Record<string, string> = {
   "/": "Vista General",
@@ -22,9 +23,9 @@ export function Topbar() {
     const update = () => {
       const now = new Date();
       setClock(
-        now.toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" }) +
+        now.toLocaleDateString("es-MX", { timeZone: MX_TZ, weekday: "short", day: "numeric", month: "short" }) +
           " — " +
-          now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+          now.toLocaleTimeString("es-MX", { timeZone: MX_TZ, hour: "2-digit", minute: "2-digit", second: "2-digit" })
       );
     };
     update();

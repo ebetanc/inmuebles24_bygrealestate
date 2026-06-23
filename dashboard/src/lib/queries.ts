@@ -1,12 +1,12 @@
 import { createSupabaseServer } from "./supabase";
 import type { Agent, Conversation, Auction, NightQueueItem, KPIs, ScrapeRun } from "./types";
+import { mxStartOfToday, mxToday } from "./datetime";
 
 const db = () => createSupabaseServer();
 
 export async function getKPIs(): Promise<KPIs> {
   const supabase = db();
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const todayStart = mxStartOfToday();
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - 7);
 
@@ -154,7 +154,7 @@ export async function getScrapeRuns(limit = 100): Promise<ScrapeRun[]> {
 
 export async function getGuardSchedule() {
   const supabase = db();
-  const today = new Date().toISOString().split("T")[0];
+  const today = mxToday();
   const endDate = new Date();
   endDate.setDate(endDate.getDate() + 7);
 
