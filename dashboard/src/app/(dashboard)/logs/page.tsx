@@ -11,6 +11,15 @@ const statusChip: Record<string, { label: string; cls: string; dot: string }> = 
   error: { label: "Error", cls: "is-alert", dot: "bg-[var(--rose)]" },
 };
 
+// Origen de la corrida: EasyBroker (n8n WF8b) escribe metadata.source='easybroker'
+// y run_id con prefijo 'eb-'. El scraper del Pi (Inmuebles24) deja metadata en null.
+function sourceOf(run: { metadata: Record<string, unknown> | null; run_id: string }) {
+  const s = (run.metadata?.source as string | undefined) ?? (run.run_id?.startsWith("eb-") ? "easybroker" : "inmuebles24");
+  return s === "easybroker"
+    ? { label: "EasyBroker", cls: "is-blue" }
+    : { label: "Inmuebles24", cls: "is-accent" };
+}
+
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleString("es-MX", {
     day: "2-digit",
@@ -42,7 +51,7 @@ export default async function LogsPage() {
         <div>
           <h2 className="font-display text-base font-bold text-foreground">Logs de Subastas</h2>
           <div className="text-xs text-muted-foreground">
-            Bitácora del scraper (Pi) — una corrida cada 15 min, 08:00–22:00 MX
+            Bitácora de scrapers — Inmuebles24 (Pi) + EasyBroker (n8n), cada 15 min, 08:00–22:00 MX
           </div>
         </div>
       </div>
@@ -69,6 +78,7 @@ export default async function LogsPage() {
       <div className="flex flex-col gap-2">
         {runs.map((run) => {
           const chip = statusChip[run.status] || { label: run.status, cls: "is-blue", dot: "bg-[var(--blue)]" };
+          const src = sourceOf(run);
           const noLeads = (run.new_listings || 0) === 0;
 
           return (
@@ -92,6 +102,11 @@ export default async function LogsPage() {
                   <span className={`h-2 w-2 rounded-full ${chip.dot}`} />
                   {chip.label}
                 </span>
+              </div>
+
+              {/* Source */}
+              <div className="shrink-0 w-[120px]">
+                <span className={`nb-chip ${src.cls}`}>{src.label}</span>
               </div>
 
               {/* Counts */}
