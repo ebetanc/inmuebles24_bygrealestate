@@ -1,5 +1,5 @@
 import { createSupabaseServer } from "./supabase";
-import type { Agent, Conversation, Auction, NightQueueItem, KPIs } from "./types";
+import type { Agent, Conversation, Auction, NightQueueItem, KPIs, ScrapeRun } from "./types";
 
 const db = () => createSupabaseServer();
 
@@ -138,6 +138,18 @@ export async function getNightQueue(): Promise<NightQueueItem[]> {
     .eq("processed", false)
     .order("queued_at", { ascending: false });
   return (data || []) as NightQueueItem[];
+}
+
+// Bitácora de corridas del scraper (Pi) — una fila por corrida cada 15 min,
+// incluso si no trajo ningún lead. Fuente: tabla scrape_logs.
+export async function getScrapeRuns(limit = 100): Promise<ScrapeRun[]> {
+  const supabase = db();
+  const { data } = await supabase
+    .from("scrape_logs")
+    .select("*")
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  return (data || []) as ScrapeRun[];
 }
 
 export async function getGuardSchedule() {

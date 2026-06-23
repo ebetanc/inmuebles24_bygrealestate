@@ -60,6 +60,22 @@ export interface GuardShift {
   agents?: { name: string };
 }
 
+export interface ScrapeRun {
+  id: number;
+  run_id: string;
+  started_at: string;
+  completed_at: string | null;
+  status: string;
+  total_scraped: number;
+  new_listings: number;
+  duplicates: number;
+  pages_scraped: number;
+  error_message: string | null;
+  notifications_sent: boolean;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface KPIs {
   totalLeadsToday: number;
   totalLeadsWeek: number;

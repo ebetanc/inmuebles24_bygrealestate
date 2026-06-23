@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from datetime import datetime, timezone
 
 from loguru import logger
 from playwright.async_api import async_playwright
@@ -29,6 +30,7 @@ from inmobiliaria24.scraper import (
     send_to_webhook,
 )
 from inmobiliaria24.state import StateStore
+from inmobiliaria24.supa import log_scrape_run
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -99,9 +101,11 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
     """Run the scraper lifecycle. Returns an integer exit code (0=success, 1=failure)."""
     with StateStore(settings.state_db_path) as store:
         run_id = store.start_run()
+        started_at = datetime.now(timezone.utc)
         total = 0
         new_count = 0
         status = "ok"
+        error_message: str | None = None
 
         async with async_playwright() as pw:
             context, chrome_proc = await launch_chrome(
@@ -113,6 +117,7 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     logger.info("Dry run complete — session is valid, on Mis avisos")
                     print("Dry run complete — session is valid, on Mis avisos")
                     print(f"Final URL: {page.url}")
+                    status = "dry_run"
                     store.finish_run(run_id, status="dry_run")
                     return 0
 
@@ -170,6 +175,7 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
 
             except AuthenticationError as e:
                 status = "auth_error"
+                error_message = str(e)
                 logger.error("Authentication failed: {}", str(e))
                 print(f"AUTH FAILED: {e}")
                 await send_error_alert(
@@ -183,6 +189,7 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
 
             except Exception as e:
                 status = "error"
+                error_message = str(e)
                 logger.exception("Unexpected error: {}", str(e))
                 await send_error_alert(
                     settings.telegram_bot_token,
@@ -194,6 +201,15 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                 return 1
 
             finally:
+                # Mirror this run to Supabase scrape_logs so the dashboard sees
+                # every 15-min run, including empty ones. Never raises.
+                await log_scrape_run(
+                    started_at=started_at,
+                    status=status,
+                    total=total,
+                    new=new_count,
+                    error_message=error_message,
+                )
                 await context.close()
                 chrome_proc.terminate()
                 chrome_proc.wait(timeout=5)
