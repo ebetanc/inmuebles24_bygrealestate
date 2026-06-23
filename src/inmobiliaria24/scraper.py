@@ -441,6 +441,180 @@ async def extract_lead_detail(page: Page, lead_id: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# 2b. Mark a lead as "Contactado" on the portal (remove it from Pendiente)
+# ---------------------------------------------------------------------------
+#
+# The scraper's local SQLite dedup keeps us from re-sending a lead, but the
+# lead stays *Pendiente* on the Inmuebles24 portal forever. Inmuebles24 has no
+# explicit "mark as contacted" control — a lead flips to *Contactado* only once
+# you reply to it in the inbox chat. So mark_lead_contacted() sends a message.
+#
+# Because that is real outbound contact to the prospect, it is driven by the
+# MARK_CONTACTED_MESSAGE env var: until the message text is set, it is a no-op.
+# Use ``--inspect-controls`` (dump_lead_controls below) on a live Pendiente lead
+# to confirm the chat composer + "Enviar" selectors first.
+
+# Dumps every plausibly-clickable control on the current page so we can find
+# the real "mark as contactado" button/menu without live access.
+_DUMP_CONTROLS_JS = """
+() => {
+    const root = document.getElementById('root') || document.body;
+    if (!root) return [];
+    const out = [];
+    const els = root.querySelectorAll(
+        'button, a, [role="button"], [data-qa], [onclick], select, textarea, input, [contenteditable], [class*="estado" i], [class*="status" i]'
+    );
+    const seen = new Set();
+    for (const el of els) {
+        const text = (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 80);
+        const dq = el.getAttribute('data-qa') || '';
+        const aria = el.getAttribute('aria-label') || '';
+        const title = el.getAttribute('title') || '';
+        const cls = (el.className && el.className.toString ? el.className.toString() : '').slice(0, 120);
+        const key = el.tagName + '|' + dq + '|' + text + '|' + cls;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+            tag: el.tagName.toLowerCase(),
+            text,
+            data_qa: dq,
+            aria_label: aria,
+            title,
+            class: cls,
+        });
+        if (out.length >= 200) break;
+    }
+
+    // Second pass: status badges/toggles are often plain <span>/<div> whose
+    // text is exactly the status word (no button/data-qa). Capture those plus
+    // their nearest clickable ancestor so we can target the status control.
+    const all = root.querySelectorAll('span, div, p, li');
+    for (const el of all) {
+        const t = (el.textContent || '').trim();
+        if (t !== 'Pendiente' && t !== 'Contactado' && t !== 'Marcar como contactado'
+            && t !== 'Marcar como pendiente') continue;
+        if (el.children.length > 0) continue;  // leaf node only (the badge text itself)
+        // Walk up to the nearest clickable ancestor.
+        let clickable = el;
+        for (let p = el; p && p !== root; p = p.parentElement) {
+            if (p.tagName === 'BUTTON' || p.tagName === 'A' || p.onclick
+                || p.getAttribute('role') === 'button'
+                || getComputedStyle(p).cursor === 'pointer') {
+                clickable = p;
+                break;
+            }
+        }
+        out.push({
+            tag: el.tagName.toLowerCase(),
+            text: t,
+            data_qa: el.getAttribute('data-qa') || '',
+            aria_label: el.getAttribute('aria-label') || '',
+            title: '_STATUS_BADGE_',
+            class: (el.className && el.className.toString ? el.className.toString() : '').slice(0, 120),
+            clickable_tag: clickable.tagName.toLowerCase(),
+            clickable_class: (clickable.className && clickable.className.toString ? clickable.className.toString() : '').slice(0, 120),
+            clickable_data_qa: clickable.getAttribute('data-qa') || '',
+        });
+    }
+    return out;
+}
+"""
+
+
+async def dump_lead_controls(page: Page, lead_id: str) -> list[dict]:
+    """Open a lead detail page and dump all clickable controls for inspection.
+
+    Writes the controls to logs/lead_controls_<lead_id>.json and logs each one
+    so the operator can identify the real "mark as Contactado" selector to put
+    in MARK_CONTACTED_SELECTOR. Read-only — does not change anything.
+    """
+    import json
+    from pathlib import Path
+
+    await _navigate_spa(page, f"{INTERESADOS_URL}/{lead_id}")
+    controls: list[dict] = await page.evaluate(_DUMP_CONTROLS_JS)
+
+    Path("logs").mkdir(exist_ok=True)
+    out_path = Path("logs") / f"lead_controls_{lead_id}.json"
+    out_path.write_text(json.dumps(controls, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    logger.info("Dumped {} controls from lead {} -> {}", len(controls), lead_id, out_path)
+    for c in controls:
+        # Surface anything that looks status-related at the top of the log.
+        blob = f"{c['text']} {c['data_qa']} {c['aria_label']} {c['title']} {c['class']}".lower()
+        hot = any(k in blob for k in ("contact", "atend", "pendiente", "estado", "marcar", "gestion"))
+        extra = ""
+        if c.get("clickable_tag"):
+            extra = " -> clickable <{}> class={!r} data-qa={!r}".format(
+                c["clickable_tag"], c.get("clickable_class", ""), c.get("clickable_data_qa", ""),
+            )
+        logger.info(
+            "{} <{}> text={!r} data-qa={!r} aria={!r} class={!r}{}",
+            "**" if hot else "  ", c["tag"], c["text"], c["data_qa"], c["aria_label"], c["class"], extra,
+        )
+    return controls
+
+
+async def mark_lead_contacted(page: Page, lead_id: str) -> bool:
+    """Move a lead out of the Pendiente queue by replying to it on the portal.
+
+    Inmuebles24 has no explicit "mark as contacted" control: a lead flips to
+    *Contactado* only once you send it a message in the inbox chat. So this
+    opens the lead detail, types MARK_CONTACTED_MESSAGE into the chat composer
+    and clicks "Enviar".
+
+    IMPORTANT: this sends a real message to the prospect — it is outbound
+    contact, not just a status flag. It is a silent no-op unless
+    MARK_CONTACTED_MESSAGE is set, so nothing is sent until the message text is
+    explicitly configured.
+
+    Never raises — a failure here must not break the scraper run (the lead stays
+    in local dedup regardless). Returns True if a message was sent, else False.
+    """
+    import os
+
+    message = os.environ.get("MARK_CONTACTED_MESSAGE", "").strip()
+    if not message:
+        logger.debug("MARK_CONTACTED_MESSAGE not set — skipping portal reply/status change")
+        return False
+
+    try:
+        await _navigate_spa(page, f"{INTERESADOS_URL}/{lead_id}")
+
+        # Chat composer: target the message box by role/element rather than the
+        # volatile styled-component class names. Prefer a textarea, fall back to
+        # any textbox / contenteditable on the page.
+        composer = page.locator("textarea").first
+        if await composer.count() == 0:
+            composer = page.get_by_role("textbox").first
+        if await composer.count() == 0:
+            composer = page.locator("[contenteditable='true']").first
+        if await composer.count() == 0:
+            logger.warning("Lead {}: no chat composer found — not contacted", lead_id)
+            return False
+
+        await composer.click()
+        await composer.fill(message)
+        await asyncio.sleep(random.uniform(0.5, 1.2))
+
+        # "Enviar" button — target by accessible text, not the hashed class.
+        enviar = page.get_by_role("button", name="Enviar").first
+        if await enviar.count() == 0:
+            enviar = page.locator("button:has-text('Enviar')").first
+        if await enviar.count() == 0:
+            logger.warning("Lead {}: no 'Enviar' button found — not contacted", lead_id)
+            return False
+
+        await enviar.click()
+        await asyncio.sleep(random.uniform(1.5, 2.5))
+        logger.info("Lead {} contacted on portal (reply sent) — should leave Pendiente", lead_id)
+        return True
+    except Exception as e:
+        logger.warning("Lead {}: failed to reply/mark Contactado on portal: {}", lead_id, e)
+        return False
+
+
+# ---------------------------------------------------------------------------
 # 3. Fallback: click-based navigation when no href links are found
 # ---------------------------------------------------------------------------
 

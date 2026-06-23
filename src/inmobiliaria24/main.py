@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from datetime import datetime, timezone
 
@@ -26,6 +27,9 @@ from inmobiliaria24.config import Settings
 from inmobiliaria24.monitor import check_stale_runs, send_error_alert, send_heartbeat
 from inmobiliaria24.scraper import (
     SessionStaleError,
+    dump_lead_controls,
+    extract_leads_list,
+    mark_lead_contacted,
     scrape_pendiente_leads,
     send_to_webhook,
 )
@@ -89,6 +93,18 @@ def _parse_args() -> argparse.Namespace:
         default=0,
         help="Only scrape and send the first N Pendiente leads (0 = all). Useful for a single-lead test.",
     )
+    parser.add_argument(
+        "--inspect-controls",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="LEAD_ID",
+        help=(
+            "Diagnostic: open a lead detail page and dump every clickable control "
+            "to logs/lead_controls_<id>.json (to find the 'mark Contactado' selector). "
+            "Pass a lead_id, or omit it to use the first Pendiente lead. Then exit."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -121,6 +137,26 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     store.finish_run(run_id, status="dry_run")
                     return 0
 
+                # Diagnostic: dump the clickable controls on a lead detail page so
+                # we can identify the real "mark as Contactado" selector. Read-only.
+                if args.inspect_controls is not None:
+                    lead_id = args.inspect_controls
+                    if not lead_id:
+                        leads = await extract_leads_list(page)
+                        lead_id = next(
+                            (l.get("lead_id") for l in leads if l.get("lead_id")), ""
+                        )
+                        if not lead_id:
+                            print("No Pendiente lead with an id found to inspect.")
+                            status = "dry_run"
+                            store.finish_run(run_id, status="dry_run")
+                            return 1
+                    controls = await dump_lead_controls(page, lead_id)
+                    print(f"Dumped {len(controls)} controls for lead {lead_id} -> logs/lead_controls_{lead_id}.json")
+                    status = "dry_run"
+                    store.finish_run(run_id, status="dry_run")
+                    return 0
+
                 # Scrape all Pendiente leads (with session recovery).
                 try:
                     all_leads = await scrape_pendiente_leads(page, limit=args.limit)
@@ -132,6 +168,20 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     await navigate_to_avisos(page)
                     all_leads = await scrape_pendiente_leads(page, limit=args.limit)
                 total = len(all_leads)
+
+                # One-shot diagnostic: when INSPECT_ON_PENDIENTE is set, dump the
+                # clickable controls of the first real Pendiente lead so we can
+                # confirm the chat composer + "Enviar" selectors on a live lead
+                # (read-only; piggybacks on the normal run, no extra proxy data).
+                if os.environ.get("INSPECT_ON_PENDIENTE", "").strip() and all_leads:
+                    insp_id = next(
+                        (l.get("lead_id") for l in all_leads if l.get("lead_id")), ""
+                    )
+                    if insp_id:
+                        try:
+                            await dump_lead_controls(page, insp_id)
+                        except Exception as e:
+                            logger.warning("INSPECT_ON_PENDIENTE dump failed: {}", e)
 
                 # Dedup: only send leads we have not already pushed. A lead stays
                 # Pendiente on the portal until an agent attends it, so without
@@ -147,6 +197,16 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                         new_leads, webhook_url=settings.webhook_url
                     )
                     store.mark_seen(new_leads)
+
+                    # Pull each sent lead out of the portal's Pendiente queue by
+                    # marking it Contactado. Best-effort and only after a
+                    # successful webhook + mark_seen, so a failure here never
+                    # drops a lead (local dedup already prevents re-sending).
+                    # No-op until MARK_CONTACTED_SELECTOR is set (see scraper.py).
+                    for lead in new_leads:
+                        lid = lead.get("lead_id", "")
+                        if lid:
+                            await mark_lead_contacted(page, lid)
                 else:
                     logger.info("No new leads to send — all already pushed")
 
