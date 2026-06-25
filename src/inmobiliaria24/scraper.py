@@ -445,14 +445,11 @@ async def extract_lead_detail(page: Page, lead_id: str) -> dict | None:
 # ---------------------------------------------------------------------------
 #
 # The scraper's local SQLite dedup keeps us from re-sending a lead, but the
-# lead stays *Pendiente* on the Inmuebles24 portal forever. Inmuebles24 has no
-# explicit "mark as contacted" control — a lead flips to *Contactado* only once
-# you reply to it in the inbox chat. So mark_lead_contacted() sends a message.
-#
-# Because that is real outbound contact to the prospect, it is driven by the
-# MARK_CONTACTED_MESSAGE env var: until the message text is set, it is a no-op.
-# Use ``--inspect-controls`` (dump_lead_controls below) on a live Pendiente lead
-# to confirm the chat composer + "Enviar" selectors first.
+# lead stays *Pendiente* on the Inmuebles24 portal forever. Each inbox row has
+# an "Estado de consulta" dropdown (Pendiente / Contactado / Finalizado) that
+# changes the status IN PLACE — mark_lead_contacted() selects "Contactado"
+# there. This does NOT message the prospect (unlike replying in the chat, the
+# only other way to flip status). Gated by the MARK_CONTACTED env var.
 
 # Dumps every plausibly-clickable control on the current page so we can find
 # the real "mark as contactado" button/menu without live access.
@@ -555,62 +552,309 @@ async def dump_lead_controls(page: Page, lead_id: str) -> list[dict]:
     return controls
 
 
-async def mark_lead_contacted(page: Page, lead_id: str) -> bool:
-    """Move a lead out of the Pendiente queue by replying to it on the portal.
+# Finds the per-row status chip ("Pendiente v" dropdown) in the inbox list and
+# the menu it opens. The inbox row exposes a status dropdown that changes the
+# status IN PLACE without opening the lead or messaging the prospect — unlike
+# the detail page, which only flips status on reply.
+_FIND_STATUS_CHIPS_JS = """
+() => {
+    const root = document.getElementById('root') || document.body;
+    if (!root) return [];
+    const out = [];
+    let idx = 0;
+    for (const el of root.querySelectorAll('*')) {
+        const t = (el.textContent || '').trim();
+        if (t !== 'Pendiente') continue;
+        if (el.children.length > 2) continue;  // chip leaf (label + maybe chevron)
+        let trig = el;
+        for (let p = el; p && p !== root; p = p.parentElement) {
+            if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
+                || p.onclick || getComputedStyle(p).cursor === 'pointer') { trig = p; break; }
+        }
+        out.push({
+            idx,
+            text: t,
+            chip_tag: el.tagName.toLowerCase(),
+            chip_class: (el.className && el.className.toString ? el.className.toString() : '').slice(0, 120),
+            trig_tag: trig.tagName.toLowerCase(),
+            trig_class: (trig.className && trig.className.toString ? trig.className.toString() : '').slice(0, 120),
+            trig_dq: trig.getAttribute('data-qa') || '',
+            trig_aria: trig.getAttribute('aria-label') || '',
+        });
+        idx++;
+    }
+    return out;
+}
+"""
 
-    Inmuebles24 has no explicit "mark as contacted" control: a lead flips to
-    *Contactado* only once you send it a message in the inbox chat. So this
-    opens the lead detail, types MARK_CONTACTED_MESSAGE into the chat composer
-    and clicks "Enviar".
+# Clicks the Nth "Pendiente" chip trigger (to open its dropdown).
+_CLICK_STATUS_CHIP_JS = """
+(index) => {
+    const root = document.getElementById('root') || document.body;
+    let idx = 0;
+    for (const el of root.querySelectorAll('*')) {
+        const t = (el.textContent || '').trim();
+        if (t !== 'Pendiente') continue;
+        if (el.children.length > 2) continue;
+        if (idx === index) {
+            let trig = el;
+            for (let p = el; p && p !== root; p = p.parentElement) {
+                if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
+                    || p.onclick || getComputedStyle(p).cursor === 'pointer') { trig = p; break; }
+            }
+            trig.click();
+            return true;
+        }
+        idx++;
+    }
+    return false;
+}
+"""
 
-    IMPORTANT: this sends a real message to the prospect — it is outbound
-    contact, not just a status flag. It is a silent no-op unless
-    MARK_CONTACTED_MESSAGE is set, so nothing is sent until the message text is
-    explicitly configured.
+# After opening the dropdown, dump the visible menu options (Contactado, etc).
+_DUMP_MENU_JS = """
+() => {
+    const root = document.getElementById('root') || document.body;
+    const out = [];
+    const seen = new Set();
+    for (const el of root.querySelectorAll('[role="menuitem"], [role="option"], li, button, a, span, div')) {
+        const t = (el.textContent || '').trim();
+        if (!t || t.length > 40) continue;
+        // Status-menu candidates: short option-like text near status words.
+        if (!/^(Contactado|Pendiente|Descartad|No contestó|No contesto|Cita|Visita|Cerrad|Atendid|Interesad|Apartad)/i.test(t)) continue;
+        if (el.children.length > 1) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;  // visible only
+        const key = el.tagName + '|' + t;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+            tag: el.tagName.toLowerCase(),
+            text: t,
+            role: el.getAttribute('role') || '',
+            data_qa: el.getAttribute('data-qa') || '',
+            class: (el.className && el.className.toString ? el.className.toString() : '').slice(0, 100),
+        });
+    }
+    return out;
+}
+"""
 
-    Never raises — a failure here must not break the scraper run (the lead stays
-    in local dedup regardless). Returns True if a message was sent, else False.
+
+async def dump_status_dropdown(page: Page) -> dict:
+    """Inspect the inbox-row status dropdown ("Pendiente v") and its menu options.
+
+    Navigates the Interesados inbox, scans every tab for a Pendiente status chip,
+    clicks the first one to open its dropdown, and dumps the menu options that
+    appear (e.g. "Contactado"). Read-only — opens the menu but does not select an
+    option. Writes logs/status_dropdown.json.
+    """
+    import json
+    from pathlib import Path
+
+    await _navigate_spa(page, INTERESADOS_URL)
+    await asyncio.sleep(30)
+
+    result: dict = {"chips_by_tab": {}, "menu": [], "found_tab": None}
+
+    for tab_name, tab_selector in _TABS:
+        if tab_selector:
+            clicked = await page.evaluate(_CLICK_TAB_JS, tab_selector)
+            if not clicked:
+                continue
+            await asyncio.sleep(30)
+
+        # Screenshot what the scraper actually sees in this tab (parity check
+        # vs the operator's own panel — resolves "scraper sees 0 Pendiente").
+        try:
+            Path("logs").mkdir(exist_ok=True)
+            await page.screenshot(path=f"logs/inbox_{tab_name}.png", full_page=True)
+        except Exception:
+            pass
+
+        chips = await page.evaluate(_FIND_STATUS_CHIPS_JS)
+        result["chips_by_tab"][tab_name] = chips
+        logger.info("Tab '{}': {} Pendiente status chip(s)", tab_name, len(chips))
+        for c in chips:
+            logger.info(
+                "  chip <{}> class={!r} -> trigger <{}> class={!r} data-qa={!r} aria={!r}",
+                c["chip_tag"], c["chip_class"], c["trig_tag"], c["trig_class"], c["trig_dq"], c["trig_aria"],
+            )
+
+        if chips and result["found_tab"] is None:
+            # Open the first Pendiente dropdown and dump the menu.
+            ok = await page.evaluate(_CLICK_STATUS_CHIP_JS, 0)
+            logger.info("Clicked first Pendiente chip in tab '{}': {}", tab_name, ok)
+            await asyncio.sleep(random.uniform(1.5, 2.5))
+            try:
+                await page.screenshot(path="logs/status_menu_open.png", full_page=True)
+            except Exception:
+                pass
+            menu = await page.evaluate(_DUMP_MENU_JS)
+            result["menu"] = menu
+            result["found_tab"] = tab_name
+            logger.info("Dropdown menu options ({}):", len(menu))
+            for m in menu:
+                logger.info(
+                    "  ** MENU <{}> text={!r} role={!r} data-qa={!r} class={!r}",
+                    m["tag"], m["text"], m["role"], m["data_qa"], m["class"],
+                )
+            # Close the menu (Escape) so we don't accidentally change anything.
+            try:
+                await page.keyboard.press("Escape")
+            except Exception:
+                pass
+
+    Path("logs").mkdir(exist_ok=True)
+    (Path("logs") / "status_dropdown.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    logger.info("Wrote logs/status_dropdown.json")
+    return result
+
+
+# Reads the status chip text ("Pendiente"/"Contactado"/"Finalizado") of the
+# inbox row whose lead link matches leadId. Read-only.
+_READ_CHIP_JS = """
+(leadId) => {
+    const root = document.getElementById('root') || document.body;
+    const re = new RegExp('interesados/' + leadId + '(?:[^0-9]|$)');
+    for (const a of root.querySelectorAll('a')) {
+        if (!re.test(a.getAttribute('href') || '')) continue;
+        let row = a;
+        for (let p = a; p && p !== root; p = p.parentElement) {
+            if (p.tagName === 'TR' || p.tagName === 'LI' || p.getAttribute('role') === 'row'
+                || p.getAttribute('data-qa') || p.getAttribute('data-panel')) { row = p; break; }
+        }
+        for (const el of row.querySelectorAll('*')) {
+            const t = (el.textContent || '').trim();
+            if ((t === 'Pendiente' || t === 'Contactado' || t === 'Finalizado')
+                && el.children.length <= 2) return t;
+        }
+        return '_ROW_NO_CHIP_';
+    }
+    return '_LEAD_NOT_FOUND_';
+}
+"""
+
+# Opens (clicks) the status chip of the inbox row matching leadId.
+_OPEN_CHIP_JS = """
+(leadId) => {
+    const root = document.getElementById('root') || document.body;
+    const re = new RegExp('interesados/' + leadId + '(?:[^0-9]|$)');
+    for (const a of root.querySelectorAll('a')) {
+        if (!re.test(a.getAttribute('href') || '')) continue;
+        let row = a;
+        for (let p = a; p && p !== root; p = p.parentElement) {
+            if (p.tagName === 'TR' || p.tagName === 'LI' || p.getAttribute('role') === 'row'
+                || p.getAttribute('data-qa') || p.getAttribute('data-panel')) { row = p; break; }
+        }
+        for (const el of row.querySelectorAll('*')) {
+            const t = (el.textContent || '').trim();
+            if ((t === 'Pendiente' || t === 'Contactado' || t === 'Finalizado')
+                && el.children.length <= 2) {
+                let chip = el;
+                for (let p = el; p && p !== row; p = p.parentElement) {
+                    if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
+                        || p.onclick || getComputedStyle(p).cursor === 'pointer') { chip = p; break; }
+                }
+                chip.click();
+                return true;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+"""
+
+# Clicks the option with the given label inside the open "Estado de consulta"
+# popover (radios: Pendiente / Contactado / Finalizado). Applies on click.
+_CLICK_OPTION_JS = """
+(label) => {
+    for (const el of document.querySelectorAll('label, span, div, li, button, [role="radio"], [role="menuitemradio"], [role="option"]')) {
+        if ((el.textContent || '').trim() !== label) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;  // visible only
+        let c = el;
+        for (let p = el; p && p !== document.body; p = p.parentElement) {
+            if (p.tagName === 'LABEL' || p.tagName === 'BUTTON'
+                || p.getAttribute('role') === 'radio' || p.getAttribute('role') === 'menuitemradio'
+                || p.onclick || getComputedStyle(p).cursor === 'pointer') { c = p; break; }
+        }
+        c.click();
+        return true;
+    }
+    return false;
+}
+"""
+
+
+async def mark_lead_contacted(page: Page, lead: dict) -> bool:
+    """Set a scraped lead's Inmuebles24 status to *Contactado* via the inbox
+    row's "Estado de consulta" dropdown (Pendiente / Contactado / Finalizado).
+
+    This changes the portal status WITHOUT messaging the prospect — it just
+    selects the "Contactado" radio in the per-row status dropdown, exactly what
+    a human does by hand. (The earlier reply-based approach was wrong: replying
+    in the chat is the only OTHER way to flip status, but it contacts the lead.)
+
+    Gated by the MARK_CONTACTED env var (set to 1) so it is a no-op until
+    explicitly enabled. Never raises — a failure here must not break the run
+    (the lead stays in local dedup regardless). Returns True if the lead is
+    Contactado afterwards.
     """
     import os
 
-    message = os.environ.get("MARK_CONTACTED_MESSAGE", "").strip()
-    if not message:
-        logger.debug("MARK_CONTACTED_MESSAGE not set — skipping portal reply/status change")
+    if os.environ.get("MARK_CONTACTED", "").strip().lower() not in ("1", "true", "yes"):
+        logger.debug("MARK_CONTACTED not enabled — skipping portal status change")
         return False
 
+    lead_id = str(lead.get("lead_id") or "").strip()
+    if not lead_id:
+        return False
+    tab = lead.get("source_tab", "mensajes")
+    tab_selector = dict(_TABS).get(tab)
+
     try:
-        await _navigate_spa(page, f"{INTERESADOS_URL}/{lead_id}")
+        await _navigate_spa(page, INTERESADOS_URL)
+        await asyncio.sleep(random.uniform(3.0, 5.0))
 
-        # Chat composer: target the message box by role/element rather than the
-        # volatile styled-component class names. Prefer a textarea, fall back to
-        # any textbox / contenteditable on the page.
-        composer = page.locator("textarea").first
-        if await composer.count() == 0:
-            composer = page.get_by_role("textbox").first
-        if await composer.count() == 0:
-            composer = page.locator("[contenteditable='true']").first
-        if await composer.count() == 0:
-            logger.warning("Lead {}: no chat composer found — not contacted", lead_id)
+        # The lead lives under its source tab (mensajes/telefono/whatsapp).
+        if tab_selector:
+            await page.evaluate(_CLICK_TAB_JS, tab_selector)
+            await asyncio.sleep(random.uniform(3.0, 5.0))
+
+        current = await page.evaluate(_READ_CHIP_JS, lead_id)
+        if current in ("Contactado", "Finalizado"):
+            logger.info("Lead {} already '{}' on portal — no change", lead_id, current)
+            return True
+        if current != "Pendiente":
+            logger.warning("Lead {}: status chip not found ({}) — not marked", lead_id, current)
             return False
 
-        await composer.click()
-        await composer.fill(message)
-        await asyncio.sleep(random.uniform(0.5, 1.2))
-
-        # "Enviar" button — target by accessible text, not the hashed class.
-        enviar = page.get_by_role("button", name="Enviar").first
-        if await enviar.count() == 0:
-            enviar = page.locator("button:has-text('Enviar')").first
-        if await enviar.count() == 0:
-            logger.warning("Lead {}: no 'Enviar' button found — not contacted", lead_id)
+        if not await page.evaluate(_OPEN_CHIP_JS, lead_id):
+            logger.warning("Lead {}: could not open status dropdown — not marked", lead_id)
             return False
+        await asyncio.sleep(random.uniform(0.8, 1.5))
 
-        await enviar.click()
-        await asyncio.sleep(random.uniform(1.5, 2.5))
-        logger.info("Lead {} contacted on portal (reply sent) — should leave Pendiente", lead_id)
-        return True
+        if not await page.evaluate(_CLICK_OPTION_JS, "Contactado"):
+            logger.warning("Lead {}: 'Contactado' option not found in dropdown", lead_id)
+            try:
+                await page.keyboard.press("Escape")
+            except Exception:
+                pass
+            return False
+        await asyncio.sleep(random.uniform(1.2, 2.0))
+
+        # Verify the row chip now reads Contactado.
+        after = await page.evaluate(_READ_CHIP_JS, lead_id)
+        ok = after == "Contactado"
+        logger.info("Lead {} status -> Contactado via dropdown: {} (now '{}')",
+                    lead_id, "OK" if ok else "UNVERIFIED", after)
+        return ok
     except Exception as e:
-        logger.warning("Lead {}: failed to reply/mark Contactado on portal: {}", lead_id, e)
+        logger.warning("Lead {}: failed to set Contactado via dropdown: {}", lead_id, e)
         return False
 
 

@@ -94,6 +94,28 @@ def _parse_args() -> argparse.Namespace:
         help="Only scrape and send the first N Pendiente leads (0 = all). Useful for a single-lead test.",
     )
     parser.add_argument(
+        "--mark-test",
+        action="store_true",
+        default=False,
+        dest="mark_test",
+        help=(
+            "Test: find the first Pendiente lead in the inbox and set it to "
+            "Contactado via the status dropdown (forces MARK_CONTACTED for this "
+            "run; no webhook/auction). Proves the status-change works, then exit."
+        ),
+    )
+    parser.add_argument(
+        "--inspect-status",
+        action="store_true",
+        default=False,
+        dest="inspect_status",
+        help=(
+            "Diagnostic: open the inbox, find the per-row 'Pendiente' status "
+            "dropdown and dump its menu options (e.g. 'Contactado') to "
+            "logs/status_dropdown.json. Read-only. Then exit."
+        ),
+    )
+    parser.add_argument(
         "--inspect-controls",
         nargs="?",
         const="",
@@ -133,6 +155,38 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     logger.info("Dry run complete — session is valid, on Mis avisos")
                     print("Dry run complete — session is valid, on Mis avisos")
                     print(f"Final URL: {page.url}")
+                    status = "dry_run"
+                    store.finish_run(run_id, status="dry_run")
+                    return 0
+
+                # Test: mark the first live Pendiente lead Contactado via the
+                # status dropdown (forces the gate on for this run; no webhook).
+                if args.mark_test:
+                    leads = await extract_leads_list(page)
+                    target = next(
+                        (l for l in leads if l.get("lead_id") and l.get("status") == "Pendiente"),
+                        None,
+                    )
+                    if not target:
+                        print("No Pendiente lead with an id found to mark-test.")
+                        store.finish_run(run_id, status="dry_run")
+                        return 1
+                    os.environ["MARK_CONTACTED"] = "1"
+                    print(f"Mark-test target: {target.get('name')!r} lead_id={target.get('lead_id')} tab={target.get('source_tab')}")
+                    ok = await mark_lead_contacted(page, target)
+                    print(f"Mark-test result: {'CONTACTADO OK' if ok else 'FAILED/UNVERIFIED'} (lead_id={target.get('lead_id')})")
+                    status = "dry_run"
+                    store.finish_run(run_id, status="dry_run")
+                    return 0 if ok else 1
+
+                # Diagnostic: inspect the inbox-row status dropdown + its menu.
+                if args.inspect_status:
+                    from inmobiliaria24.scraper import dump_status_dropdown
+                    res = await dump_status_dropdown(page)
+                    print(
+                        f"Status dropdown: found in tab {res.get('found_tab')!r}, "
+                        f"{len(res.get('menu', []))} menu option(s) -> logs/status_dropdown.json"
+                    )
                     status = "dry_run"
                     store.finish_run(run_id, status="dry_run")
                     return 0
@@ -198,15 +252,14 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     )
                     store.mark_seen(new_leads)
 
-                    # Pull each sent lead out of the portal's Pendiente queue by
-                    # marking it Contactado. Best-effort and only after a
-                    # successful webhook + mark_seen, so a failure here never
-                    # drops a lead (local dedup already prevents re-sending).
-                    # No-op until MARK_CONTACTED_SELECTOR is set (see scraper.py).
+                    # Set each sent lead's Inmuebles24 status to Contactado via
+                    # the inbox status dropdown (no message to the prospect).
+                    # Best-effort and only after a successful webhook + mark_seen,
+                    # so a failure here never drops a lead (local dedup already
+                    # prevents re-sending). No-op until MARK_CONTACTED=1.
                     for lead in new_leads:
-                        lid = lead.get("lead_id", "")
-                        if lid:
-                            await mark_lead_contacted(page, lid)
+                        if lead.get("lead_id"):
+                            await mark_lead_contacted(page, lead)
                 else:
                     logger.info("No new leads to send — all already pushed")
 
