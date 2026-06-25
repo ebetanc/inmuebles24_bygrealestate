@@ -1,32 +1,15 @@
 {
-  "updatedAt": "2026-06-25T05:59:40.626Z",
-  "createdAt": "2026-06-14T14:46:10.909Z",
-  "id": "Obr38705ZZYS3FB8",
-  "name": "WF10 - Scraper Lead Intake",
+  "updatedAt": "2026-06-25T05:59:41.101Z",
+  "createdAt": "2026-06-23T20:04:20.270Z",
+  "id": "Mu3YTTH8IgtaH7Ml",
+  "name": "WF8b - EasyBroker Lead Intake",
   "description": null,
   "active": true,
   "isArchived": false,
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "scraper-leads",
-        "options": {}
-      },
-      "id": "b1b2c3d4-0001-4000-8000-000000000001",
-      "name": "Scraper Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [
-        208,
-        304
-      ],
-      "webhookId": "scraper-leads-webhook-id",
-      "notes": "Receives POST from Python scraper.\nPayload: JSON array of lead objects.\nConfigure scraper env: WEBHOOK_URL=https://[your-n8n-domain]/webhook/scraper-leads"
-    },
-    {
-      "parameters": {
-        "jsCode": "// The scraper sends an array of leads. Split into individual items.\n// Normalize field names for downstream processing.\nconst body = $input.first().json.body || $input.first().json;\nconst leads = Array.isArray(body) ? body : [body];\n\nreturn leads.map(lead => ({\n  json: {\n    // Contact info\n    phone: (lead.phone || '').replace(/[^\\d]/g, ''),\n    email: lead.email || null,\n    name: lead.name || lead.pushName || null,\n    message: lead.message || '',\n    // Property info (already available from scraper)\n    listing_id: lead.listing_id || null,\n    property_title: lead.property || lead.address || 'Propiedad sin titulo',\n    property_address: lead.address || '',\n    property_price: lead.price || 'Precio por confirmar',\n    listing_type: lead.listing_type || 'venta',\n    // Scraper metadata\n    scraper_lead_id: lead.lead_id || null,\n    source_tab: lead.source_tab || 'mensajes',\n    source: 'inmuebles24'\n  }\n}));"
+        "jsCode": "// Merge EB contact + property details -> WF10-normalized lead shape.\nconst contact = $('Split EB Leads').item.json;\nconst prop = $input.first().json || {};\nconst hasProp = !!(prop && prop.public_id);\nconst title = hasProp ? prop.title : ('Propiedad ' + (contact.property_id || 'EasyBroker'));\nconst price = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].formatted_amount : 'Precio por confirmar';\nconst loc = hasProp && prop.location ? (typeof prop.location==='object' ? prop.location.name : prop.location) : '';\nconst op = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].type : 'venta';\nreturn [{ json: {\n  phone: (contact.phone||'').replace(/[^\\d]/g,''),\n  email: contact.email || null,\n  name: contact.name || null,\n  message: contact.message || '',\n  listing_id: contact.property_id || null,\n  property_title: title,\n  property_address: loc,\n  property_price: price,\n  listing_type: op,\n  source: 'easybroker'\n}}];"
       },
       "id": "b1b2c3d4-0002-4000-8000-000000000002",
       "name": "Split & Normalize Leads",
@@ -398,20 +381,171 @@
       ],
       "id": "b85a5f12-0653-4794-bbc9-d2df332181f8",
       "name": "Route"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "eb8b-0001-aaaa-0001",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.easybroker.com/v1/contact_requests",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Authorization",
+              "value": "={{ $env.EASYBROKER_API_KEY }}"
+            },
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "page",
+              "value": "1"
+            },
+            {
+              "name": "limit",
+              "value": "50"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "eb8b-0002-aaaa-0002",
+      "name": "Fetch EB Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// EB poll: filter new (id>cursor) & source!=Inmuebles24; advance cursor; emit a log row + lead rows.\nconst response = $input.first().json;\nconst content = Array.isArray(response.content) ? response.content : [];\nconst ok = Array.isArray(response.content);\nconst sd = $getWorkflowStaticData('global');\nlet lastId = sd.lastEbContactId;\nif (lastId === undefined || lastId === null) lastId = 39328174; // baseline = current max, avoids dumping history\nconst newMax = content.length ? Math.max(lastId, ...content.map(c=>c.id)) : lastId;\nconst fresh = content.filter(c => c.id > lastId && c.source !== 'Inmuebles24');\nsd.lastEbContactId = newMax;\nconst out = [{ json: {\n  __log: true,\n  run_id: 'eb-' + Date.now(),\n  started_at: new Date().toISOString(),\n  status: ok ? 'ok' : 'error',\n  total_scraped: content.length,\n  new_listings: fresh.length,\n  error_message: ok ? null : 'No content in EB response'\n}}];\nfor (const c of fresh.sort((a,b)=>a.id-b.id)) out.push({ json: {\n  __log: false,\n  eb_contact_id: c.id, name: c.name||null,\n  phone: (c.phone||'').replace(/[^\\d]/g,''), email: c.email||null,\n  property_id: c.property_id||null, message: c.message||'', eb_source: c.source||'EasyBroker'\n}});\nreturn out;"
+      },
+      "id": "eb8b-0003-aaaa-0003",
+      "name": "Split EB Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        40,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.easybroker.com/v1/properties/{{ $json.property_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Authorization",
+              "value": "={{ $env.EASYBROKER_API_KEY }}"
+            },
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "eb8b-0004-aaaa-0004",
+      "name": "Fetch EB Property",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "is-log",
+              "leftValue": "={{ $json.__log }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "eb8b-0005-aaaa-0005",
+      "name": "Is Log Row?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        260,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO scrape_logs (run_id, started_at, completed_at, status, total_scraped, new_listings, duplicates, pages_scraped, notifications_sent, metadata)\nVALUES ($1, $2::timestamptz, NOW(), $3, $4, $5, 0, 1, ($5 > 0), $6::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [$json.run_id, $json.started_at, $json.status, $json.total_scraped, $json.new_listings, JSON.stringify({source:'easybroker'})] }}"
+        }
+      },
+      "id": "eb8b-0006-aaaa-0006",
+      "name": "Log EB Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        60
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      }
     }
   ],
   "connections": {
-    "Scraper Webhook": {
-      "main": [
-        [
-          {
-            "node": "Split & Normalize Leads",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Split & Normalize Leads": {
       "main": [
         [
@@ -547,6 +681,68 @@
           }
         ]
       ]
+    },
+    "Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch EB Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch EB Contacts": {
+      "main": [
+        [
+          {
+            "node": "Split EB Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split EB Leads": {
+      "main": [
+        [
+          {
+            "node": "Is Log Row?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch EB Property": {
+      "main": [
+        [
+          {
+            "node": "Split & Normalize Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Log Row?": {
+      "main": [
+        [
+          {
+            "node": "Log EB Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch EB Property",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -556,19 +752,26 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "staticData": null,
+  "staticData": {
+    "node:Every 15 Minutes": {
+      "recurrenceRules": []
+    },
+    "global": {
+      "lastEbContactId": 39360024
+    }
+  },
   "meta": null,
-  "pinData": {},
-  "versionId": "38d9b26c-4d20-45d6-9bb4-dd13b2b900f0",
-  "activeVersionId": "38d9b26c-4d20-45d6-9bb4-dd13b2b900f0",
-  "versionCounter": 84,
+  "pinData": null,
+  "versionId": "2192f5ea-27bd-4a41-b8fb-8bf7ff498c01",
+  "activeVersionId": "2192f5ea-27bd-4a41-b8fb-8bf7ff498c01",
+  "versionCounter": 152,
   "triggerCount": 1,
   "shared": [
     {
-      "updatedAt": "2026-06-14T14:46:10.911Z",
-      "createdAt": "2026-06-14T14:46:10.911Z",
+      "updatedAt": "2026-06-23T20:04:20.273Z",
+      "createdAt": "2026-06-23T20:04:20.273Z",
       "role": "workflow:owner",
-      "workflowId": "Obr38705ZZYS3FB8",
+      "workflowId": "Mu3YTTH8IgtaH7Ml",
       "projectId": "q5HebGTNHrfaBGjx",
       "project": {
         "updatedAt": "2025-06-06T10:18:49.745Z",
@@ -631,31 +834,14 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-06-25T05:59:40.627Z",
-    "createdAt": "2026-06-25T05:59:40.627Z",
-    "versionId": "38d9b26c-4d20-45d6-9bb4-dd13b2b900f0",
-    "workflowId": "Obr38705ZZYS3FB8",
+    "updatedAt": "2026-06-25T05:59:41.101Z",
+    "createdAt": "2026-06-25T05:59:41.101Z",
+    "versionId": "2192f5ea-27bd-4a41-b8fb-8bf7ff498c01",
+    "workflowId": "Mu3YTTH8IgtaH7Ml",
     "nodes": [
       {
         "parameters": {
-          "httpMethod": "POST",
-          "path": "scraper-leads",
-          "options": {}
-        },
-        "id": "b1b2c3d4-0001-4000-8000-000000000001",
-        "name": "Scraper Webhook",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
-        "position": [
-          208,
-          304
-        ],
-        "webhookId": "scraper-leads-webhook-id",
-        "notes": "Receives POST from Python scraper.\nPayload: JSON array of lead objects.\nConfigure scraper env: WEBHOOK_URL=https://[your-n8n-domain]/webhook/scraper-leads"
-      },
-      {
-        "parameters": {
-          "jsCode": "// The scraper sends an array of leads. Split into individual items.\n// Normalize field names for downstream processing.\nconst body = $input.first().json.body || $input.first().json;\nconst leads = Array.isArray(body) ? body : [body];\n\nreturn leads.map(lead => ({\n  json: {\n    // Contact info\n    phone: (lead.phone || '').replace(/[^\\d]/g, ''),\n    email: lead.email || null,\n    name: lead.name || lead.pushName || null,\n    message: lead.message || '',\n    // Property info (already available from scraper)\n    listing_id: lead.listing_id || null,\n    property_title: lead.property || lead.address || 'Propiedad sin titulo',\n    property_address: lead.address || '',\n    property_price: lead.price || 'Precio por confirmar',\n    listing_type: lead.listing_type || 'venta',\n    // Scraper metadata\n    scraper_lead_id: lead.lead_id || null,\n    source_tab: lead.source_tab || 'mensajes',\n    source: 'inmuebles24'\n  }\n}));"
+          "jsCode": "// Merge EB contact + property details -> WF10-normalized lead shape.\nconst contact = $('Split EB Leads').item.json;\nconst prop = $input.first().json || {};\nconst hasProp = !!(prop && prop.public_id);\nconst title = hasProp ? prop.title : ('Propiedad ' + (contact.property_id || 'EasyBroker'));\nconst price = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].formatted_amount : 'Precio por confirmar';\nconst loc = hasProp && prop.location ? (typeof prop.location==='object' ? prop.location.name : prop.location) : '';\nconst op = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].type : 'venta';\nreturn [{ json: {\n  phone: (contact.phone||'').replace(/[^\\d]/g,''),\n  email: contact.email || null,\n  name: contact.name || null,\n  message: contact.message || '',\n  listing_id: contact.property_id || null,\n  property_title: title,\n  property_address: loc,\n  property_price: price,\n  listing_type: op,\n  source: 'easybroker'\n}}];"
         },
         "id": "b1b2c3d4-0002-4000-8000-000000000002",
         "name": "Split & Normalize Leads",
@@ -1027,20 +1213,171 @@
         ],
         "id": "b85a5f12-0653-4794-bbc9-d2df332181f8",
         "name": "Route"
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 15
+              }
+            ]
+          }
+        },
+        "id": "eb8b-0001-aaaa-0001",
+        "name": "Every 15 Minutes",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -400,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "https://api.easybroker.com/v1/contact_requests",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Authorization",
+                "value": "={{ $env.EASYBROKER_API_KEY }}"
+              },
+              {
+                "name": "accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "page",
+                "value": "1"
+              },
+              {
+                "name": "limit",
+                "value": "50"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "eb8b-0002-aaaa-0002",
+        "name": "Fetch EB Contacts",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -180,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// EB poll: filter new (id>cursor) & source!=Inmuebles24; advance cursor; emit a log row + lead rows.\nconst response = $input.first().json;\nconst content = Array.isArray(response.content) ? response.content : [];\nconst ok = Array.isArray(response.content);\nconst sd = $getWorkflowStaticData('global');\nlet lastId = sd.lastEbContactId;\nif (lastId === undefined || lastId === null) lastId = 39328174; // baseline = current max, avoids dumping history\nconst newMax = content.length ? Math.max(lastId, ...content.map(c=>c.id)) : lastId;\nconst fresh = content.filter(c => c.id > lastId && c.source !== 'Inmuebles24');\nsd.lastEbContactId = newMax;\nconst out = [{ json: {\n  __log: true,\n  run_id: 'eb-' + Date.now(),\n  started_at: new Date().toISOString(),\n  status: ok ? 'ok' : 'error',\n  total_scraped: content.length,\n  new_listings: fresh.length,\n  error_message: ok ? null : 'No content in EB response'\n}}];\nfor (const c of fresh.sort((a,b)=>a.id-b.id)) out.push({ json: {\n  __log: false,\n  eb_contact_id: c.id, name: c.name||null,\n  phone: (c.phone||'').replace(/[^\\d]/g,''), email: c.email||null,\n  property_id: c.property_id||null, message: c.message||'', eb_source: c.source||'EasyBroker'\n}});\nreturn out;"
+        },
+        "id": "eb8b-0003-aaaa-0003",
+        "name": "Split EB Leads",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          40,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.easybroker.com/v1/properties/{{ $json.property_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Authorization",
+                "value": "={{ $env.EASYBROKER_API_KEY }}"
+              },
+              {
+                "name": "accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "eb8b-0004-aaaa-0004",
+        "name": "Fetch EB Property",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          260,
+          300
+        ],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "strict",
+              "leftValue": ""
+            },
+            "conditions": [
+              {
+                "id": "is-log",
+                "leftValue": "={{ $json.__log }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "id": "eb8b-0005-aaaa-0005",
+        "name": "Is Log Row?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          260,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO scrape_logs (run_id, started_at, completed_at, status, total_scraped, new_listings, duplicates, pages_scraped, notifications_sent, metadata)\nVALUES ($1, $2::timestamptz, NOW(), $3, $4, $5, 0, 1, ($5 > 0), $6::jsonb);",
+          "options": {
+            "queryReplacement": "={{ [$json.run_id, $json.started_at, $json.status, $json.total_scraped, $json.new_listings, JSON.stringify({source:'easybroker'})] }}"
+          }
+        },
+        "id": "eb8b-0006-aaaa-0006",
+        "name": "Log EB Run",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          480,
+          60
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "dEHKygi1neTNvPtH",
+            "name": "Postgres account BYG project"
+          }
+        }
       }
     ],
     "connections": {
-      "Scraper Webhook": {
-        "main": [
-          [
-            {
-              "node": "Split & Normalize Leads",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
       "Split & Normalize Leads": {
         "main": [
           [
@@ -1176,6 +1513,68 @@
             }
           ]
         ]
+      },
+      "Every 15 Minutes": {
+        "main": [
+          [
+            {
+              "node": "Fetch EB Contacts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch EB Contacts": {
+        "main": [
+          [
+            {
+              "node": "Split EB Leads",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split EB Leads": {
+        "main": [
+          [
+            {
+              "node": "Is Log Row?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch EB Property": {
+        "main": [
+          [
+            {
+              "node": "Split & Normalize Leads",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Log Row?": {
+        "main": [
+          [
+            {
+              "node": "Log EB Run",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Fetch EB Property",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Esteban Betancourt",
@@ -1184,18 +1583,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-06-25T05:59:40.708Z",
-        "id": 1451,
-        "workflowId": "Obr38705ZZYS3FB8",
-        "versionId": "38d9b26c-4d20-45d6-9bb4-dd13b2b900f0",
+        "createdAt": "2026-06-25T05:59:41.145Z",
+        "id": 1453,
+        "workflowId": "Mu3YTTH8IgtaH7Ml",
+        "versionId": "2192f5ea-27bd-4a41-b8fb-8bf7ff498c01",
         "event": "activated",
         "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
       },
       {
-        "createdAt": "2026-06-25T05:59:40.921Z",
-        "id": 1452,
-        "workflowId": "Obr38705ZZYS3FB8",
-        "versionId": "38d9b26c-4d20-45d6-9bb4-dd13b2b900f0",
+        "createdAt": "2026-06-25T05:59:41.331Z",
+        "id": 1454,
+        "workflowId": "Mu3YTTH8IgtaH7Ml",
+        "versionId": "2192f5ea-27bd-4a41-b8fb-8bf7ff498c01",
         "event": "activated",
         "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
       }

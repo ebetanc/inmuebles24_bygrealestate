@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-14T15:26:27.218Z",
+  "updatedAt": "2026-06-23T19:59:03.465Z",
   "createdAt": "2026-05-08T10:26:56.908Z",
   "id": "UNIKqyAvIUAZkNIs",
   "name": "WF3c - Auction Expiry Sweeper (Evolution)",
@@ -30,7 +30,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH expired AS (\n  UPDATE auctions\n  SET status = 'expired'\n  WHERE status = 'open' AND expires_at <= NOW()\n  RETURNING auction_id, conversation_id, property_id, short_code\n)\nSELECT e.*, conv.lead_phone, conv.lead_name\nFROM expired e\nJOIN conversations conv ON conv.conversation_id = e.conversation_id;",
+        "query": "WITH expired AS (\n  UPDATE auctions\n  SET status = 'expired'\n  WHERE status = 'open' AND expires_at <= NOW()\n  RETURNING auction_id, conversation_id, property_id, short_code\n)\nSELECT e.*, conv.lead_phone, conv.lead_name, m.manager_phone\nFROM expired e\nJOIN conversations conv ON conv.conversation_id = e.conversation_id\nCROSS JOIN (SELECT whatsapp_number AS manager_phone FROM agents WHERE agent_id = 'agent_manager') m;",
         "options": {}
       },
       "id": "4907bdf7-6514-4c5e-b147-3cecbfee7398",
@@ -100,7 +100,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $env.MANAGER_PHONE }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"lead_escalacion_manager\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.property_id || 'Propiedad')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_name || 'Sin nombre')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_phone || 'N/D')) }} }\n        ]\n      }\n    ]\n  }\n}",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.manager_phone }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"lead_escalacion_manager\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.property_id || 'Propiedad')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_name || 'Sin nombre')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_phone || 'N/D')) }} }\n        ]\n      }\n    ]\n  }\n}",
         "options": {
           "timeout": 10000
         }
@@ -164,9 +164,241 @@
   },
   "meta": null,
   "pinData": null,
-  "versionId": "02fada08-821d-49b7-a520-edb1f5289a44",
-  "activeVersionId": "02fada08-821d-49b7-a520-edb1f5289a44",
-  "versionCounter": 31,
+  "versionId": "ac02b87e-7769-4e40-901b-1a1b3b678b3a",
+  "activeVersionId": "ac02b87e-7769-4e40-901b-1a1b3b678b3a",
+  "versionCounter": 59,
   "triggerCount": 1,
-  "tags": []
+  "shared": [
+    {
+      "updatedAt": "2026-05-08T10:26:56.909Z",
+      "createdAt": "2026-05-08T10:26:56.909Z",
+      "role": "workflow:owner",
+      "workflowId": "UNIKqyAvIUAZkNIs",
+      "projectId": "q5HebGTNHrfaBGjx",
+      "project": {
+        "updatedAt": "2025-06-06T10:18:49.745Z",
+        "createdAt": "2025-06-06T10:17:16.319Z",
+        "id": "q5HebGTNHrfaBGjx",
+        "name": "Esteban Betancourt <esteban.betanc@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2",
+        "projectRelations": [
+          {
+            "updatedAt": "2025-06-06T10:17:16.319Z",
+            "createdAt": "2025-06-06T10:17:16.319Z",
+            "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2",
+            "projectId": "q5HebGTNHrfaBGjx",
+            "user": {
+              "updatedAt": "2026-06-25T05:55:55.000Z",
+              "createdAt": "2025-06-06T10:17:15.951Z",
+              "id": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2",
+              "email": "esteban.betanc@gmail.com",
+              "firstName": "Esteban",
+              "lastName": "Betancourt",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-06-06T10:20:33.254Z",
+                "personalization_survey_n8n_version": "1.95.3",
+                "companyIndustryExtended": [
+                  "other"
+                ],
+                "otherCompanyIndustryExtended": "Other",
+                "companySize": "<20",
+                "companyType": "other",
+                "role": "business-owner",
+                "reportedSource": "linkedin"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "XczLfW5gqdaJ9CVk",
+                "userActivatedAt": 1749228551144,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1769018173678
+                },
+                "dismissedCallouts": {
+                  "aiAgentStarterCallout": true,
+                  "ragStarterCallout": true
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-06-24",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-23T19:59:03.467Z",
+    "createdAt": "2026-06-23T19:59:03.467Z",
+    "versionId": "ac02b87e-7769-4e40-901b-1a1b3b678b3a",
+    "workflowId": "UNIKqyAvIUAZkNIs",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 1
+              }
+            ]
+          }
+        },
+        "id": "38f75920-a753-410b-a9b3-c2f04daefb9a",
+        "name": "Every Minute",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          240,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH expired AS (\n  UPDATE auctions\n  SET status = 'expired'\n  WHERE status = 'open' AND expires_at <= NOW()\n  RETURNING auction_id, conversation_id, property_id, short_code\n)\nSELECT e.*, conv.lead_phone, conv.lead_name, m.manager_phone\nFROM expired e\nJOIN conversations conv ON conv.conversation_id = e.conversation_id\nCROSS JOIN (SELECT whatsapp_number AS manager_phone FROM agents WHERE agent_id = 'agent_manager') m;",
+          "options": {}
+        },
+        "id": "4907bdf7-6514-4c5e-b147-3cecbfee7398",
+        "name": "Expire Unclaimed Auctions",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          460,
+          300
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "dEHKygi1neTNvPtH",
+            "name": "Postgres account BYG project"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "5be14f2d-6c1b-4965-9e61-402136262cfc",
+                "leftValue": "={{ $json.auction_id }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "c9629494-520c-4b4d-a8e4-fc40170a7e98",
+        "name": "Any Expired?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          680,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.manager_phone }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"lead_escalacion_manager\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.property_id || 'Propiedad')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_name || 'Sin nombre')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_phone || 'N/D')) }} }\n        ]\n      }\n    ]\n  }\n}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "bc828cbe-0205-481f-81d8-b1b75cdbc20e",
+        "name": "Escalate to Manager via Evolution",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          900,
+          200
+        ],
+        "continueOnFail": true
+      }
+    ],
+    "connections": {
+      "Every Minute": {
+        "main": [
+          [
+            {
+              "node": "Expire Unclaimed Auctions",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Expire Unclaimed Auctions": {
+        "main": [
+          [
+            {
+              "node": "Any Expired?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Any Expired?": {
+        "main": [
+          [
+            {
+              "node": "Escalate to Manager via Evolution",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      }
+    },
+    "authors": "Esteban Betancourt",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-23T19:59:03.553Z",
+        "id": 1437,
+        "workflowId": "UNIKqyAvIUAZkNIs",
+        "versionId": "ac02b87e-7769-4e40-901b-1a1b3b678b3a",
+        "event": "activated",
+        "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
+      }
+    ]
+  }
 }
