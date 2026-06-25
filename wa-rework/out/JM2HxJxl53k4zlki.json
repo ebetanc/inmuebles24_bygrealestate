@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-14T15:26:26.827Z",
+  "updatedAt": "2026-06-25T20:47:28.597Z",
   "createdAt": "2026-05-08T10:26:56.633Z",
   "id": "JM2HxJxl53k4zlki",
   "name": "WF3b - Claim Handler (Evolution)",
@@ -298,6 +298,103 @@
         420
       ],
       "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.eb_contact_id, ag.name AS agent_name, au.short_code\nFROM conversations c\nLEFT JOIN agents ag ON ag.agent_id = c.assigned_agent_id\nLEFT JOIN auctions au ON au.conversation_id = c.conversation_id\nWHERE c.conversation_id = $1::uuid AND c.eb_contact_id IS NOT NULL\nORDER BY au.created_at DESC LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [$json.conversation_id] }}"
+        }
+      },
+      "id": "eb00note-0001-4000-8000-000000000001",
+      "name": "Get EB Note Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        860,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.easybroker.com/v1/contacts/{{ $json.eb_contact_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Authorization",
+              "value": "={{ $env.EASYBROKER_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "eb00note-0002-4000-8000-000000000002",
+      "name": "Fetch EB Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        400
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const meta = $('Get EB Note Data').first().json;\nconst existing = ($json && $json.private_description) || '';\nconst d = new Date().toLocaleString('es-MX', {timeZone:'America/Mexico_City', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});\nconst line = d + ' - Asignado a ' + (meta.agent_name || 'agente') + ' via subasta (TOMO-' + (meta.short_code || '?') + '). [BYG bot]';\nconst updated = existing ? (existing + '\n' + line) : line;\nreturn [{ json: { eb_contact_id: meta.eb_contact_id, private_description: updated } }];"
+      },
+      "id": "eb00note-0003-4000-8000-000000000003",
+      "name": "Build EB Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.easybroker.com/v1/contacts/{{ $json.eb_contact_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Authorization",
+              "value": "={{ $env.EASYBROKER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"private_description\": {{ JSON.stringify($json.private_description) }}\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "eb00note-0004-4000-8000-000000000004",
+      "name": "Patch EB Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        400
+      ],
+      "continueOnFail": true
     }
   ],
   "connections": {
@@ -346,6 +443,11 @@
         [
           {
             "node": "Build Winner/Lead/Loser Messages",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get EB Note Data",
             "type": "main",
             "index": 0
           }
@@ -424,6 +526,39 @@
           }
         ]
       ]
+    },
+    "Get EB Note Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch EB Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch EB Contact": {
+      "main": [
+        [
+          {
+            "node": "Build EB Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build EB Note": {
+      "main": [
+        [
+          {
+            "node": "Patch EB Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -435,9 +570,658 @@
   "staticData": null,
   "meta": null,
   "pinData": null,
-  "versionId": "e3b25933-7660-4b48-af34-d288a7fe1d6f",
-  "activeVersionId": "e3b25933-7660-4b48-af34-d288a7fe1d6f",
-  "versionCounter": 30,
+  "versionId": "1bf656f5-5bd1-442a-ace8-7cb8ebd996ff",
+  "activeVersionId": "1bf656f5-5bd1-442a-ace8-7cb8ebd996ff",
+  "versionCounter": 44,
   "triggerCount": 0,
-  "tags": []
+  "shared": [
+    {
+      "updatedAt": "2026-05-08T10:26:56.635Z",
+      "createdAt": "2026-05-08T10:26:56.635Z",
+      "role": "workflow:owner",
+      "workflowId": "JM2HxJxl53k4zlki",
+      "projectId": "q5HebGTNHrfaBGjx",
+      "project": {
+        "updatedAt": "2025-06-06T10:18:49.745Z",
+        "createdAt": "2025-06-06T10:17:16.319Z",
+        "id": "q5HebGTNHrfaBGjx",
+        "name": "Esteban Betancourt <esteban.betanc@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2",
+        "projectRelations": [
+          {
+            "updatedAt": "2025-06-06T10:17:16.319Z",
+            "createdAt": "2025-06-06T10:17:16.319Z",
+            "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2",
+            "projectId": "q5HebGTNHrfaBGjx",
+            "user": {
+              "updatedAt": "2026-06-25T05:55:55.000Z",
+              "createdAt": "2025-06-06T10:17:15.951Z",
+              "id": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2",
+              "email": "esteban.betanc@gmail.com",
+              "firstName": "Esteban",
+              "lastName": "Betancourt",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-06-06T10:20:33.254Z",
+                "personalization_survey_n8n_version": "1.95.3",
+                "companyIndustryExtended": [
+                  "other"
+                ],
+                "otherCompanyIndustryExtended": "Other",
+                "companySize": "<20",
+                "companyType": "other",
+                "role": "business-owner",
+                "reportedSource": "linkedin"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "XczLfW5gqdaJ9CVk",
+                "userActivatedAt": 1749228551144,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1769018173678
+                },
+                "dismissedCallouts": {
+                  "aiAgentStarterCallout": true,
+                  "ragStarterCallout": true
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-06-24",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-25T20:47:28.598Z",
+    "createdAt": "2026-06-25T20:47:28.598Z",
+    "versionId": "1bf656f5-5bd1-442a-ace8-7cb8ebd996ff",
+    "workflowId": "JM2HxJxl53k4zlki",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "passthrough"
+        },
+        "id": "0c1952e0-e484-458f-bde6-b65bf77cbbae",
+        "name": "When Called by WF1",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1,
+        "position": [
+          200,
+          300
+        ],
+        "notes": "Input from WF1 when an agent sends TOMO-XXXX:\n{\n  agent_id: 'agent_yolanda',\n  agent_name: 'Yolanda',\n  agent_phone: '5215500000001',\n  short_code: 'AB12',\n  raw_message: 'TOMO-AB12',\n  messageId: '3EB0A0...'\n}"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "-- ATOMIC CLAIM: WHERE status='open' ensures first-reply-wins.\nWITH claim AS (\n  UPDATE auctions\n  SET status='claimed', winner_agent_id=$1, claimed_at=NOW()\n  WHERE short_code=$2 AND status='open' AND expires_at > NOW()\n  RETURNING auction_id, conversation_id, property_id, winner_agent_id, notified_agents\n)\nSELECT c.*, conv.lead_phone, conv.lead_name, pc.payload AS property_payload\nFROM claim c\nJOIN conversations conv ON conv.conversation_id = c.conversation_id\nLEFT JOIN properties_cache pc ON pc.property_id = c.property_id;",
+          "options": {
+            "queryReplacement": "={{ [$json.agent_id, $json.short_code] }}"
+          }
+        },
+        "id": "86c01b28-9da5-4402-aeff-5ae13cf77363",
+        "name": "Atomic Claim (WHERE status=open)",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          420,
+          300
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "dEHKygi1neTNvPtH",
+            "name": "Postgres account BYG project"
+          }
+        },
+        "alwaysOutputData": true
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "60c87d88-e8b4-4580-ba9a-c190d6ae6ee6",
+                "leftValue": "={{ $json.auction_id }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "85cb99da-9e47-45f0-96d1-3c34d8286a33",
+        "name": "Did This Agent Win?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          640,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE conversations\nSET assigned_agent_id=$1, mode='ai', assigned_at=NOW(), claimed_via='tomo_auction'\nWHERE conversation_id=$2::uuid\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
+          "options": {
+            "queryReplacement": "={{ [$('When Called by WF1').item.json.agent_id, $json.conversation_id] }}"
+          }
+        },
+        "id": "03d4ff26-bb45-4baa-96d9-0031c56c877e",
+        "name": "Assign Conversation to Winner",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          860,
+          180
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "dEHKygi1neTNvPtH",
+            "name": "Postgres account BYG project"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const trigger = $('When Called by WF1').first().json;\nconst claim   = $('Atomic Claim (WHERE status=open)').first().json;\n\nconst winner = {\n  purpose: 'winner_confirmation',\n  number: trigger.agent_phone,\n  text: [\n    `\\u2705 Asignado! Lead: ${claim.lead_name || 'Sin nombre'}`,\n    `\\u{1F4F1} Telefono del lead: ${claim.lead_phone}`,\n    `\\u{1F3E0} Propiedad: ${claim.property_id}`,\n    ``,\n    `El asistente AI ya esta atendiendo sus preguntas. Te contactaremos si requiere tu intervencion (visita, negociacion, etc.).`\n  ].join('\\n')\n};\n\nconst leadGreeting = {\n  purpose: 'lead_greeting',\n  number: claim.lead_phone,\n  text: [\n    `Hola${claim.lead_name ? ' ' + claim.lead_name.split(' ')[0] : ''}! \\u{1F44B}`,\n    ``,\n    `Soy el asistente de la agencia. Estoy a tus ordenes para contarte sobre la propiedad. Que te gustaria saber? (precio, ubicacion, recamaras, amenidades, etc.)`,\n    ``,\n    `Hi${claim.lead_name ? ' ' + claim.lead_name.split(' ')[0] : ''}! I'm the agency assistant. I'm here to help you learn about this property. What would you like to know?`\n  ].join('\\n')\n};\n\nconst losers = (claim.notified_agents || [])\n  .filter(id => id !== trigger.agent_id)\n  .map(agent_id => ({\n    purpose: 'loser_notification',\n    agent_id,\n    text: `Este lead ya fue tomado por otro asesor. Suerte con el proximo! \\u{1F4AA}`\n  }));\n\nreturn [winner, leadGreeting, ...losers].map(m => ({ json: m }));"
+        },
+        "id": "9127e6ce-b2ef-4daf-8722-1e1c983af051",
+        "name": "Build Winner/Lead/Loser Messages",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1080,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "f7727c4a-1403-44a9-98be-73f62aa24b68",
+                "leftValue": "={{ $json.purpose }}",
+                "rightValue": "loser_notification",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "686b0f7f-ae71-4353-9475-bee2a15daba2",
+        "name": "Needs Phone Lookup?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1300,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT whatsapp_number FROM agents WHERE agent_id = $1;",
+          "options": {
+            "queryReplacement": "={{ $json.agent_id }}"
+          }
+        },
+        "id": "7757b98b-9c8b-4a58-a77b-199d8e651637",
+        "name": "Lookup Loser Agent Phone",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          1520,
+          80
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "dEHKygi1neTNvPtH",
+            "name": "Postgres account BYG project"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "number",
+                "name": "number",
+                "value": "={{ $json.whatsapp_number }}",
+                "type": "string"
+              },
+              {
+                "id": "text",
+                "name": "text",
+                "value": "={{ $('Build Winner/Lead/Loser Messages').item.json.text }}",
+                "type": "string"
+              },
+              {
+                "id": "purpose",
+                "name": "purpose",
+                "value": "loser_notification",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "2ef0db24-a3cf-42a7-83a0-0646f961ceeb",
+        "name": "Set Loser Payload",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          1740,
+          80
+        ]
+      },
+      {
+        "parameters": {
+          "mode": "append",
+          "options": {}
+        },
+        "id": "51b5a7db-e1b9-4b46-aee9-825e66f39b46",
+        "name": "Merge All Outbound",
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.1,
+        "position": [
+          1960,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": {{ JSON.stringify($json.text) }}\n  }\n}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "3f795990-1c85-42e6-9b1c-0c3723437d80",
+        "name": "Send All via Evolution",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2180,
+          180
+        ],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const trigger = $('When Called by WF1').first().json;\nreturn [{\n  json: {\n    number: trigger.agent_phone,\n    text: `\\u26A0\\uFE0F No pude asignarte el lead ${trigger.short_code}.\\n\\nPuede que otro asesor lo haya tomado primero, o que la subasta haya expirado. Cuando entre un nuevo lead te avisaremos.`\n  }\n}];"
+        },
+        "id": "fd34d5fe-6ba8-45ad-9bcb-520a3a4ade60",
+        "name": "Build 'Too Late' Message",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          860,
+          420
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": {{ JSON.stringify($json.text) }}\n  }\n}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "066de598-a9e9-4a0e-8165-b19a2446f049",
+        "name": "Send 'Too Late' via Evolution",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1080,
+          420
+        ],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT c.eb_contact_id, ag.name AS agent_name, au.short_code\nFROM conversations c\nLEFT JOIN agents ag ON ag.agent_id = c.assigned_agent_id\nLEFT JOIN auctions au ON au.conversation_id = c.conversation_id\nWHERE c.conversation_id = $1::uuid AND c.eb_contact_id IS NOT NULL\nORDER BY au.created_at DESC LIMIT 1;",
+          "options": {
+            "queryReplacement": "={{ [$json.conversation_id] }}"
+          }
+        },
+        "id": "eb00note-0001-4000-8000-000000000001",
+        "name": "Get EB Note Data",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          860,
+          400
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "dEHKygi1neTNvPtH",
+            "name": "Postgres account BYG project"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.easybroker.com/v1/contacts/{{ $json.eb_contact_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Authorization",
+                "value": "={{ $env.EASYBROKER_API_KEY }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "eb00note-0002-4000-8000-000000000002",
+        "name": "Fetch EB Contact",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1080,
+          400
+        ],
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const meta = $('Get EB Note Data').first().json;\nconst existing = ($json && $json.private_description) || '';\nconst d = new Date().toLocaleString('es-MX', {timeZone:'America/Mexico_City', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});\nconst line = d + ' - Asignado a ' + (meta.agent_name || 'agente') + ' via subasta (TOMO-' + (meta.short_code || '?') + '). [BYG bot]';\nconst updated = existing ? (existing + '\n' + line) : line;\nreturn [{ json: { eb_contact_id: meta.eb_contact_id, private_description: updated } }];"
+        },
+        "id": "eb00note-0003-4000-8000-000000000003",
+        "name": "Build EB Note",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://api.easybroker.com/v1/contacts/{{ $json.eb_contact_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Authorization",
+                "value": "={{ $env.EASYBROKER_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"private_description\": {{ JSON.stringify($json.private_description) }}\n}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "eb00note-0004-4000-8000-000000000004",
+        "name": "Patch EB Contact",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1520,
+          400
+        ],
+        "continueOnFail": true
+      }
+    ],
+    "connections": {
+      "When Called by WF1": {
+        "main": [
+          [
+            {
+              "node": "Atomic Claim (WHERE status=open)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Atomic Claim (WHERE status=open)": {
+        "main": [
+          [
+            {
+              "node": "Did This Agent Win?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Did This Agent Win?": {
+        "main": [
+          [
+            {
+              "node": "Assign Conversation to Winner",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build 'Too Late' Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Assign Conversation to Winner": {
+        "main": [
+          [
+            {
+              "node": "Build Winner/Lead/Loser Messages",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Get EB Note Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Winner/Lead/Loser Messages": {
+        "main": [
+          [
+            {
+              "node": "Needs Phone Lookup?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Needs Phone Lookup?": {
+        "main": [
+          [
+            {
+              "node": "Lookup Loser Agent Phone",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Merge All Outbound",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Lookup Loser Agent Phone": {
+        "main": [
+          [
+            {
+              "node": "Set Loser Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set Loser Payload": {
+        "main": [
+          [
+            {
+              "node": "Merge All Outbound",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge All Outbound": {
+        "main": [
+          [
+            {
+              "node": "Send All via Evolution",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build 'Too Late' Message": {
+        "main": [
+          [
+            {
+              "node": "Send 'Too Late' via Evolution",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get EB Note Data": {
+        "main": [
+          [
+            {
+              "node": "Fetch EB Contact",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch EB Contact": {
+        "main": [
+          [
+            {
+              "node": "Build EB Note",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build EB Note": {
+        "main": [
+          [
+            {
+              "node": "Patch EB Contact",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Esteban Betancourt",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-25T20:47:28.640Z",
+        "id": 1457,
+        "workflowId": "JM2HxJxl53k4zlki",
+        "versionId": "1bf656f5-5bd1-442a-ace8-7cb8ebd996ff",
+        "event": "activated",
+        "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
+      },
+      {
+        "createdAt": "2026-06-25T20:47:28.865Z",
+        "id": 1458,
+        "workflowId": "JM2HxJxl53k4zlki",
+        "versionId": "1bf656f5-5bd1-442a-ace8-7cb8ebd996ff",
+        "event": "activated",
+        "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
+      }
+    ]
+  }
 }

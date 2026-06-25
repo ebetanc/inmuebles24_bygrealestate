@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-25T05:59:41.101Z",
+  "updatedAt": "2026-06-25T20:47:28.161Z",
   "createdAt": "2026-06-23T20:04:20.270Z",
   "id": "Mu3YTTH8IgtaH7Ml",
   "name": "WF8b - EasyBroker Lead Intake",
@@ -9,7 +9,7 @@
   "nodes": [
     {
       "parameters": {
-        "jsCode": "// Merge EB contact + property details -> WF10-normalized lead shape.\nconst contact = $('Split EB Leads').item.json;\nconst prop = $input.first().json || {};\nconst hasProp = !!(prop && prop.public_id);\nconst title = hasProp ? prop.title : ('Propiedad ' + (contact.property_id || 'EasyBroker'));\nconst price = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].formatted_amount : 'Precio por confirmar';\nconst loc = hasProp && prop.location ? (typeof prop.location==='object' ? prop.location.name : prop.location) : '';\nconst op = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].type : 'venta';\nreturn [{ json: {\n  phone: (contact.phone||'').replace(/[^\\d]/g,''),\n  email: contact.email || null,\n  name: contact.name || null,\n  message: contact.message || '',\n  listing_id: contact.property_id || null,\n  property_title: title,\n  property_address: loc,\n  property_price: price,\n  listing_type: op,\n  source: 'easybroker'\n}}];"
+        "jsCode": "// Merge EB contact + property details -> WF10-normalized lead shape.\nconst contact = $('Split EB Leads').item.json;\nconst prop = $input.first().json || {};\nconst hasProp = !!(prop && prop.public_id);\nconst title = hasProp ? prop.title : ('Propiedad ' + (contact.property_id || 'EasyBroker'));\nconst price = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].formatted_amount : 'Precio por confirmar';\nconst loc = hasProp && prop.location ? (typeof prop.location==='object' ? prop.location.name : prop.location) : '';\nconst op = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].type : 'venta';\nreturn [{ json: {\n  phone: (contact.phone||'').replace(/[^\\d]/g,''),\n  email: contact.email || null,\n  name: contact.name || null,\n  message: contact.message || '',\n  listing_id: contact.property_id || null,\n  property_title: title,\n  property_address: loc,\n  property_price: price,\n  listing_type: op,\n  source: 'easybroker',\n  eb_contact_id: contact.contact_id || null\n}}];"
       },
       "id": "b1b2c3d4-0002-4000-8000-000000000002",
       "name": "Split & Normalize Leads",
@@ -153,9 +153,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Create new conversation for scraper lead (day mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'pending_assignment', $5, 'day')\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
+        "query": "-- Create new conversation for scraper lead (day mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during, eb_contact_id)\nVALUES ($1, $2, $3, $4, 'pending_assignment', $5, 'day', $6)\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
         "options": {
-          "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source] }}"
+          "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source, $json.eb_contact_id] }}"
         }
       },
       "id": "b1b2c3d4-0010-4000-8000-000000000010",
@@ -235,9 +235,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Create new conversation for scraper lead (night mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'night_queued', $5, 'night')\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
+        "query": "-- Create new conversation for scraper lead (night mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during, eb_contact_id)\nVALUES ($1, $2, $3, $4, 'night_queued', $5, 'night', $6)\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
         "options": {
-          "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source] }}"
+          "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source, $json.eb_contact_id] }}"
         }
       },
       "id": "b1b2c3d4-0014-4000-8000-000000000014",
@@ -757,14 +757,14 @@
       "recurrenceRules": []
     },
     "global": {
-      "lastEbContactId": 39360024
+      "lastEbContactId": 39364636
     }
   },
   "meta": null,
   "pinData": null,
-  "versionId": "2192f5ea-27bd-4a41-b8fb-8bf7ff498c01",
-  "activeVersionId": "2192f5ea-27bd-4a41-b8fb-8bf7ff498c01",
-  "versionCounter": 152,
+  "versionId": "3170ae36-97d0-4c5f-96f5-bac3159c4d03",
+  "activeVersionId": "3170ae36-97d0-4c5f-96f5-bac3159c4d03",
+  "versionCounter": 217,
   "triggerCount": 1,
   "shared": [
     {
@@ -834,14 +834,14 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-06-25T05:59:41.101Z",
-    "createdAt": "2026-06-25T05:59:41.101Z",
-    "versionId": "2192f5ea-27bd-4a41-b8fb-8bf7ff498c01",
+    "updatedAt": "2026-06-25T20:47:28.162Z",
+    "createdAt": "2026-06-25T20:47:28.162Z",
+    "versionId": "3170ae36-97d0-4c5f-96f5-bac3159c4d03",
     "workflowId": "Mu3YTTH8IgtaH7Ml",
     "nodes": [
       {
         "parameters": {
-          "jsCode": "// Merge EB contact + property details -> WF10-normalized lead shape.\nconst contact = $('Split EB Leads').item.json;\nconst prop = $input.first().json || {};\nconst hasProp = !!(prop && prop.public_id);\nconst title = hasProp ? prop.title : ('Propiedad ' + (contact.property_id || 'EasyBroker'));\nconst price = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].formatted_amount : 'Precio por confirmar';\nconst loc = hasProp && prop.location ? (typeof prop.location==='object' ? prop.location.name : prop.location) : '';\nconst op = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].type : 'venta';\nreturn [{ json: {\n  phone: (contact.phone||'').replace(/[^\\d]/g,''),\n  email: contact.email || null,\n  name: contact.name || null,\n  message: contact.message || '',\n  listing_id: contact.property_id || null,\n  property_title: title,\n  property_address: loc,\n  property_price: price,\n  listing_type: op,\n  source: 'easybroker'\n}}];"
+          "jsCode": "// Merge EB contact + property details -> WF10-normalized lead shape.\nconst contact = $('Split EB Leads').item.json;\nconst prop = $input.first().json || {};\nconst hasProp = !!(prop && prop.public_id);\nconst title = hasProp ? prop.title : ('Propiedad ' + (contact.property_id || 'EasyBroker'));\nconst price = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].formatted_amount : 'Precio por confirmar';\nconst loc = hasProp && prop.location ? (typeof prop.location==='object' ? prop.location.name : prop.location) : '';\nconst op = hasProp && prop.operations && prop.operations[0] ? prop.operations[0].type : 'venta';\nreturn [{ json: {\n  phone: (contact.phone||'').replace(/[^\\d]/g,''),\n  email: contact.email || null,\n  name: contact.name || null,\n  message: contact.message || '',\n  listing_id: contact.property_id || null,\n  property_title: title,\n  property_address: loc,\n  property_price: price,\n  listing_type: op,\n  source: 'easybroker',\n  eb_contact_id: contact.contact_id || null\n}}];"
         },
         "id": "b1b2c3d4-0002-4000-8000-000000000002",
         "name": "Split & Normalize Leads",
@@ -985,9 +985,9 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "-- Create new conversation for scraper lead (day mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'pending_assignment', $5, 'day')\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
+          "query": "-- Create new conversation for scraper lead (day mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during, eb_contact_id)\nVALUES ($1, $2, $3, $4, 'pending_assignment', $5, 'day', $6)\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
           "options": {
-            "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source] }}"
+            "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source, $json.eb_contact_id] }}"
           }
         },
         "id": "b1b2c3d4-0010-4000-8000-000000000010",
@@ -1067,9 +1067,9 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "-- Create new conversation for scraper lead (night mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'night_queued', $5, 'night')\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
+          "query": "-- Create new conversation for scraper lead (night mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during, eb_contact_id)\nVALUES ($1, $2, $3, $4, 'night_queued', $5, 'night', $6)\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
           "options": {
-            "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source] }}"
+            "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source, $json.eb_contact_id] }}"
           }
         },
         "id": "b1b2c3d4-0014-4000-8000-000000000014",
@@ -1583,18 +1583,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-06-25T05:59:41.145Z",
-        "id": 1453,
+        "createdAt": "2026-06-25T20:47:28.213Z",
+        "id": 1455,
         "workflowId": "Mu3YTTH8IgtaH7Ml",
-        "versionId": "2192f5ea-27bd-4a41-b8fb-8bf7ff498c01",
+        "versionId": "3170ae36-97d0-4c5f-96f5-bac3159c4d03",
         "event": "activated",
         "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
       },
       {
-        "createdAt": "2026-06-25T05:59:41.331Z",
-        "id": 1454,
+        "createdAt": "2026-06-25T20:47:28.415Z",
+        "id": 1456,
         "workflowId": "Mu3YTTH8IgtaH7Ml",
-        "versionId": "2192f5ea-27bd-4a41-b8fb-8bf7ff498c01",
+        "versionId": "3170ae36-97d0-4c5f-96f5-bac3159c4d03",
         "event": "activated",
         "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
       }
