@@ -737,8 +737,10 @@ _READ_CHIP_JS = """
 }
 """
 
-# Opens (clicks) the status chip of the inbox row matching leadId.
-_OPEN_CHIP_JS = """
+# Returns the viewport-center coords of the status chip for the inbox row
+# matching leadId (after scrolling it into view), so Playwright can issue a REAL
+# mouse click — el.click() does not open this React dropdown.
+_CHIP_BBOX_JS = """
 (leadId) => {
     const root = document.getElementById('root') || document.body;
     const re = new RegExp('interesados/' + leadId + '(?:[^0-9]|$)');
@@ -749,43 +751,47 @@ _OPEN_CHIP_JS = """
             if (p.tagName === 'TR' || p.tagName === 'LI' || p.getAttribute('role') === 'row'
                 || p.getAttribute('data-qa') || p.getAttribute('data-panel')) { row = p; break; }
         }
+        let chip = null;
         for (const el of row.querySelectorAll('*')) {
             const t = (el.textContent || '').trim();
             if ((t === 'Pendiente' || t === 'Contactado' || t === 'Finalizado')
-                && el.children.length <= 2) {
-                let chip = el;
-                for (let p = el; p && p !== row; p = p.parentElement) {
-                    if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
-                        || p.onclick || getComputedStyle(p).cursor === 'pointer') { chip = p; break; }
-                }
-                chip.click();
-                return true;
-            }
+                && el.children.length <= 2) { chip = el; break; }
         }
-        return false;
+        if (!chip) return { found: false, reason: 'no_chip' };
+        let target = chip;
+        for (let p = chip; p && p !== row; p = p.parentElement) {
+            if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
+                || getComputedStyle(p).cursor === 'pointer') { target = p; break; }
+        }
+        target.scrollIntoView({ block: 'center' });
+        const r = target.getBoundingClientRect();
+        return { found: true, text: (chip.textContent || '').trim(),
+                 x: r.x + r.width / 2, y: r.y + r.height / 2 };
     }
-    return false;
+    return { found: false, reason: 'no_lead' };
 }
 """
 
-# Clicks the option with the given label inside the open "Estado de consulta"
-# popover (radios: Pendiente / Contactado / Finalizado). Applies on click.
-_CLICK_OPTION_JS = """
+# Returns the viewport-center coords of the option labelled `label` inside the
+# open "Estado de consulta" popover (the container that holds Pendiente +
+# Contactado + Finalizado), so Playwright can mouse-click it.
+_OPTION_BBOX_JS = """
 (label) => {
-    for (const el of document.querySelectorAll('label, span, div, li, button, [role="radio"], [role="menuitemradio"], [role="option"]')) {
-        if ((el.textContent || '').trim() !== label) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width === 0 || r.height === 0) continue;  // visible only
-        let c = el;
-        for (let p = el; p && p !== document.body; p = p.parentElement) {
-            if (p.tagName === 'LABEL' || p.tagName === 'BUTTON'
-                || p.getAttribute('role') === 'radio' || p.getAttribute('role') === 'menuitemradio'
-                || p.onclick || getComputedStyle(p).cursor === 'pointer') { c = p; break; }
+    for (const c of document.querySelectorAll('div, ul, section, [role="menu"], [role="listbox"], [role="dialog"]')) {
+        const txt = c.textContent || '';
+        if (!/Estado de consulta/i.test(txt)
+            && !(/Pendiente/.test(txt) && /Finalizado/.test(txt))) continue;
+        const r0 = c.getBoundingClientRect();
+        if (r0.width === 0 || r0.height === 0) continue;
+        for (const el of c.querySelectorAll('*')) {
+            if ((el.textContent || '').trim() !== label) continue;
+            if (el.children.length > 1) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            return { found: true, x: r.x + r.width / 2, y: r.y + r.height / 2 };
         }
-        c.click();
-        return true;
     }
-    return false;
+    return { found: false };
 }
 """
 
@@ -833,18 +839,30 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
             logger.warning("Lead {}: status chip not found ({}) — not marked", lead_id, current)
             return False
 
-        if not await page.evaluate(_OPEN_CHIP_JS, lead_id):
-            logger.warning("Lead {}: could not open status dropdown — not marked", lead_id)
+        # Open the status dropdown with a REAL mouse click (el.click() does not
+        # trigger this React popover).
+        chip = await page.evaluate(_CHIP_BBOX_JS, lead_id)
+        if not chip.get("found"):
+            logger.warning("Lead {}: status chip not located ({}) — not marked",
+                           lead_id, chip.get("reason"))
             return False
-        await asyncio.sleep(random.uniform(0.8, 1.5))
+        await page.mouse.click(chip["x"], chip["y"])
+        await asyncio.sleep(random.uniform(1.0, 1.6))
 
-        if not await page.evaluate(_CLICK_OPTION_JS, "Contactado"):
-            logger.warning("Lead {}: 'Contactado' option not found in dropdown", lead_id)
+        # Click the "Contactado" option in the open popover (real mouse click).
+        opt = await page.evaluate(_OPTION_BBOX_JS, "Contactado")
+        if not opt.get("found"):
+            logger.warning("Lead {}: 'Contactado' option not visible after opening dropdown", lead_id)
+            try:
+                await page.screenshot(path=f"logs/mark_fail_{lead_id}.png", full_page=True)
+            except Exception:
+                pass
             try:
                 await page.keyboard.press("Escape")
             except Exception:
                 pass
             return False
+        await page.mouse.click(opt["x"], opt["y"])
         await asyncio.sleep(random.uniform(1.2, 2.0))
 
         # Verify the row chip now reads Contactado.
