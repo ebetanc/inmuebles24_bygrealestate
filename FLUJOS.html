@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BYG — Flujos de Leads (owner-first)</title>
+<style>
+  :root{
+    --bg:#f4efe6; --card:#fffdf8; --ink:#1a1a1a; --line:#1a1a1a;
+    --accent:#ff5c39; --blue:#2f6df0; --green:#1f9d55; --rose:#e23b54;
+    --amber:#f0a020; --purple:#7b4dff; --muted:#6b6256;
+    --shadow:4px 4px 0 var(--ink); --shadow-sm:2px 2px 0 var(--ink);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Space Grotesk",system-ui,Segoe UI,Roboto,sans-serif;padding:28px 18px 60px}
+  h1{font-size:24px;margin:0 0 4px;letter-spacing:-.5px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 22px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 22px;font-size:12px;font-weight:600}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:12px;height:12px;border:2px solid var(--ink);border-radius:3px}
+  .stat{font-size:10px;font-weight:800;border:1.5px solid var(--ink);border-radius:5px;padding:1px 6px}
+  .s-live{background:var(--green);color:#fff}
+  .s-stage{background:var(--amber);color:#1a1a1a}
+  .wrap{max-width:1120px;margin:0 auto}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  .flow{background:var(--card);border:2px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);padding:18px 16px}
+  .flow h2{margin:0 0 14px;font-size:16px;display:flex;align-items:center;gap:8px}
+  .pill{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+    border:2px solid var(--ink);border-radius:999px;padding:2px 8px;box-shadow:var(--shadow-sm)}
+  .pill.eb{background:var(--blue);color:#fff}
+  .pill.inm{background:var(--accent);color:#fff}
+  .pill.dark{background:var(--ink);color:var(--bg)}
+  .pill.own{background:var(--purple);color:#fff}
+  .step{border:2px solid var(--ink);border-radius:9px;background:#fff;padding:9px 11px;
+    box-shadow:var(--shadow-sm);font-size:13px;line-height:1.35}
+  .step b{display:block;font-size:12.5px}
+  .step small{color:var(--muted);font-size:11.5px}
+  .arrow{height:20px;display:flex;align-items:center;justify-content:center}
+  .arrow::after{content:"▼";font-size:12px}
+  .tag{display:inline-block;font-size:10px;font-weight:800;border-radius:5px;padding:1px 6px;
+    border:1.5px solid var(--ink);margin-top:5px}
+  .t-mark{background:var(--green);color:#fff}
+  .t-key{background:var(--purple);color:#fff}
+  .banner{background:#fff4d6;border:2px solid var(--ink);border-radius:10px;box-shadow:var(--shadow-sm);
+    padding:10px 13px;font-size:12.5px;margin:22px 0 8px;line-height:1.4}
+  .shared{margin:14px 0 0;background:var(--card);border:2px solid var(--line);
+    border-radius:12px;box-shadow:var(--shadow);padding:18px 16px}
+  .shared h2{margin:0 0 4px;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .merge{text-align:center;color:var(--muted);font-size:12px;font-weight:700;margin:6px 0 14px}
+  .tier{border-left:5px solid var(--purple);padding:2px 0 2px 12px;margin:0 0 4px}
+  .tier.guard{border-color:var(--blue)} .tier.mgr{border-color:var(--rose)}
+  .decision{text-align:center;font-weight:800;font-size:12px;margin:8px 0;color:var(--ink)}
+  .decision em{font-style:normal;color:var(--muted);font-weight:600}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr}}
+  .foot{margin:22px 0 0;font-size:12px;color:var(--muted)}
+  code{background:#efe8da;border:1px solid #d9cfbd;border-radius:4px;padding:0 4px;font-size:11.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BYG — Flujos de Leads <span class="pill own" style="vertical-align:middle">owner-first</span></h1>
+  <p class="sub">Dos fuentes → resolver al asesor DUEÑO de la propiedad → avisarle primero → si no, subasta de guardia → manager.</p>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--accent)"></i>Inmuebles24 (scraper Pi)</span>
+    <span><i class="dot" style="background:var(--blue)"></i>EasyBroker (n8n)</span>
+    <span><i class="dot" style="background:var(--purple)"></i>Owner-first (dueño)</span>
+    <span><i class="stat s-live">LIVE</i> en producción</span>
+    <span><i class="stat s-stage">STAGED</i> construido, no activo</span>
+  </div>
+
+  <!-- SOURCES -->
+  <div class="cols">
+    <div class="flow">
+      <h2><span class="pill inm">Inmuebles24</span> Scraper en Pi <span class="stat s-live">LIVE</span></h2>
+      <div class="step"><b>⏱️ Timer Pi</b><small>cada 15 min, 08:00–20:00 CDMX</small></div>
+      <div class="arrow"></div>
+      <div class="step"><b>🔐 Scrape inbox Interesados</b><small>3 tabs → leads <b>Pendiente</b> (proxy móvil MX)</small></div>
+      <div class="arrow"></div>
+      <div class="step"><b>🔑 Captura la CLAVE del aviso</b><small>del detalle: <code>Cód. del anunciante: EB-VK1013</code> → <code>property_public_id</code>. El scraper la extrae y la manda, <b>pero WF10 hoy la descarta</b> (se conecta al activar owner-first).</small>
+        <span class="tag t-key">clave EB-XXXX</span> <span class="stat s-stage">falta hilar en WF10</span></div>
+      <div class="arrow"></div>
+      <div class="step"><b>🧹 Dedup local → POST a WF10</b><small>solo leads nuevos</small></div>
+      <div class="arrow"></div>
+      <div class="step"><b>✅ Marca "Contactado" en el portal</b><small>dropdown, sin mensaje al prospecto</small>
+        <span class="tag t-mark">sale de Pendiente</span></div>
+    </div>
+
+    <div class="flow">
+      <h2><span class="pill eb">EasyBroker</span> WF8b <span class="stat s-live">LIVE</span></h2>
+      <div class="step"><b>⏱️ Schedule n8n</b><small>cada 15 min → <code>GET /contact_requests</code></small></div>
+      <div class="arrow"></div>
+      <div class="step"><b>🧹 Filtra nuevos</b><small><code>id&gt;cursor</code> + <code>source≠Inmuebles24</code> (evita doble-subasta)</small></div>
+      <div class="arrow"></div>
+      <div class="step"><b>🔑 Ya trae la CLAVE</b><small>el <code>property_id</code> del lead ES el <code>EB-XXXX</code> + guarda <code>eb_contact_id</code></small>
+        <span class="tag t-key">clave EB-XXXX</span></div>
+      <div class="arrow"></div>
+      <div class="step"><b>🏠 Fetch property → normaliza → WF8b intake</b></div>
+    </div>
+  </div>
+
+  <p class="banner">⚠️ <b>Hoy en producción</b> los dos van directo a <b>subasta de guardia plana</b> (paso 🔵 abajo). El <b>owner-first</b> (pasos 🟣) está <span class="stat s-stage">STAGED</span>: WF12 resolver LIVE pero huérfano, WF13 importado inactivo. <b>Se activa cuando BYG etiquete TODAS las propiedades en EasyBroker</b> (sin tag → cae a manager).</p>
+
+  <!-- SHARED TRUNK: OWNER-FIRST -->
+  <div class="shared">
+    <h2><span class="pill dark">Ruteo</span> Owner-first por niveles</h2>
+    <p class="merge">▼ los dos flujos llegan aquí, con la CLAVE EB-XXXX ▼</p>
+
+    <div class="tier">
+      <div class="step"><b>🟣 NIVEL 0 — Resolver al DUEÑO &nbsp;<span class="stat s-live">WF12 LIVE</span></b>
+        <small>con la clave: <code>GET /properties/EB-XXXX</code> → <code>tags:["Sandra"]</code> → normaliza tag→agente (<code>property_agent_alias</code>) → <b>agente dueño</b>. (El campo <code>agent</code> de EB solo da "BYG", por eso se usan los <b>tags</b>.)</small></div>
+    </div>
+
+    <div class="decision">¿Dueño resuelto? <em>(¿propiedad etiquetada + agente con WhatsApp?)</em></div>
+    <div class="grid2">
+      <div class="tier">
+        <div class="step"><b>🟣 SÍ → NIVEL 1: avisar SOLO al dueño &nbsp;<span class="stat s-stage">WF13 STAGED</span></b>
+          <small>WhatsApp template con código claim. <b>2 min</b> para responder <code>TOMO-XXXX</code>.</small></div>
+      </div>
+      <div class="tier mgr">
+        <div class="step"><b>🔴 NO → directo a MANAGER</b><small>sin tag / agente sin WhatsApp → Sandy (manager)</small></div>
+      </div>
+    </div>
+
+    <div class="decision">¿El dueño respondió en 2 min?</div>
+    <div class="tier guard">
+      <div class="step"><b>🔵 NO → NIVEL 2: subasta de GUARDIA &nbsp;<span class="stat s-live">WF3a LIVE</span></b>
+        <small>fan-out a los agentes <b>en guardia</b> (pool del calendario, vía WF6) + manager. Gana el primero que responda <code>TOMO-XXXX</code>. <em>(Hoy esto es el primer y único paso.)</em></small></div>
+    </div>
+
+    <div class="decision">¿Alguien de guardia respondió en 5 min?</div>
+    <div class="tier mgr">
+      <div class="step"><b>🔴 NO → NIVEL 3: MANAGER &nbsp;<span class="stat s-live">WF3c LIVE</span></b><small>expiry sweeper escala al manager</small></div>
+    </div>
+
+    <div class="arrow"></div>
+    <div class="step"><b>🏁 Claim (cualquier nivel) — WF3b &nbsp;<span class="stat s-live">LIVE</span></b>
+      <small>claim atómico → asigna conversación → manda nombre+tel del lead al ganador, avisa a los demás.</small>
+      <span class="tag t-mark">solo EasyBroker: escribe nota en el contacto EB</span>
+      <small style="display:block;margin-top:4px">Nota EB: <code>"&lt;fecha&gt; - Asignado a Sandy via subasta (TOMO-XXXX). [BYG bot]"</code></small></div>
+    <div class="arrow"></div>
+    <div class="step"><b>🔁 Seguimiento + reporte</b><small>WF14 sweeper → WF15 respuestas · WF16 reporte semanal al gerente · Logs: <code>scrape_logs</code> → dashboard /logs</small></div>
+  </div>
+
+  <p class="foot">
+    <b>La "clave":</b> el código EasyBroker <code>EB-XXXX</code> que aparece en el aviso de Inmuebles24 (y ES el property_id en EasyBroker). Con esa clave se consulta la propiedad en EB y se lee el <b>tag</b> = asesor dueño → se le avisa primero (owner-first).
+    <b>Gate para activar owner-first:</b> BYG debe etiquetar todas las propiedades en EB + agregar Tania a <code>agents</code> + email de Gina/Lety. Detalle de cableado en <code>wa-rework/FLIP_RUNBOOK_owner_first.md</code>.
+  </p>
+</div>
+</body>
+</html>
