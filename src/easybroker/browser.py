@@ -54,6 +54,22 @@ async def launch_chrome(
     chrome_path = _find_chrome()
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Self-heal: a previous timeout-killed run can orphan a Chrome bound to CDP
+    # port 9223 (xvfb-run does not forward SIGTERM to the grandchild), which the
+    # next connect_over_cdp would attach to — stuck on a blank page. Kill any
+    # stale EB Chrome (matched by its unique 9223 flag; the scraper's 9222 is
+    # safe) and drop the profile lock before launching a fresh one.
+    try:
+        subprocess.run(
+            ["pkill", "-9", "-f", f"remote-debugging-port={CDP_PORT}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+        )
+        for lock in PROFILE_DIR.glob("Singleton*"):
+            lock.unlink(missing_ok=True)
+        await asyncio.sleep(1.0)
+    except Exception as e:
+        logger.warning("stale-Chrome cleanup skipped: {}", e)
+
     args = [
         str(chrome_path),
         f"--remote-debugging-port={CDP_PORT}",
