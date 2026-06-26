@@ -87,17 +87,30 @@ async def launch_chrome(
     return context, proc
 
 
-async def wait_for_spa(page: Page, timeout_ms: int = 45_000) -> None:
-    """Wait for the EasyBroker React SPA to render meaningful content."""
-    try:
-        await page.wait_for_function(
-            "() => (document.body && document.body.innerText || '').trim().length > 80",
-            timeout=timeout_ms,
-        )
-    except Exception:
-        # Fall through — callers screenshot + inspect on failure.
-        logger.warning("SPA content wait timed out after {}ms", timeout_ms)
-    await asyncio.sleep(1.5)
+async def wait_for_spa(page: Page, timeout_ms: int = 30_000) -> None:
+    """Wait for the EasyBroker React SPA to render meaningful content.
+
+    Polls document body length from Python (re-evaluating each second) instead of
+    page.wait_for_function: when EB does a client-side redirect (e.g. probing the
+    login URL while already authenticated → /manager), the page execution context
+    is destroyed mid-evaluation. wait_for_function stalls for the full timeout on
+    that; this loop just catches the error and retries, surviving the redirect."""
+    deadline = timeout_ms
+    step = 1000
+    while deadline > 0:
+        try:
+            await page.wait_for_load_state("domcontentloaded")
+            length = await page.evaluate(
+                "() => (document.body && document.body.innerText || '').trim().length"
+            )
+            if length and length > 80:
+                await asyncio.sleep(1.0)
+                return
+        except Exception:
+            pass  # execution context destroyed during a redirect — retry
+        await asyncio.sleep(step / 1000)
+        deadline -= step
+    logger.warning("SPA content wait timed out after {}ms", timeout_ms)
 
 
 async def screenshot(page: Page, label: str) -> str | None:
