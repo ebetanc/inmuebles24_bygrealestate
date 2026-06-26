@@ -39,40 +39,64 @@ async def goto_buzon(page: Page) -> bool:
     return ok
 
 
-async def find_request_by_phone(page: Page, phone: str) -> bool:
-    """Select the Buzón conversation for `phone`. Returns True if opened.
+# Find a conversation anchor whose row digits end with the target (last 10).
+# Digit-normalised so "55 4185 3995", "+52 55…", etc. all match.
+_FIND_CONV_HREF_JS = """
+(target) => {
+    const norm = (s) => (s || '').replace(/\\D/g, '');
+    for (const a of document.querySelectorAll('a')) {
+        const h = a.getAttribute('href') || '';
+        if (!/conversations\\/\\d+/.test(h)) continue;
+        for (let p = a; p && p.tagName !== 'BODY'; p = p.parentElement) {
+            if (norm(p.innerText).endsWith(target)) return h;
+        }
+    }
+    return '';
+}
+"""
 
-    Scans visible inbox rows for the phone number text and clicks the match.
+
+async def _open_conv_href(page: Page, href: str) -> bool:
+    url = href if href.startswith("http") else f"{APP_URL}{href}"
+    rendered = await _navigate_render(page, url)
+    await asyncio.sleep(random.uniform(1.0, 2.0))
+    return rendered
+
+
+async def find_request_by_phone(page: Page, phone: str) -> bool:
+    """Open the Buzón conversation for `phone`. Returns True if opened.
+
+    The Buzón holds tens of thousands of conversations, so a target lead is
+    almost never on the default (recent) page. Use the Buzón search field
+    ("Busca por nombre, email o teléfono") to filter to the match, then open it.
+    Falls back to scanning the currently-visible rows.
     """
     target = _norm_phone(phone)
     if not target:
         return False
 
-    # Each inbox row is an <a href="/agent/conversations/{id}">. Find the one
-    # whose row text contains the phone and navigate to it directly (more
-    # reliable than clicking — a row click does not always open the detail).
-    href = await page.evaluate(
-        """(target) => {
-            for (const a of document.querySelectorAll('a')) {
-                const h = a.getAttribute('href') || '';
-                if (!/conversations\\/\\d+/.test(h)) continue;
-                if ((a.innerText || '').includes(target)) return h;
-                // also check the enclosing row
-                for (let p = a; p; p = p.parentElement) {
-                    if (p.tagName === 'BODY') break;
-                    if ((p.innerText || '').includes(target)) return h;
-                }
-            }
-            return '';
-        }""",
-        target,
-    )
-    if not href:
-        return False
-    url = href if href.startswith("http") else f"{APP_URL}{href}"
-    rendered = await _navigate_render(page, url)
-    await asyncio.sleep(random.uniform(1.0, 2.0))
-    return rendered
+    # Search first (the visible list only holds recent conversations).
+    digits = re.sub(r"\D", "", phone or "")
+    for query in (digits, target):
+        try:
+            box = page.get_by_placeholder(re.compile("Busca por", re.I)).first
+            if await box.count() == 0:
+                break
+            await box.fill("")
+            await box.fill(query)
+            await box.press("Enter")
+            await asyncio.sleep(random.uniform(3.0, 4.0))
+            href = await page.evaluate(_FIND_CONV_HREF_JS, target)
+            if href:
+                return await _open_conv_href(page, href)
+        except Exception as e:
+            logger.warning("Buzón search for {!r} failed: {}", query, e)
+
+    # Fallback: scan whatever rows are currently rendered.
+    href = await page.evaluate(_FIND_CONV_HREF_JS, target)
+    if href:
+        return await _open_conv_href(page, href)
+    return False
 
 
 # The action-bar controls are <a>/<span> (not <button>) and the status options
