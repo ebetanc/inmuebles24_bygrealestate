@@ -23,7 +23,7 @@ Environment=HOME=/opt/inmobiliaria24
 # the shell before it finishes (a literal would self-match).
 ExecStartPre=-/bin/sh -c 'pkill -9 -f "[r]emote-debugging-port=9223"; rm -f /opt/inmobiliaria24/.session/eb-chrome-profile/Singleton*'
 # Headful under a virtual framebuffer — EB's WAF returns 403 to headless Chrome.
-ExecStart=/usr/bin/xvfb-run -a /opt/inmobiliaria24/.venv/bin/python -m easybroker
+ExecStart=/usr/bin/xvfb-run -a -s "-screen 0 1920x1080x24" /opt/inmobiliaria24/.venv/bin/python -m easybroker
 TimeoutStartSec=600
 PrivateTmp=true
 

@@ -80,7 +80,11 @@ async def launch_chrome(
         f"--remote-debugging-port={CDP_PORT}",
         f"--user-data-dir={PROFILE_DIR.resolve()}",
         "--lang=es-MX",
-        "--start-maximized",
+        # Force a DESKTOP viewport. Under xvfb --start-maximized yields a narrow
+        # window and EB renders its MOBILE layout (collapsed action bar, hidden
+        # desktop search) which breaks the validated desktop selectors. An
+        # explicit wide window keeps EB on the desktop layout.
+        "--window-size=1920,1080",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-blink-features=AutomationControlled",
