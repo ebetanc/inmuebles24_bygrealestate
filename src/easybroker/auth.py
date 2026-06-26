@@ -76,31 +76,71 @@ async def _first_visible(page: Page, selectors: list[str], timeout_ms: int = 12_
     return None
 
 
-async def session_is_valid(page: Page) -> bool:
-    """True only if we are on a real logged-in EB page (Buzón nav present)."""
-    if _is_logged_out_url(page.url):
+async def _body_text(page: Page) -> str:
+    try:
+        return await page.evaluate("() => (document.body && document.body.innerText) || ''")
+    except Exception:
+        return ""
+
+
+async def _login_form_present(page: Page) -> bool:
+    """Positive signal that we are LOGGED OUT: the login UI is actually present."""
+    if not _is_logged_out_url(page.url):
         return False
-    # A logged-in EB page renders the top nav with "Buzón"; the login page does
-    # not. Presence of a visible password field is a definitive logged-out tell.
     try:
         if await page.locator('input[type="password"]').first.is_visible():
-            return False
+            return True
     except Exception:
         pass
     try:
-        body = await page.evaluate("() => (document.body && document.body.innerText) || ''")
+        if await page.locator('input[type="email"], input[name="authentication[email]"]').first.is_visible():
+            return True
     except Exception:
-        body = ""
-    if "Buzón" in body or "Buzon" in body or "Tablero" in body:
-        return True
-    return len(body.strip()) > 200 and not _is_logged_out_url(page.url)
+        pass
+    body = await _body_text(page)
+    return "Continuar con email" in body or "Inicia sesión" in body or "Inicia sesion" in body
+
+
+async def _navigate_render(page: Page, url: str, *, retries: int = 4) -> bool:
+    """Navigate and wait until the SPA actually renders content. Retries on a
+    slow/empty load (Pi↔EB latency) instead of letting the caller mistake an
+    un-rendered shell for a logged-out session. Returns True if content rendered."""
+    for attempt in range(1, retries + 1):
+        try:
+            await page.goto(url, wait_until="domcontentloaded")
+            await wait_for_spa(page)
+            if len((await _body_text(page)).strip()) > 120:
+                return True
+        except Exception as e:
+            logger.warning("nav attempt {}/{} for {} failed: {}", attempt, retries, url, e)
+        await asyncio.sleep(2.0 * attempt)
+    return False
+
+
+async def session_is_valid(page: Page) -> bool:
+    """True only if we are on a real logged-in EB page.
+
+    Hardened: a logged-in probe of LOGIN_URL redirects AWAY from /authentication
+    (to /manager). We only treat the session as INVALID when the login form is
+    positively present — never on a slow/empty load, which would otherwise cause
+    an unnecessary re-login (account risk)."""
+    if await _login_form_present(page):
+        return False
+    if not _is_logged_out_url(page.url):
+        return True  # redirected to the CRM (e.g. /manager)
+    body = await _body_text(page)
+    return ("Buzón" in body or "Buzon" in body or "Tablero" in body)
 
 
 async def login(page: Page, settings) -> None:
     """Perform a fresh EB login (email + password)."""
     logger.info("Starting EB login for {}", settings.email)
-    await page.goto(LOGIN_URL, wait_until="domcontentloaded")
-    await wait_for_spa(page)
+    if not await _navigate_render(page, LOGIN_URL):
+        await screenshot(page, "login_page_no_render")
+        raise AuthenticationError(
+            "EB login page did not render after retries (Pi↔EB latency). "
+            "Aborting BEFORE submitting credentials — no failed-login attempt made."
+        )
     await asyncio.sleep(random.uniform(1.0, 2.0))
 
     # The login screen first offers social + email choices ("Continuar con
@@ -152,30 +192,47 @@ async def login(page: Page, settings) -> None:
     await asyncio.sleep(random.uniform(2.0, 4.0))
     await wait_for_spa(page)
 
-    if not await session_is_valid(page):
-        await screenshot(page, "login_failed")
-        raise AuthenticationError(
-            f"EB login failed — not on a logged-in page after submit (url={page.url}). "
-            f"May be a wrong password or a new-device verification challenge."
-        )
-    logger.info("EB login successful (url={})", page.url)
+    # Verify with retries: a slow post-login redirect must not be mistaken for a
+    # failure. But if the login form is positively still present (wrong password
+    # / verification), fail fast — do NOT resubmit (avoid lockout).
+    for _ in range(4):
+        if await session_is_valid(page):
+            logger.info("EB login successful (url={})", page.url)
+            return
+        if await _login_form_present(page):
+            await screenshot(page, "login_failed")
+            raise AuthenticationError(
+                f"EB login rejected — login form still present (url={page.url}). "
+                f"Wrong password or a new-device verification challenge. Not retrying."
+            )
+        await asyncio.sleep(3.0)
+    await screenshot(page, "login_unverified")
+    raise AuthenticationError(
+        f"EB login could not be verified after submit (url={page.url}) — likely "
+        f"slow load, not a credential error. Will retry on the next run."
+    )
 
 
 async def load_or_login(context, settings) -> Page:
     """Ensure the context is authenticated; return a Page on a logged-in EB page."""
     page = await context.new_page()
     logger.info("Checking if persistent EB session is still valid")
-    try:
-        # Probe the login URL: if already authenticated, EB redirects away from
-        # /authentication to the CRM dashboard.
-        await page.goto(LOGIN_URL, wait_until="domcontentloaded")
-        await wait_for_spa(page)
-        if await session_is_valid(page):
+    # Probe LOGIN_URL up to 3 times. If authenticated, EB redirects away from
+    # /authentication to the CRM. Only fall through to a fresh login when the
+    # login form is POSITIVELY present — never on a slow/empty load.
+    for attempt in range(1, 4):
+        rendered = await _navigate_render(page, LOGIN_URL)
+        if rendered and await session_is_valid(page):
             logger.info("Persistent EB session is valid — skipping login")
             return page
-        logger.warning("EB session not valid (url={}) — performing fresh login", page.url)
-    except Exception as e:
-        logger.warning("EB session check error ({}): performing fresh login", e)
+        if await _login_form_present(page):
+            logger.warning("EB session expired (login form present) — performing fresh login")
+            break
+        logger.warning(
+            "EB session probe inconclusive (rendered={}, url={}) — retry {}/3",
+            rendered, page.url, attempt,
+        )
+        await asyncio.sleep(2.0 * attempt)
 
     await login(page, settings)
     return page

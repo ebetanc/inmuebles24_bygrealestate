@@ -15,7 +15,7 @@ from pathlib import Path
 from loguru import logger
 from playwright.async_api import Page
 
-from easybroker.auth import APP_URL
+from easybroker.auth import APP_URL, _navigate_render
 from easybroker.browser import screenshot, wait_for_spa
 
 BUZON_URL = f"{APP_URL}/agent/conversations?reset_page=true"
@@ -32,11 +32,11 @@ def _norm_phone(phone: str) -> str:
     return digits[-10:] if len(digits) >= 10 else digits
 
 
-async def goto_buzon(page: Page) -> None:
-    """Navigate to the Buzón inbox (/agent/conversations)."""
-    await page.goto(BUZON_URL, wait_until="domcontentloaded")
-    await wait_for_spa(page)
-    await asyncio.sleep(random.uniform(1.5, 2.5))
+async def goto_buzon(page: Page) -> bool:
+    """Navigate to the Buzón inbox (/agent/conversations). Returns True if it rendered."""
+    ok = await _navigate_render(page, BUZON_URL)
+    await asyncio.sleep(random.uniform(1.0, 2.0))
+    return ok
 
 
 async def find_request_by_phone(page: Page, phone: str) -> bool:
@@ -70,10 +70,9 @@ async def find_request_by_phone(page: Page, phone: str) -> bool:
     if not href:
         return False
     url = href if href.startswith("http") else f"{APP_URL}{href}"
-    await page.goto(url, wait_until="domcontentloaded")
-    await wait_for_spa(page)
-    await asyncio.sleep(random.uniform(1.5, 2.5))
-    return True
+    rendered = await _navigate_render(page, url)
+    await asyncio.sleep(random.uniform(1.0, 2.0))
+    return rendered
 
 
 # The action-bar controls are <a>/<span> (not <button>) and the status options
@@ -251,7 +250,10 @@ async def attend_lead(
     note = note_text or f"Atendido por {agent_name}"
     result = {"found": False, "status_ok": False, "note_ok": False}
 
-    await goto_buzon(page)
+    if not await goto_buzon(page):
+        await screenshot(page, "buzon_no_render")
+        logger.error("Buzón did not render — skipping lead {} this run", phone)
+        return result
     found = await find_request_by_phone(page, phone)
     result["found"] = found
     if not found:
