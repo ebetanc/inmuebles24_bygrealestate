@@ -1,7 +1,7 @@
 """CLI for the EasyBroker Buzón bot.
 
 Usage:
-    python -m easybroker [--headful] [options]
+    python -m easybroker [options]   # headful by default (EB blocks headless)
 
 Modes:
     (default)            Poll Supabase for assigned EB leads and, for each,
@@ -40,8 +40,11 @@ logger.add("logs/eb_run.log", level="DEBUG", rotation="10 MB", retention="7 days
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="easybroker", description="EasyBroker Buzón attend bot")
-    p.add_argument("--headful", action="store_true", default=False,
-                   help="Run Chrome with a visible window (default: headless)")
+    # EB's WAF/anti-bot serves blank/403 to HEADLESS Chrome — it must run HEADFUL
+    # (under xvfb on a headless host). So headful is the DEFAULT here (unlike the
+    # Inmuebles24 scraper). --headless is an escape hatch, not for normal use.
+    p.add_argument("--headless", action="store_true", default=False,
+                   help="Run Chrome headless (DO NOT use for EB — its WAF blocks headless; default is headful)")
     p.add_argument("--dry-run", action="store_true", dest="dry_run", default=False,
                    help="Log in, verify session, then exit")
     p.add_argument("--inspect-login", action="store_true", dest="inspect_login", default=False,
@@ -65,7 +68,7 @@ async def async_main(args: argparse.Namespace) -> int:
         return 1
 
     async with async_playwright() as pw:
-        context, chrome_proc = await launch_chrome(pw, headless=not args.headful)
+        context, chrome_proc = await launch_chrome(pw, headless=args.headless)
         try:
             if args.inspect_login:
                 page = await context.new_page()
