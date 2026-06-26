@@ -217,21 +217,27 @@ async def load_or_login(context, settings) -> Page:
     """Ensure the context is authenticated; return a Page on a logged-in EB page."""
     page = await context.new_page()
     logger.info("Checking if persistent EB session is still valid")
-    # Probe LOGIN_URL up to 3 times. If authenticated, EB redirects away from
-    # /authentication to the CRM. Only fall through to a fresh login when the
-    # login form is POSITIVELY present — never on a slow/empty load.
+    # Probe LOGIN_URL up to 3 times. Detect an authenticated session by the
+    # REDIRECT alone (EB sends a logged-in request away from /authentication to
+    # the CRM) — do NOT wait for the heavy dashboard SPA to fully render, which
+    # is what the Pi's flaky link to EB intermittently stalls on. Only fall
+    # through to a fresh login when the login form is positively present.
     for attempt in range(1, 4):
-        rendered = await _navigate_render(page, LOGIN_URL)
-        if rendered and await session_is_valid(page):
-            logger.info("Persistent EB session is valid — skipping login")
+        try:
+            await page.goto(LOGIN_URL, wait_until="domcontentloaded")
+        except Exception as e:
+            logger.warning("session-probe nav failed (attempt {}/3): {}", attempt, e)
+            await asyncio.sleep(2.0 * attempt)
+            continue
+        await asyncio.sleep(2.0)
+        url = page.url.lower()
+        if "authentication" not in url and not _is_logged_out_url(url):
+            logger.info("Persistent EB session is valid (redirected to {}) — skipping login", page.url)
             return page
         if await _login_form_present(page):
             logger.warning("EB session expired (login form present) — performing fresh login")
             break
-        logger.warning(
-            "EB session probe inconclusive (rendered={}, url={}) — retry {}/3",
-            rendered, page.url, attempt,
-        )
+        logger.warning("EB session probe inconclusive (url={}) — retry {}/3", page.url, attempt)
         await asyncio.sleep(2.0 * attempt)
 
     await login(page, settings)
