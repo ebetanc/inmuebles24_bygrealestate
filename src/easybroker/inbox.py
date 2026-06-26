@@ -44,14 +44,19 @@ async def goto_buzon(page: Page) -> bool:
 _FIND_CONV_HREF_JS = """
 (target) => {
     const norm = (s) => (s || '').replace(/\\D/g, '');
+    let first = '';
     for (const a of document.querySelectorAll('a')) {
         const h = a.getAttribute('href') || '';
         if (!/conversations\\/\\d+/.test(h)) continue;
+        if (!first) first = h;                  // top of the filtered list
         for (let p = a; p && p.tagName !== 'BODY'; p = p.parentElement) {
-            if (norm(p.innerText).endsWith(target)) return h;
+            if (norm(p.innerText).endsWith(target)) return h;   // exact phone row
         }
     }
-    return '';
+    // On a phone-filtered Buzón the rows show the contact's NAME (not the phone),
+    // so digit-matching usually misses — fall back to the top (most recent)
+    // result, which is this lead's active conversation.
+    return first;
 }
 """
 
