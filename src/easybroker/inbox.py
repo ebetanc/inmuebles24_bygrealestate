@@ -75,27 +75,32 @@ async def find_request_by_phone(page: Page, phone: str) -> bool:
     if not target:
         return False
 
-    # Search first (the visible list only holds recent conversations).
+    # Filter the Buzón server-side via the search_criteria[query] URL param
+    # (the EB conversation list is server-rendered with this param). This avoids
+    # the visible/hidden search-input ambiguity — under xvfb's narrow viewport EB
+    # renders the MOBILE layout, so the desktop search field is hidden.
     digits = re.sub(r"\D", "", phone or "")
     for query in (digits, target):
-        try:
-            box = page.get_by_placeholder(re.compile("Busca por", re.I)).first
-            if await box.count() == 0:
-                break
-            await box.fill("")
-            await box.fill(query)
+        url = f"{APP_URL}/agent/conversations?search_criteria%5Bquery%5D={query}&reset_page=true"
+        if not await _navigate_render(page, url):
+            continue
+        await asyncio.sleep(random.uniform(1.5, 2.5))
+        href = await page.evaluate(_FIND_CONV_HREF_JS, target)
+        if href:
+            return await _open_conv_href(page, href)
+
+    # Fallback: type into the VISIBLE search field (mobile or desktop) and scan.
+    try:
+        box = page.get_by_placeholder(re.compile("Buscar por nombre", re.I)).filter(visible=True).first
+        if await box.count() > 0:
+            await box.fill(digits)
             await box.press("Enter")
             await asyncio.sleep(random.uniform(3.0, 4.0))
             href = await page.evaluate(_FIND_CONV_HREF_JS, target)
             if href:
                 return await _open_conv_href(page, href)
-        except Exception as e:
-            logger.warning("Buzón search for {!r} failed: {}", query, e)
-
-    # Fallback: scan whatever rows are currently rendered.
-    href = await page.evaluate(_FIND_CONV_HREF_JS, target)
-    if href:
-        return await _open_conv_href(page, href)
+    except Exception as e:
+        logger.warning("Buzón input-search fallback failed: {}", e)
     return False
 
 
