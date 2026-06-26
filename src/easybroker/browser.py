@@ -86,10 +86,16 @@ async def launch_chrome(
     if headless:
         args.append("--headless=new")
 
-    proxy = os.environ.get("CHROME_PROXY", "").strip()
+    # Use a DEDICATED proxy var, NOT the scraper's CHROME_PROXY: the Inmuebles24
+    # scraper sets CHROME_PROXY to a Mexico mobile proxy (needed to beat that
+    # portal's Cloudflare) which is slow/flaky and metered. EB reaches fine from
+    # the host's own IP, so EB runs direct unless EB_CHROME_PROXY is set explicitly.
+    proxy = os.environ.get("EB_CHROME_PROXY", "").strip()
     if proxy:
         args.append(f"--proxy-server={proxy}")
         logger.info("Chrome using proxy {}", proxy)
+    else:
+        logger.info("Chrome running WITHOUT proxy (EB reaches direct)")
 
     logger.info("Launching Chrome via CDP on port {}", CDP_PORT)
     proc = subprocess.Popen(
