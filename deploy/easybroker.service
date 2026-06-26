@@ -19,7 +19,9 @@ Environment=HOME=/opt/inmobiliaria24
 # lock — the next run then attaches to that stuck instance. Kill any stale EB
 # Chrome (matched by its unique 9223 debug port, so the scraper's 9222 Chrome is
 # untouched) and clear the lock before launching.
-ExecStartPre=-/bin/sh -c 'pkill -9 -f "remote-debugging-port=9223"; rm -f /opt/inmobiliaria24/.session/eb-chrome-profile/Singleton*'
+# The [r] in the pattern stops pkill -f from matching its own argv and killing
+# the shell before it finishes (a literal would self-match).
+ExecStartPre=-/bin/sh -c 'pkill -9 -f "[r]emote-debugging-port=9223"; rm -f /opt/inmobiliaria24/.session/eb-chrome-profile/Singleton*'
 # Headful under a virtual framebuffer — EB's WAF returns 403 to headless Chrome.
 ExecStart=/usr/bin/xvfb-run -a /opt/inmobiliaria24/.venv/bin/python -m easybroker
 TimeoutStartSec=600

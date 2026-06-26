@@ -60,8 +60,13 @@ async def launch_chrome(
     # stale EB Chrome (matched by its unique 9223 flag; the scraper's 9222 is
     # safe) and drop the profile lock before launching a fresh one.
     try:
+        # NOTE the [r] in the pattern: pkill -f matches against full command
+        # lines, INCLUDING this pkill's own argv. A literal
+        # "remote-debugging-port=9223" would self-match and kill our own parent
+        # shell. "[r]emote-…" matches the same Chrome cmdline but not the pattern
+        # string itself (classic grep-avoiding-itself trick).
         subprocess.run(
-            ["pkill", "-9", "-f", f"remote-debugging-port={CDP_PORT}"],
+            ["pkill", "-9", "-f", f"[r]emote-debugging-port={CDP_PORT}"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
         )
         for lock in PROFILE_DIR.glob("Singleton*"):
