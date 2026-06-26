@@ -351,7 +351,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const meta = $('Get EB Note Data').first().json;\nconst existing = ($json && $json.private_description) || '';\nconst d = new Date().toLocaleString('es-MX', {timeZone:'America/Mexico_City', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});\nconst line = d + ' - Asignado a ' + (meta.agent_name || 'agente') + ' via subasta (TOMO-' + (meta.short_code || '?') + '). [BYG bot]';\nconst updated = existing ? (existing + '\n' + line) : line;\nreturn [{ json: { eb_contact_id: meta.eb_contact_id, private_description: updated } }];"
+        "jsCode": "const meta = $('Get EB Note Data').first().json;\nconst existing = ($json && $json.private_description) || '';\nconst d = new Date().toLocaleString('es-MX', {timeZone:'America/Mexico_City', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});\nconst line = d + ' - Asignado a ' + (meta.agent_name || 'agente') + ' via subasta (TOMO-' + (meta.short_code || '?') + '). [BYG bot]';\nconst updated = existing ? (existing + '\n' + line) : line;\nconst existingTags = Array.isArray($json.tags) ? $json.tags : [];\nconst tags = existingTags.includes('Atendido') ? existingTags : existingTags.concat('Atendido');\nreturn [{ json: { eb_contact_id: meta.eb_contact_id, private_description: updated, tags: tags } }];"
       },
       "id": "eb00note-0003-4000-8000-000000000003",
       "name": "Build EB Note",
@@ -381,7 +381,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"private_description\": {{ JSON.stringify($json.private_description) }}\n}",
+        "jsonBody": "={\n  \"private_description\": {{ JSON.stringify($json.private_description) }},\n  \"tags\": {{ JSON.stringify($json.tags) }}\n}",
         "options": {
           "timeout": 15000
         }
