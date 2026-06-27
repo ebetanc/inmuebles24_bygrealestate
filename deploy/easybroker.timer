@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the EasyBroker Buzon attend bot every 15 min (business hours, CDMX)
+
+[Timer]
+# Mirror the Inmuebles24 scraper window: every 15 min 08:00–19:45 plus a 20:00
+# run, America/Mexico_City. Most runs find 0 pending leads and exit fast.
+OnCalendar=*-*-* 08..19:0/15:00 America/Mexico_City
+OnCalendar=*-*-* 20:00:00 America/Mexico_City
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target
