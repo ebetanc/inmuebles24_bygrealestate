@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flujo de Atención de Leads</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --ink:#11161c; --bg:#f4f1ea; --card:#fff;
+    --i24:#e8501e; --i24s:#ffe7dc;
+    --eb:#3b5bff;  --ebs:#e7ecff;
+    --ok:#0a7d4d;  --oks:#dcf7e8;
+    --shadow:5px 5px 0 #11161c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;padding:40px 18px 90px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:34px;text-align:center;margin:0 0 6px;letter-spacing:-.5px}
+  .lead{text-align:center;color:#5b6b7a;font-size:16px;margin:0 0 40px}
+  section{margin:46px 0;page-break-inside:avoid}
+  h2{font-size:24px;margin:0 0 4px;display:flex;align-items:center;gap:12px}
+  .dot{width:18px;height:18px;border:2px solid var(--ink);border-radius:50%}
+  .dot.i{background:var(--i24)} .dot.e{background:var(--eb)}
+  .cap{color:#5b6b7a;font-size:15px;margin:0 0 18px;padding-left:30px}
+  .panel{border:2px solid var(--ink);background:var(--card);box-shadow:var(--shadow);padding:26px 18px;overflow-x:auto}
+  .mermaid{display:flex;justify-content:center;min-width:100%}
+  .tag{display:inline-block;font-size:12.5px;font-weight:700;border:2px solid var(--ink);
+    border-radius:999px;padding:3px 12px;margin-left:8px}
+  .tag.i{background:var(--i24s);color:var(--i24)}
+  .tag.e{background:var(--ebs);color:var(--eb)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>📲 Flujo de Atención de Leads</h1>
+  <p class="lead">Cómo el sistema capta, asigna y da seguimiento a cada cliente interesado — de forma automática.</p>
+
+  <!-- ============ VISTA GENERAL ============ -->
+  <section>
+    <h2>Vista general</h2>
+    <p class="cap">Dos portales · un mismo motor automático · seguimiento de vuelta en cada portal.</p>
+    <div class="panel">
+      <div class="mermaid">
+flowchart LR
+    classDef i24 fill:#ffe7dc,stroke:#11161c,stroke-width:2px,color:#e8501e;
+    classDef eb  fill:#e7ecff,stroke:#11161c,stroke-width:2px,color:#3b5bff;
+    classDef sys fill:#fff,stroke:#11161c,stroke-width:2px;
+    classDef ok  fill:#dcf7e8,stroke:#11161c,stroke-width:2px,color:#0a7d4d;
+
+    P1["🟠 Inmuebles24"]:::i24 --> M
+    P2["🔵 EasyBroker"]:::eb --> M
+    M["⚙️ Sistema automático<br/>capta y asigna el lead"]:::sys --> A["🧑‍💼 Asesor asignado"]:::ok
+    A --> N["💬 Aviso por WhatsApp"]:::ok
+    A --> S["✅ Seguimiento marcado<br/>en el portal de origen"]:::ok
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ INMUEBLES24 ============ -->
+  <section>
+    <h2><span class="dot i"></span> Flujo Inmuebles24 <span class="tag i">Portal naranja</span></h2>
+    <p class="cap">Del interés del cliente hasta marcarlo "Contactado".</p>
+    <div class="panel">
+      <div class="mermaid">
+flowchart LR
+    classDef step fill:#fff,stroke:#11161c,stroke-width:2px;
+    classDef ok fill:#dcf7e8,stroke:#11161c,stroke-width:2px,color:#0a7d4d;
+    classDef start fill:#ffe7dc,stroke:#11161c,stroke-width:2px,color:#e8501e;
+
+    A["1. Cliente pregunta<br/>por una propiedad<br/>en Inmuebles24"]:::start
+    A --> B["2. El sistema detecta<br/>el lead automaticamente"]:::step
+    B --> C["3. Se asigna<br/>a un asesor"]:::step
+    C --> D["4. El asesor recibe<br/>aviso por WhatsApp"]:::step
+    D --> E["5. El lead se marca<br/>'Contactado' en el portal<br/>(sale de Pendientes)"]:::ok
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EASYBROKER ============ -->
+  <section>
+    <h2><span class="dot e"></span> Flujo EasyBroker <span class="tag e">Portal azul</span></h2>
+    <p class="cap">Del interés del cliente hasta dejar el estatus y la nota del asesor.</p>
+    <div class="panel">
+      <div class="mermaid">
+flowchart LR
+    classDef step fill:#fff,stroke:#11161c,stroke-width:2px;
+    classDef ok fill:#dcf7e8,stroke:#11161c,stroke-width:2px,color:#0a7d4d;
+    classDef start fill:#e7ecff,stroke:#11161c,stroke-width:2px,color:#3b5bff;
+
+    A["1. Cliente pregunta<br/>por una propiedad<br/>en EasyBroker"]:::start
+    A --> B["2. El sistema detecta<br/>el lead automaticamente"]:::step
+    B --> C["3. Se asigna<br/>a un asesor"]:::step
+    C --> D["4. El asesor recibe<br/>aviso por WhatsApp"]:::step
+    D --> E["5. Estatus → 'Atendida'<br/>+ nota 'Atendido por (asesor)'<br/>en EasyBroker"]:::ok
+      </div>
+    </div>
+  </section>
+
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad:true, theme:"base",
+    themeVariables:{
+      fontFamily:'"Segoe UI",Roboto,sans-serif', fontSize:"16px",
+      primaryColor:"#ffffff", primaryTextColor:"#11161c", primaryBorderColor:"#11161c",
+      lineColor:"#11161c"
+    },
+    flowchart:{ curve:"basis", nodeSpacing:55, rankSpacing:60, htmlLabels:true, useMaxWidth:true }
+  });
+</script>
+</body>
+</html>
