@@ -25,9 +25,10 @@ dev = [
 [project.scripts]
 inmobiliaria24 = "inmobiliaria24.main:main"
 easybroker = "easybroker.main:main"
+reporte-semanal = "reporte_semanal.__main__:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/inmobiliaria24", "src/easybroker"]
+packages = ["src/inmobiliaria24", "src/easybroker", "src/reporte_semanal"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

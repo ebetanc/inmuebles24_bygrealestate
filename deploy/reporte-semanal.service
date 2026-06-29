@@ -1,0 +1,16 @@
+[Unit]
+Description=Reporte semanal de leads (email a gerencia)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=inmobiliaria24
+WorkingDirectory=/opt/inmobiliaria24
+EnvironmentFile=/opt/inmobiliaria24/.env
+Environment=PYTHONPATH=/opt/inmobiliaria24/src
+ExecStart=/opt/inmobiliaria24/.venv/bin/python -m reporte_semanal
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

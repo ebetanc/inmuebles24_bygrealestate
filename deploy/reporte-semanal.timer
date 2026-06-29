@@ -1,0 +1,9 @@
+[Unit]
+Description=Dispara el reporte semanal de leads los Lunes 8am (CDMX)
+
+[Timer]
+OnCalendar=Mon *-*-* 08:00:00 America/Mexico_City
+Persistent=true
+
+[Install]
+WantedBy=timers.target
