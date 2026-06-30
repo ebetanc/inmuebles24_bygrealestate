@@ -170,9 +170,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Create new conversation for scraper lead (day mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'pending_assignment', $5, 'day')\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
+        "query": "-- Create new conversation for scraper lead (day mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during, i24_lead_id)\nVALUES ($1, $2, $3, $4, 'pending_assignment', $5, 'day', $6)\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
         "options": {
-          "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source] }}"
+          "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source, $json.scraper_lead_id] }}"
         }
       },
       "id": "b1b2c3d4-0010-4000-8000-000000000010",
@@ -252,9 +252,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Create new conversation for scraper lead (night mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'night_queued', $5, 'night')\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
+        "query": "-- Create new conversation for scraper lead (night mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during, i24_lead_id)\nVALUES ($1, $2, $3, $4, 'night_queued', $5, 'night', $6)\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
         "options": {
-          "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source] }}"
+          "queryReplacement": "={{ [$json.phone, $json.name, $json.email, $json.listing_id, $json.source, $json.scraper_lead_id] }}"
         }
       },
       "id": "b1b2c3d4-0014-4000-8000-000000000014",
