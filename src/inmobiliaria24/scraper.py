@@ -349,18 +349,35 @@ _EXTRACT_LEAD_DETAIL_JS = """
     const emailMatch = text.match(/[\\w.+-]+@[\\w.-]+\\.[a-zA-Z]{2,}/);
     if (emailMatch) email = emailMatch[0];
 
-    // Phone — look in contact section first, then fallback
+    // Phone — collect candidate numbers PER LINE, never spanning lines. The old
+    // regex used \\s in the char class, so it jumped across the newline between the
+    // two stacked numbers Inmuebles24 shows and glued them:
+    // "525555067748\\n5555067748" -> "525555067748555" (3 junk digits appended).
     let phone = '';
     const phoneSection = text.match(
         /(?:Datos de contacto|Tel[eé]fono|Tel)[\\s\\S]*?(?=\\n\\n|Acerca|$)/i
     );
-    if (phoneSection) {
-        const phoneMatch = phoneSection[0].match(/(\\d[\\d\\s-]{7,15})/);
-        if (phoneMatch) phone = phoneMatch[1].replace(/[\\s-]/g, '');
+    const scanArea = phoneSection ? phoneSection[0] : text;
+    let phoneCands = [];
+    for (const line of scanArea.split(/\\n+/)) {
+        const m = line.match(/\\d[\\d \\t-]{6,13}\\d/); // digits + spaces/dashes, NO newline
+        if (m) {
+            const digits = m[0].replace(/\\D/g, '');
+            if (digits.length >= 10 && digits.length <= 13) phoneCands.push(digits);
+        }
     }
-    if (!phone) {
-        const allPhones = text.match(/\\b(\\d{10,13})\\b/g);
-        if (allPhones) phone = allPhones[0];
+    if (phoneCands.length === 0) {
+        phoneCands = (text.match(/\\d{10,13}/g) || []);
+    }
+    // Prefer a country-code number (12-13 digits), else a local 10-digit.
+    phone = phoneCands.find(s => s.length >= 12)
+         || phoneCands.find(s => s.length === 10)
+         || phoneCands[0] || '';
+    // Normalize to Mexico canonical: 52 + 10 digits (drop the mobile "1": 521->52).
+    if (phone) {
+        if (phone.length === 10) phone = '52' + phone;
+        else if (phone.length === 13 && phone.startsWith('521')) phone = '52' + phone.slice(3);
+        else if (phone.length === 11 && phone.startsWith('1')) phone = '52' + phone.slice(1);
     }
 
     // Message — the lead's inquiry text
@@ -404,7 +421,15 @@ _EXTRACT_LEAD_DETAIL_JS = """
     );
     if (propMatch) property = propMatch[0].trim();
 
+    // EasyBroker advertiser code, e.g. "Cód. del anunciante: EB-VK1013".
+    // Used to resolve the owner agent via EasyBroker tags (owner-first routing).
+    // Empty if the page does not expose it -> downstream routes to manager.
+    let propertyPublicId = '';
+    const ebMatch = text.match(/EB-[A-Z0-9]{4,}/i);
+    if (ebMatch) propertyPublicId = ebMatch[0].toUpperCase();
+
     return { name, email, phone, message, listing_id: listingId, status, property,
+             property_public_id: propertyPublicId,
              page_text: text.substring(0, 1500) };
 }
 """
@@ -430,6 +455,442 @@ async def extract_lead_detail(page: Page, lead_id: str) -> dict | None:
         logger.warning("Could not extract detail for lead {}", lead_id)
 
     return detail
+
+
+# ---------------------------------------------------------------------------
+# 2b. Mark a lead as "Contactado" on the portal (remove it from Pendiente)
+# ---------------------------------------------------------------------------
+#
+# The scraper's local SQLite dedup keeps us from re-sending a lead, but the
+# lead stays *Pendiente* on the Inmuebles24 portal forever. Each inbox row has
+# an "Estado de consulta" dropdown (Pendiente / Contactado / Finalizado) that
+# changes the status IN PLACE — mark_lead_contacted() selects "Contactado"
+# there. This does NOT message the prospect (unlike replying in the chat, the
+# only other way to flip status). Gated by the MARK_CONTACTED env var.
+
+# Dumps every plausibly-clickable control on the current page so we can find
+# the real "mark as contactado" button/menu without live access.
+_DUMP_CONTROLS_JS = """
+() => {
+    const root = document.getElementById('root') || document.body;
+    if (!root) return [];
+    const out = [];
+    const els = root.querySelectorAll(
+        'button, a, [role="button"], [data-qa], [onclick], select, textarea, input, [contenteditable], [class*="estado" i], [class*="status" i]'
+    );
+    const seen = new Set();
+    for (const el of els) {
+        const text = (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 80);
+        const dq = el.getAttribute('data-qa') || '';
+        const aria = el.getAttribute('aria-label') || '';
+        const title = el.getAttribute('title') || '';
+        const cls = (el.className && el.className.toString ? el.className.toString() : '').slice(0, 120);
+        const key = el.tagName + '|' + dq + '|' + text + '|' + cls;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+            tag: el.tagName.toLowerCase(),
+            text,
+            data_qa: dq,
+            aria_label: aria,
+            title,
+            class: cls,
+        });
+        if (out.length >= 200) break;
+    }
+
+    // Second pass: status badges/toggles are often plain <span>/<div> whose
+    // text is exactly the status word (no button/data-qa). Capture those plus
+    // their nearest clickable ancestor so we can target the status control.
+    const all = root.querySelectorAll('span, div, p, li');
+    for (const el of all) {
+        const t = (el.textContent || '').trim();
+        if (t !== 'Pendiente' && t !== 'Contactado' && t !== 'Marcar como contactado'
+            && t !== 'Marcar como pendiente') continue;
+        if (el.children.length > 0) continue;  // leaf node only (the badge text itself)
+        // Walk up to the nearest clickable ancestor.
+        let clickable = el;
+        for (let p = el; p && p !== root; p = p.parentElement) {
+            if (p.tagName === 'BUTTON' || p.tagName === 'A' || p.onclick
+                || p.getAttribute('role') === 'button'
+                || getComputedStyle(p).cursor === 'pointer') {
+                clickable = p;
+                break;
+            }
+        }
+        out.push({
+            tag: el.tagName.toLowerCase(),
+            text: t,
+            data_qa: el.getAttribute('data-qa') || '',
+            aria_label: el.getAttribute('aria-label') || '',
+            title: '_STATUS_BADGE_',
+            class: (el.className && el.className.toString ? el.className.toString() : '').slice(0, 120),
+            clickable_tag: clickable.tagName.toLowerCase(),
+            clickable_class: (clickable.className && clickable.className.toString ? clickable.className.toString() : '').slice(0, 120),
+            clickable_data_qa: clickable.getAttribute('data-qa') || '',
+        });
+    }
+    return out;
+}
+"""
+
+
+async def dump_lead_controls(page: Page, lead_id: str) -> list[dict]:
+    """Open a lead detail page and dump all clickable controls for inspection.
+
+    Writes the controls to logs/lead_controls_<lead_id>.json and logs each one
+    so the operator can identify the real "mark as Contactado" selector to put
+    in MARK_CONTACTED_SELECTOR. Read-only — does not change anything.
+    """
+    import json
+    from pathlib import Path
+
+    await _navigate_spa(page, f"{INTERESADOS_URL}/{lead_id}")
+    controls: list[dict] = await page.evaluate(_DUMP_CONTROLS_JS)
+
+    Path("logs").mkdir(exist_ok=True)
+    out_path = Path("logs") / f"lead_controls_{lead_id}.json"
+    out_path.write_text(json.dumps(controls, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    logger.info("Dumped {} controls from lead {} -> {}", len(controls), lead_id, out_path)
+    for c in controls:
+        # Surface anything that looks status-related at the top of the log.
+        blob = f"{c['text']} {c['data_qa']} {c['aria_label']} {c['title']} {c['class']}".lower()
+        hot = any(k in blob for k in ("contact", "atend", "pendiente", "estado", "marcar", "gestion"))
+        extra = ""
+        if c.get("clickable_tag"):
+            extra = " -> clickable <{}> class={!r} data-qa={!r}".format(
+                c["clickable_tag"], c.get("clickable_class", ""), c.get("clickable_data_qa", ""),
+            )
+        logger.info(
+            "{} <{}> text={!r} data-qa={!r} aria={!r} class={!r}{}",
+            "**" if hot else "  ", c["tag"], c["text"], c["data_qa"], c["aria_label"], c["class"], extra,
+        )
+    return controls
+
+
+# Finds the per-row status chip ("Pendiente v" dropdown) in the inbox list and
+# the menu it opens. The inbox row exposes a status dropdown that changes the
+# status IN PLACE without opening the lead or messaging the prospect — unlike
+# the detail page, which only flips status on reply.
+_FIND_STATUS_CHIPS_JS = """
+() => {
+    const root = document.getElementById('root') || document.body;
+    if (!root) return [];
+    const out = [];
+    let idx = 0;
+    for (const el of root.querySelectorAll('*')) {
+        const t = (el.textContent || '').trim();
+        if (t !== 'Pendiente') continue;
+        if (el.children.length > 2) continue;  // chip leaf (label + maybe chevron)
+        let trig = el;
+        for (let p = el; p && p !== root; p = p.parentElement) {
+            if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
+                || p.onclick || getComputedStyle(p).cursor === 'pointer') { trig = p; break; }
+        }
+        out.push({
+            idx,
+            text: t,
+            chip_tag: el.tagName.toLowerCase(),
+            chip_class: (el.className && el.className.toString ? el.className.toString() : '').slice(0, 120),
+            trig_tag: trig.tagName.toLowerCase(),
+            trig_class: (trig.className && trig.className.toString ? trig.className.toString() : '').slice(0, 120),
+            trig_dq: trig.getAttribute('data-qa') || '',
+            trig_aria: trig.getAttribute('aria-label') || '',
+        });
+        idx++;
+    }
+    return out;
+}
+"""
+
+# Clicks the Nth "Pendiente" chip trigger (to open its dropdown).
+_CLICK_STATUS_CHIP_JS = """
+(index) => {
+    const root = document.getElementById('root') || document.body;
+    let idx = 0;
+    for (const el of root.querySelectorAll('*')) {
+        const t = (el.textContent || '').trim();
+        if (t !== 'Pendiente') continue;
+        if (el.children.length > 2) continue;
+        if (idx === index) {
+            let trig = el;
+            for (let p = el; p && p !== root; p = p.parentElement) {
+                if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
+                    || p.onclick || getComputedStyle(p).cursor === 'pointer') { trig = p; break; }
+            }
+            trig.click();
+            return true;
+        }
+        idx++;
+    }
+    return false;
+}
+"""
+
+# After opening the dropdown, dump the visible menu options (Contactado, etc).
+_DUMP_MENU_JS = """
+() => {
+    const root = document.getElementById('root') || document.body;
+    const out = [];
+    const seen = new Set();
+    for (const el of root.querySelectorAll('[role="menuitem"], [role="option"], li, button, a, span, div')) {
+        const t = (el.textContent || '').trim();
+        if (!t || t.length > 40) continue;
+        // Status-menu candidates: short option-like text near status words.
+        if (!/^(Contactado|Pendiente|Descartad|No contestó|No contesto|Cita|Visita|Cerrad|Atendid|Interesad|Apartad)/i.test(t)) continue;
+        if (el.children.length > 1) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;  // visible only
+        const key = el.tagName + '|' + t;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+            tag: el.tagName.toLowerCase(),
+            text: t,
+            role: el.getAttribute('role') || '',
+            data_qa: el.getAttribute('data-qa') || '',
+            class: (el.className && el.className.toString ? el.className.toString() : '').slice(0, 100),
+        });
+    }
+    return out;
+}
+"""
+
+
+async def dump_status_dropdown(page: Page) -> dict:
+    """Inspect the inbox-row status dropdown ("Pendiente v") and its menu options.
+
+    Navigates the Interesados inbox, scans every tab for a Pendiente status chip,
+    clicks the first one to open its dropdown, and dumps the menu options that
+    appear (e.g. "Contactado"). Read-only — opens the menu but does not select an
+    option. Writes logs/status_dropdown.json.
+    """
+    import json
+    from pathlib import Path
+
+    await _navigate_spa(page, INTERESADOS_URL)
+    await asyncio.sleep(30)
+
+    result: dict = {"chips_by_tab": {}, "menu": [], "found_tab": None}
+
+    for tab_name, tab_selector in _TABS:
+        if tab_selector:
+            clicked = await page.evaluate(_CLICK_TAB_JS, tab_selector)
+            if not clicked:
+                continue
+            await asyncio.sleep(30)
+
+        # Screenshot what the scraper actually sees in this tab (parity check
+        # vs the operator's own panel — resolves "scraper sees 0 Pendiente").
+        try:
+            Path("logs").mkdir(exist_ok=True)
+            await page.screenshot(path=f"logs/inbox_{tab_name}.png", full_page=True)
+        except Exception:
+            pass
+
+        chips = await page.evaluate(_FIND_STATUS_CHIPS_JS)
+        result["chips_by_tab"][tab_name] = chips
+        logger.info("Tab '{}': {} Pendiente status chip(s)", tab_name, len(chips))
+        for c in chips:
+            logger.info(
+                "  chip <{}> class={!r} -> trigger <{}> class={!r} data-qa={!r} aria={!r}",
+                c["chip_tag"], c["chip_class"], c["trig_tag"], c["trig_class"], c["trig_dq"], c["trig_aria"],
+            )
+
+        if chips and result["found_tab"] is None:
+            # Open the first Pendiente dropdown and dump the menu.
+            ok = await page.evaluate(_CLICK_STATUS_CHIP_JS, 0)
+            logger.info("Clicked first Pendiente chip in tab '{}': {}", tab_name, ok)
+            await asyncio.sleep(random.uniform(1.5, 2.5))
+            try:
+                await page.screenshot(path="logs/status_menu_open.png", full_page=True)
+            except Exception:
+                pass
+            menu = await page.evaluate(_DUMP_MENU_JS)
+            result["menu"] = menu
+            result["found_tab"] = tab_name
+            logger.info("Dropdown menu options ({}):", len(menu))
+            for m in menu:
+                logger.info(
+                    "  ** MENU <{}> text={!r} role={!r} data-qa={!r} class={!r}",
+                    m["tag"], m["text"], m["role"], m["data_qa"], m["class"],
+                )
+            # Close the menu (Escape) so we don't accidentally change anything.
+            try:
+                await page.keyboard.press("Escape")
+            except Exception:
+                pass
+
+    Path("logs").mkdir(exist_ok=True)
+    (Path("logs") / "status_dropdown.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    logger.info("Wrote logs/status_dropdown.json")
+    return result
+
+
+# Reads the status chip text ("Pendiente"/"Contactado"/"Finalizado") of the
+# inbox row whose lead link matches leadId. Read-only.
+_READ_CHIP_JS = """
+(leadId) => {
+    const root = document.getElementById('root') || document.body;
+    const re = new RegExp('interesados/' + leadId + '(?:[^0-9]|$)');
+    for (const a of root.querySelectorAll('a')) {
+        if (!re.test(a.getAttribute('href') || '')) continue;
+        let row = a;
+        for (let p = a; p && p !== root; p = p.parentElement) {
+            if (p.tagName === 'TR' || p.tagName === 'LI' || p.getAttribute('role') === 'row'
+                || p.getAttribute('data-qa') || p.getAttribute('data-panel')) { row = p; break; }
+        }
+        for (const el of row.querySelectorAll('*')) {
+            const t = (el.textContent || '').trim();
+            if ((t === 'Pendiente' || t === 'Contactado' || t === 'Finalizado')
+                && el.children.length <= 2) return t;
+        }
+        return '_ROW_NO_CHIP_';
+    }
+    return '_LEAD_NOT_FOUND_';
+}
+"""
+
+# Returns the viewport-center coords of the status chip for the inbox row
+# matching leadId (after scrolling it into view), so Playwright can issue a REAL
+# mouse click — el.click() does not open this React dropdown.
+_CHIP_BBOX_JS = """
+(leadId) => {
+    const root = document.getElementById('root') || document.body;
+    const re = new RegExp('interesados/' + leadId + '(?:[^0-9]|$)');
+    for (const a of root.querySelectorAll('a')) {
+        if (!re.test(a.getAttribute('href') || '')) continue;
+        let row = a;
+        for (let p = a; p && p !== root; p = p.parentElement) {
+            if (p.tagName === 'TR' || p.tagName === 'LI' || p.getAttribute('role') === 'row'
+                || p.getAttribute('data-qa') || p.getAttribute('data-panel')) { row = p; break; }
+        }
+        let chip = null;
+        for (const el of row.querySelectorAll('*')) {
+            const t = (el.textContent || '').trim();
+            if ((t === 'Pendiente' || t === 'Contactado' || t === 'Finalizado')
+                && el.children.length <= 2) { chip = el; break; }
+        }
+        if (!chip) return { found: false, reason: 'no_chip' };
+        let target = chip;
+        for (let p = chip; p && p !== row; p = p.parentElement) {
+            if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
+                || getComputedStyle(p).cursor === 'pointer') { target = p; break; }
+        }
+        target.scrollIntoView({ block: 'center' });
+        const r = target.getBoundingClientRect();
+        return { found: true, text: (chip.textContent || '').trim(),
+                 x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    }
+    return { found: false, reason: 'no_lead' };
+}
+"""
+
+# Returns the viewport-center coords of the option labelled `label` inside the
+# open "Estado de consulta" popover (the container that holds Pendiente +
+# Contactado + Finalizado), so Playwright can mouse-click it.
+_OPTION_BBOX_JS = """
+(label) => {
+    for (const c of document.querySelectorAll('div, ul, section, [role="menu"], [role="listbox"], [role="dialog"]')) {
+        const txt = c.textContent || '';
+        if (!/Estado de consulta/i.test(txt)
+            && !(/Pendiente/.test(txt) && /Finalizado/.test(txt))) continue;
+        const r0 = c.getBoundingClientRect();
+        if (r0.width === 0 || r0.height === 0) continue;
+        for (const el of c.querySelectorAll('*')) {
+            if ((el.textContent || '').trim() !== label) continue;
+            if (el.children.length > 1) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            return { found: true, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        }
+    }
+    return { found: false };
+}
+"""
+
+
+async def mark_lead_contacted(page: Page, lead: dict) -> bool:
+    """Set a scraped lead's Inmuebles24 status to *Contactado* via the inbox
+    row's "Estado de consulta" dropdown (Pendiente / Contactado / Finalizado).
+
+    This changes the portal status WITHOUT messaging the prospect — it just
+    selects the "Contactado" radio in the per-row status dropdown, exactly what
+    a human does by hand. (The earlier reply-based approach was wrong: replying
+    in the chat is the only OTHER way to flip status, but it contacts the lead.)
+
+    Gated by the MARK_CONTACTED env var (set to 1) so it is a no-op until
+    explicitly enabled. Never raises — a failure here must not break the run
+    (the lead stays in local dedup regardless). Returns True if the lead is
+    Contactado afterwards.
+    """
+    import os
+
+    if os.environ.get("MARK_CONTACTED", "").strip().lower() not in ("1", "true", "yes"):
+        logger.debug("MARK_CONTACTED not enabled — skipping portal status change")
+        return False
+
+    lead_id = str(lead.get("lead_id") or "").strip()
+    if not lead_id:
+        return False
+    tab = lead.get("source_tab", "mensajes")
+    tab_selector = dict(_TABS).get(tab)
+
+    try:
+        await _navigate_spa(page, INTERESADOS_URL)
+        await asyncio.sleep(random.uniform(3.0, 5.0))
+
+        # The lead lives under its source tab (mensajes/telefono/whatsapp).
+        if tab_selector:
+            await page.evaluate(_CLICK_TAB_JS, tab_selector)
+            await asyncio.sleep(random.uniform(3.0, 5.0))
+
+        current = await page.evaluate(_READ_CHIP_JS, lead_id)
+        if current in ("Contactado", "Finalizado"):
+            logger.info("Lead {} already '{}' on portal — no change", lead_id, current)
+            return True
+        if current != "Pendiente":
+            logger.warning("Lead {}: status chip not found ({}) — not marked", lead_id, current)
+            return False
+
+        # Open the status dropdown with a REAL mouse click (el.click() does not
+        # trigger this React popover).
+        chip = await page.evaluate(_CHIP_BBOX_JS, lead_id)
+        if not chip.get("found"):
+            logger.warning("Lead {}: status chip not located ({}) — not marked",
+                           lead_id, chip.get("reason"))
+            return False
+        await page.mouse.click(chip["x"], chip["y"])
+        await asyncio.sleep(random.uniform(1.0, 1.6))
+
+        # Click the "Contactado" option in the open popover (real mouse click).
+        opt = await page.evaluate(_OPTION_BBOX_JS, "Contactado")
+        if not opt.get("found"):
+            logger.warning("Lead {}: 'Contactado' option not visible after opening dropdown", lead_id)
+            try:
+                await page.screenshot(path=f"logs/mark_fail_{lead_id}.png", full_page=True)
+            except Exception:
+                pass
+            try:
+                await page.keyboard.press("Escape")
+            except Exception:
+                pass
+            return False
+        await page.mouse.click(opt["x"], opt["y"])
+        await asyncio.sleep(random.uniform(1.2, 2.0))
+
+        # Verify the row chip now reads Contactado.
+        after = await page.evaluate(_READ_CHIP_JS, lead_id)
+        ok = after == "Contactado"
+        logger.info("Lead {} status -> Contactado via dropdown: {} (now '{}')",
+                    lead_id, "OK" if ok else "UNVERIFIED", after)
+        return ok
+    except Exception as e:
+        logger.warning("Lead {}: failed to set Contactado via dropdown: {}", lead_id, e)
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -540,10 +1001,16 @@ async def send_to_webhook(leads: list[dict], webhook_url: str = "") -> None:
 # ---------------------------------------------------------------------------
 
 
-async def scrape_and_send(page: Page, *, webhook_url: str = "") -> list[dict]:
-    """Full flow: Interesados inbox -> detail per Pendiente lead -> webhook.
+async def scrape_pendiente_leads(page: Page, *, limit: int = 0) -> list[dict]:
+    """Extract all Pendiente leads (with full detail) from the Interesados inbox.
 
-    Returns all extracted leads (before dedup). Caller handles dedup via StateStore.
+    Returns all extracted leads (before dedup). The caller handles dedup via
+    StateStore and is responsible for sending only the new leads to the webhook —
+    this keeps the scraper from re-posting a lead that stays Pendiente on the
+    portal across runs.
+
+    If ``limit`` > 0, only the first ``limit`` Pendiente leads are detail-scraped
+    (useful for a controlled single-lead test run).
     Includes session staleness detection and screenshot capture on failures.
     """
     # Step 1: Get Pendiente leads from the inbox.
@@ -557,8 +1024,15 @@ async def scrape_and_send(page: Page, *, webhook_url: str = "") -> list[dict]:
         )
 
     if not pendiente_leads:
-        logger.warning("No Pendiente leads found — nothing to send")
+        logger.warning("No Pendiente leads found — nothing to extract")
         return []
+
+    if limit and limit > 0 and len(pendiente_leads) > limit:
+        logger.info(
+            "Limiting to first {} of {} Pendiente lead(s)",
+            limit, len(pendiente_leads),
+        )
+        pendiente_leads = pendiente_leads[:limit]
 
     results: list[dict] = []
 
@@ -615,9 +1089,5 @@ async def scrape_and_send(page: Page, *, webhook_url: str = "") -> list[dict]:
     if not results:
         logger.warning("No lead details extracted — nothing to send")
         return []
-
-    # Step 2: Send to webhook.
-    logger.info("Sending {} Pendiente leads to webhook", len(results))
-    await send_to_webhook(results, webhook_url=webhook_url)
 
     return results

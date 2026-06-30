@@ -40,7 +40,7 @@ HOME_URL = "https://www.inmuebles24.com/"
 AVISOS_URL = "https://www.inmuebles24.com/panel.bum"
 
 # Selectors (from live DOM inspection)
-BTN_INGRESAR = '[data-qa="HEADER_LOGIN"]'
+BTN_INGRESAR = '[data-qa="HEADER_LOGIN"] >> visible=true'
 INPUT_EMAIL = '[data-qa="input_usuario_login"]'
 BTN_CONTINUAR = '[data-qa="boton_continuar_login"]'
 INPUT_PASSWORD = '[data-qa="input_contraseña_login"]'
@@ -64,11 +64,57 @@ class AuthenticationError(Exception):
 
 _CF_TITLES = ("just a moment", "un momento")
 
+# Titles that mean we are NOT on a usable logged-in panel: the Cloudflare
+# interstitial AND the hard "1020 / Attention Required" block page. Used by the
+# session-validity check so a block/empty page is never mistaken for a live
+# session (the old bug: it only checked the URL and silently scraped 0 leads).
+_LOGGED_OUT_TITLES = _CF_TITLES + (
+    "attention required",
+    "access denied",
+    "you have been blocked",
+)
+
 
 def _is_cloudflare_page(title: str) -> bool:
     """Return True if the page title matches a Cloudflare challenge (EN or ES)."""
     lower = title.lower()
     return any(t in lower for t in _CF_TITLES)
+
+
+async def _session_is_valid(page: Page) -> bool:
+    """Return True only if we are on a real logged-in panel.
+
+    Hardened against the silent-failure mode where a Cloudflare block or an
+    empty shell passed a URL-only check, so the scraper reported "session valid"
+    and scraped 0 leads without re-logging-in. This only ADDS rejections (never
+    accepts a page the old check rejected), so it cannot cause a spurious
+    re-login of a genuinely valid session.
+    """
+    url = page.url.lower()
+    if any(frag in url for frag in ("login", "acceso", "ingresar")):
+        return False
+
+    title = (await page.title()).lower()
+    if any(t in title for t in _LOGGED_OUT_TITLES):
+        return False
+
+    # A logged-out page renders the "Ingresar" login control; a logged-in panel
+    # does not. Its presence is a definitive logged-out signal.
+    try:
+        if await page.locator(BTN_INGRESAR).count() > 0:
+            return False
+    except Exception:
+        pass
+
+    # Reject an empty/error shell (a real panel renders substantial content).
+    try:
+        text = await page.evaluate("() => (document.body && document.body.innerText) || ''")
+    except Exception:
+        text = ""
+    if len(text.strip()) < 100:
+        return False
+
+    return True
 
 
 async def _wait_for_cloudflare(page: Page, timeout_ms: int = 90_000) -> None:
@@ -132,7 +178,9 @@ async def login(page: Page, settings: Settings) -> None:
     await asyncio.sleep(random.uniform(1.0, 2.5))
     try:
         await page.wait_for_selector(BTN_INGRESAR, timeout=15_000)
-        await page.click(BTN_INGRESAR)
+        # The header login button can sit outside the viewport (sticky header,
+        # negative y), so a normal click misses. JS click is position-agnostic.
+        await page.locator(BTN_INGRESAR).first.evaluate("e => e.click()")
     except Exception as e:
         raise AuthenticationError(f"Could not find/click 'Ingresar' button: {e}")
     await asyncio.sleep(random.uniform(1.0, 2.0))
@@ -261,6 +309,13 @@ async def launch_chrome(
     if headless:
         args.append("--headless=new")
 
+    # Optional upstream proxy (e.g. a local gost relay forwarding to a
+    # residential/mobile proxy). Set CHROME_PROXY to a no-auth proxy URL.
+    proxy = os.environ.get("CHROME_PROXY", "").strip()
+    if proxy:
+        args.append(f"--proxy-server={proxy}")
+        logger.info("Chrome using proxy {}", proxy)
+
     logger.info("Launching Chrome via CDP on port {}", CDP_PORT)
     proc = subprocess.Popen(
         args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -299,10 +354,13 @@ async def load_or_login(context: BrowserContext, settings: Settings) -> Page:
         await page.goto(AVISOS_URL, wait_until="domcontentloaded")
         await _wait_for_cloudflare(page)
 
-        if "login" not in page.url and "acceso" not in page.url:
+        if await _session_is_valid(page):
             logger.info("Persistent session is valid — skipping login")
             return page
-        logger.warning("Session expired — performing fresh login")
+        logger.warning(
+            "Session not valid (expired / blocked / logged out, url={}) — performing fresh login",
+            page.url,
+        )
     except Exception as e:
         logger.warning("Session check error ({}): performing fresh login", e)
 
