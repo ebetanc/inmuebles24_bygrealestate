@@ -26,3 +26,7 @@ whatsapp-agent/workflows/live_*.json
 
 .vercel
 graphify-out/
+
+# n8n live-workflow backups (rollback copies, keep local only)
+wf_*_backup_*.json
+wf10_live_backup_*.json
