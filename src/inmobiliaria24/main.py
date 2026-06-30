@@ -263,6 +263,19 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                 else:
                     logger.info("No new leads to send — all already pushed")
 
+                # Case A: write the Inmuebles24 advisor note ("Asignado a <asesor>")
+                # for any assigned lead that still lacks one. Reuses this logged-in
+                # session (shares Chrome profile/port 9222, so it cannot run as a
+                # separate process). Best-effort — never breaks the scraper run.
+                try:
+                    from inmobiliaria24.notes import write_pending_for_page
+
+                    notes_written = await write_pending_for_page(page)
+                    if notes_written:
+                        logger.info("Wrote {} i24 advisor note(s)", notes_written)
+                except Exception as e:
+                    logger.warning("i24 note pass failed: {}", str(e))
+
                 print(f"Scraped {total} Pendiente leads, {new_count} new")
                 for lead in new_leads:
                     print(f"  NEW: {lead.get('name', '?')} (lead_id={lead.get('lead_id', '?')})")

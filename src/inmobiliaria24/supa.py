@@ -57,3 +57,78 @@ async def log_scrape_run(
         logger.info("scrape_logs row written to Supabase (status={}, new={})", status, new)
     except Exception as e:  # never let telemetry break the scraper
         logger.warning("Failed to write scrape_logs to Supabase: {}", str(e))
+
+
+# ---------------------------------------------------------------------------
+# Inmuebles24 advisor-note queue (case A)
+# ---------------------------------------------------------------------------
+
+
+def _supa_cfg() -> tuple[str, str] | None:
+    url = os.environ.get("SUPABASE_URL", "").strip()
+    key = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
+    if not url or not key:
+        logger.debug("Supabase not configured")
+        return None
+    return url.rstrip("/"), key
+
+
+def _headers(key: str) -> dict:
+    return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+
+
+async def fetch_pending_i24_notes(limit: int = 20) -> list[dict]:
+    """i24 leads that are assigned, have a known i24 lead id, and have no note yet.
+
+    Returns dicts: conversation_id, i24_lead_id, assigned_agent_id, agent_name.
+    """
+    cfg = _supa_cfg()
+    if not cfg:
+        return []
+    url, key = cfg
+    q = (
+        f"{url}/rest/v1/conversations?source=eq.inmuebles24"
+        "&assigned_agent_id=not.is.null&i24_lead_id=not.is.null&i24_note_added=eq.false"
+        f"&select=conversation_id,i24_lead_id,assigned_agent_id,lead_name&limit={limit}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(q, headers=_headers(key))
+            r.raise_for_status()
+            rows = r.json()
+            if not rows:
+                return []
+            ids = sorted({x["assigned_agent_id"] for x in rows if x.get("assigned_agent_id")})
+            names: dict[str, str] = {}
+            if ids:
+                inlist = ",".join(ids)
+                ar = await client.get(
+                    f"{url}/rest/v1/agents?agent_id=in.({inlist})&select=agent_id,name",
+                    headers=_headers(key),
+                )
+                ar.raise_for_status()
+                names = {a["agent_id"]: a.get("name") or a["agent_id"] for a in ar.json()}
+            for x in rows:
+                x["agent_name"] = names.get(x.get("assigned_agent_id"), x.get("assigned_agent_id"))
+            return rows
+    except Exception as e:
+        logger.warning("fetch_pending_i24_notes failed: {}", str(e))
+        return []
+
+
+async def mark_i24_note_added(conversation_id: str) -> bool:
+    """Set conversations.i24_note_added = true (idempotency guard)."""
+    cfg = _supa_cfg()
+    if not cfg:
+        return False
+    url, key = cfg
+    endpoint = f"{url}/rest/v1/conversations?conversation_id=eq.{conversation_id}"
+    h = {**_headers(key), "Prefer": "return=minimal"}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.patch(endpoint, json={"i24_note_added": True}, headers=h)
+            r.raise_for_status()
+        return True
+    except Exception as e:
+        logger.warning("mark_i24_note_added failed for {}: {}", conversation_id, str(e))
+        return False
