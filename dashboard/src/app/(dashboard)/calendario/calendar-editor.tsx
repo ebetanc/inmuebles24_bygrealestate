@@ -60,8 +60,10 @@ function buildInitialState(
   return state;
 }
 
-// A day is invalid when the same agent is assigned to both morning and afternoon.
-function dayHasConflict(day: DayData): boolean {
+// Full-day coverage: the same agent covers both morning and afternoon. This is
+// a VALID, intentional arrangement (e.g. weekends with a single advisor on duty
+// the whole day). Surfaced as info only — it does NOT block saving.
+function dayIsFullDay(day: DayData): boolean {
   return !!day.m && !!day.t && day.m === day.t;
 }
 
@@ -150,16 +152,11 @@ export default function CalendarEditor({
     setDirty(true);
   };
 
-  const conflictDates = Object.entries(schedule)
-    .filter(([, day]) => dayHasConflict(day))
+  const fullDayDates = Object.entries(schedule)
+    .filter(([, day]) => dayIsFullDay(day))
     .map(([date]) => date);
 
   const handleSave = () => {
-    if (conflictDates.length > 0) {
-      const d = conflictDates.map((x) => x.slice(8)).join(", ");
-      showToast(`Mismo agente en manana y tarde — corrija dia(s): ${d}`);
-      return;
-    }
     const data = Object.entries(schedule).map(([date, day]) => ({
       date,
       morning: [day.m].filter(Boolean),
@@ -202,19 +199,19 @@ export default function CalendarEditor({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {conflictDates.length > 0 && (
-            <span className="nb-chip is-alert">
-              {conflictDates.length} dia(s) con agente repetido
+          {fullDayDates.length > 0 && (
+            <span className="nb-chip">
+              {fullDayDates.length} dia(s) cobertura completa (1 asesor)
             </span>
           )}
-          {dirty && conflictDates.length === 0 && (
+          {dirty && (
             <span className="nb-chip is-accent">
               Sin guardar
             </span>
           )}
           <button
             onClick={handleSave}
-            disabled={isPending || !dirty || conflictDates.length > 0}
+            disabled={isPending || !dirty}
             className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border-2 border-foreground bg-primary px-4 py-2 font-display text-xs font-bold text-primary-foreground shadow-[var(--shadow-sm)] transition-[transform,box-shadow,background] duration-100 hover:-translate-x-px hover:-translate-y-px hover:bg-foreground hover:text-background hover:shadow-[var(--shadow-hover)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0"
           >
             {isPending ? "Guardando..." : "Guardar mes"}
@@ -287,7 +284,7 @@ export default function CalendarEditor({
           const isWeekend = dow === 0 || dow === 6;
           const isToday = date === today;
           const day = schedule[date];
-          const conflict = dayHasConflict(day);
+          const fullDay = dayIsFullDay(day);
 
           return (
             <div
@@ -318,8 +315,8 @@ export default function CalendarEditor({
                       value={day[slot]}
                       onChange={(e) => updateSlot(date, slot, e.target.value)}
                       className={`w-full px-2 py-1.5 rounded-[var(--radius-sm)] text-xs font-bold border-2 border-foreground transition-colors cursor-pointer ${
-                        conflict
-                          ? "bg-destructive text-foreground"
+                        fullDay
+                          ? "bg-[var(--green)] text-foreground"
                           : day[slot]
                           ? isMorning
                             ? "bg-[var(--accent-fill)] text-foreground"
