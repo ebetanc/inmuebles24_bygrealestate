@@ -349,18 +349,35 @@ _EXTRACT_LEAD_DETAIL_JS = """
     const emailMatch = text.match(/[\\w.+-]+@[\\w.-]+\\.[a-zA-Z]{2,}/);
     if (emailMatch) email = emailMatch[0];
 
-    // Phone — look in contact section first, then fallback
+    // Phone — collect candidate numbers PER LINE, never spanning lines. The old
+    // regex used \\s in the char class, so it jumped across the newline between the
+    // two stacked numbers Inmuebles24 shows and glued them:
+    // "525555067748\\n5555067748" -> "525555067748555" (3 junk digits appended).
     let phone = '';
     const phoneSection = text.match(
         /(?:Datos de contacto|Tel[eé]fono|Tel)[\\s\\S]*?(?=\\n\\n|Acerca|$)/i
     );
-    if (phoneSection) {
-        const phoneMatch = phoneSection[0].match(/(\\d[\\d\\s-]{7,15})/);
-        if (phoneMatch) phone = phoneMatch[1].replace(/[\\s-]/g, '');
+    const scanArea = phoneSection ? phoneSection[0] : text;
+    let phoneCands = [];
+    for (const line of scanArea.split(/\\n+/)) {
+        const m = line.match(/\\d[\\d \\t-]{6,13}\\d/); // digits + spaces/dashes, NO newline
+        if (m) {
+            const digits = m[0].replace(/\\D/g, '');
+            if (digits.length >= 10 && digits.length <= 13) phoneCands.push(digits);
+        }
     }
-    if (!phone) {
-        const allPhones = text.match(/\\b(\\d{10,13})\\b/g);
-        if (allPhones) phone = allPhones[0];
+    if (phoneCands.length === 0) {
+        phoneCands = (text.match(/\\d{10,13}/g) || []);
+    }
+    // Prefer a country-code number (12-13 digits), else a local 10-digit.
+    phone = phoneCands.find(s => s.length >= 12)
+         || phoneCands.find(s => s.length === 10)
+         || phoneCands[0] || '';
+    // Normalize to Mexico canonical: 52 + 10 digits (drop the mobile "1": 521->52).
+    if (phone) {
+        if (phone.length === 10) phone = '52' + phone;
+        else if (phone.length === 13 && phone.startsWith('521')) phone = '52' + phone.slice(3);
+        else if (phone.length === 11 && phone.startsWith('1')) phone = '52' + phone.slice(1);
     }
 
     // Message — the lead's inquiry text
