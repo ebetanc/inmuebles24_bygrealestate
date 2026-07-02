@@ -130,23 +130,45 @@ async def _wait_for_cloudflare(page: Page, timeout_ms: int = 90_000) -> None:
         title, timeout_ms // 1000,
     )
 
-    try:
-        await page.wait_for_function(
-            """() => {
-                const t = document.title.toLowerCase();
-                return !t.includes('just a moment') && !t.includes('un momento');
-            }""",
-            timeout=timeout_ms,
-        )
-        await page.wait_for_load_state("domcontentloaded")
-        await asyncio.sleep(random.uniform(1.5, 3.0))
-        logger.info("Cloudflare challenge resolved")
-    except Exception as e:
-        raise AuthenticationError(
-            f"Cloudflare challenge did not resolve within "
-            f"{timeout_ms // 1000}s — try running with --headful and clicking "
-            f"the checkbox manually. Error: {e}"
-        )
+    # A challenge that stalls past the timeout usually never resolves on that
+    # page load, but a fresh load on the same session often passes (observed
+    # 2026-07-02: intermittent midday streaks that self-healed). Retry once
+    # with a reload before giving up.
+    last_error: Exception | None = None
+    for attempt in (1, 2):
+        try:
+            await page.wait_for_function(
+                """() => {
+                    const t = document.title.toLowerCase();
+                    return !t.includes('just a moment') && !t.includes('un momento');
+                }""",
+                timeout=timeout_ms,
+            )
+            await page.wait_for_load_state("domcontentloaded")
+            await asyncio.sleep(random.uniform(1.5, 3.0))
+            logger.info("Cloudflare challenge resolved (attempt {})", attempt)
+            return
+        except Exception as e:
+            last_error = e
+            if attempt == 1:
+                logger.warning(
+                    "Cloudflare challenge stalled after {}s — reloading and retrying once",
+                    timeout_ms // 1000,
+                )
+                try:
+                    await page.reload(wait_until="domcontentloaded")
+                    await asyncio.sleep(1.5)
+                except Exception as reload_err:
+                    logger.warning("Reload during Cloudflare retry failed: {}", reload_err)
+                if not _is_cloudflare_page(await page.title()):
+                    logger.info("Cloudflare challenge gone after reload")
+                    return
+
+    raise AuthenticationError(
+        f"Cloudflare challenge did not resolve within "
+        f"{timeout_ms // 1000}s (2 attempts) — try running with --headful and "
+        f"clicking the checkbox manually. Error: {last_error}"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -117,6 +117,14 @@ async def async_main(args: argparse.Namespace) -> int:
                 if res["status_ok"] and res["note_ok"]:
                     await mark_attended(settings, l["conversation_id"])
                     attended += 1
+                elif not res["found"]:
+                    # Not in Buzón "Activas" = the conversation was archived or
+                    # attended manually in the EB UI. It will never reappear, so
+                    # retrying every run loops forever — mark it done and move on.
+                    logger.warning(
+                        "Lead {} not found in Buzón Activas (archived/manually attended) — "
+                        "marking eb_marked_attended to stop retries", l.get("lead_phone"))
+                    await mark_attended(settings, l["conversation_id"])
                 else:
                     logger.warning("Lead {} not fully attended: {}", l.get("lead_phone"), res)
             print(f"Attended {attended}/{len(leads)} EB lead(s)")
