@@ -354,19 +354,31 @@ _EXTRACT_LEAD_DETAIL_JS = """
     // two stacked numbers Inmuebles24 shows and glued them:
     // "525555067748\\n5555067748" -> "525555067748555" (3 junk digits appended).
     let phone = '';
-    const phoneSection = text.match(
-        /(?:Datos de contacto|Tel[eé]fono|Tel)[\\s\\S]*?(?=\\n\\n|Acerca|$)/i
-    );
-    const scanArea = phoneSection ? phoneSection[0] : text;
+    // Prefer the contact-panel links (wa.me / tel:) — they exist only inside
+    // "Datos de contacto". A text regex over the whole page can capture numbers
+    // typed inside chat messages instead (seen live 2026-07-03: an advisor's
+    // own callback number in her reply was stored as the lead's phone).
     let phoneCands = [];
-    for (const line of scanArea.split(/\\n+/)) {
-        const m = line.match(/\\d[\\d \\t-]{6,13}\\d/); // digits + spaces/dashes, NO newline
-        if (m) {
-            const digits = m[0].replace(/\\D/g, '');
-            if (digits.length >= 10 && digits.length <= 13) phoneCands.push(digits);
+    for (const a of root.querySelectorAll('a[href*="wa.me"], a[href^="tel:"], a[href*="whatsapp"]')) {
+        const digits = (a.getAttribute('href') || '').replace(/\\D/g, '');
+        if (digits.length >= 10 && digits.length <= 13) phoneCands.push(digits);
+    }
+    if (phoneCands.length === 0) {
+        const phoneSection = text.match(
+            /(?:Datos de contacto|Tel[eé]fono|Tel)[\\s\\S]*?(?=\\n\\n|Acerca|$)/i
+        );
+        const scanArea = phoneSection ? phoneSection[0] : '';
+        for (const line of scanArea.split(/\\n+/)) {
+            const m = line.match(/\\d[\\d \\t-]{6,13}\\d/); // digits + spaces/dashes, NO newline
+            if (m) {
+                const digits = m[0].replace(/\\D/g, '');
+                if (digits.length >= 10 && digits.length <= 13) phoneCands.push(digits);
+            }
         }
     }
     if (phoneCands.length === 0) {
+        // Last resort: whole-page scan. May hit chat-message numbers, so only
+        // when the contact panel gave us nothing at all.
         phoneCands = (text.match(/\\d{10,13}/g) || []);
     }
     // Prefer a country-code number (12-13 digits), else a local 10-digit.
