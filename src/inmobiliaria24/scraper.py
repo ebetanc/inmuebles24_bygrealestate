@@ -780,65 +780,44 @@ async def dump_status_dropdown(page: Page) -> dict:
     return result
 
 
-# Reads the status chip text ("Pendiente"/"Contactado"/"Finalizado") of the
-# inbox row whose lead link matches leadId. Read-only.
-_READ_CHIP_JS = """
-(leadId) => {
-    const root = document.getElementById('root') || document.body;
-    const re = new RegExp('interesados/' + leadId + '(?:[^0-9]|$)');
-    for (const a of root.querySelectorAll('a')) {
-        if (!re.test(a.getAttribute('href') || '')) continue;
-        let row = a;
-        for (let p = a; p && p !== root; p = p.parentElement) {
-            if (p.tagName === 'TR' || p.tagName === 'LI' || p.getAttribute('role') === 'row'
-                || p.getAttribute('data-qa') || p.getAttribute('data-panel')) { row = p; break; }
-        }
-        for (const el of row.querySelectorAll('*')) {
-            const t = (el.textContent || '').trim();
-            if ((t === 'Pendiente' || t === 'Contactado' || t === 'Finalizado')
-                && el.children.length <= 2) return t;
-        }
-        return '_ROW_NO_CHIP_';
+# Reads the status chip on a lead's DETAIL page (first status-text leaf in
+# document order = the header chip). The detail page shows exactly one lead, so
+# there is no wrong-row risk.
+_DETAIL_READ_STATUS_JS = """
+() => {
+    for (const el of document.querySelectorAll('*')) {
+        const t = (el.textContent || '').trim();
+        if ((t === 'Pendiente' || t === 'Contactado' || t === 'Finalizado')
+            && el.children.length <= 2) return t;
     }
-    return '_LEAD_NOT_FOUND_';
+    return 'none';
 }
 """
 
-# Tags the status chip of the inbox row matching leadId with data-byg-click so
-# Playwright can click the ELEMENT (page.click resolves fresh coordinates at
-# click time). Clicking by pre-measured bbox coords mis-fired: the virtual list
-# re-renders/scrolls between measuring and clicking, and the click landed on a
-# DIFFERENT row's chip (seen live 2026-07-03: Roberto's flip opened Liliana's
-# dropdown 6 rows up — screenshot logs/mark_unverified_261642856.png).
-# el.click() alone does not open this React popover, hence tag + real click.
-_TAG_CHIP_JS = """
-(leadId) => {
-    const root = document.getElementById('root') || document.body;
+# Tags the DETAIL-page status chip with data-byg-click so Playwright can click
+# the ELEMENT (fresh coordinates at click time). The earlier inbox-row approach
+# was unfixably unreliable: the virtualized inbox list recycles row DOM nodes,
+# so both bbox-coordinate clicks AND tagged-element clicks ended up opening a
+# DIFFERENT row's dropdown (seen live 2026-07-03, Roberto row 7 opened row 1's
+# menu — logs/mark_unverified_261642856.png). The detail page has exactly one
+# chip. el.click() alone does not open this React popover, hence tag + click.
+_DETAIL_TAG_CHIP_JS = """
+() => {
     for (const el of document.querySelectorAll('[data-byg-click]')) el.removeAttribute('data-byg-click');
-    const re = new RegExp('interesados/' + leadId + '(?:[^0-9]|$)');
-    for (const a of root.querySelectorAll('a')) {
-        if (!re.test(a.getAttribute('href') || '')) continue;
-        let row = a;
-        for (let p = a; p && p !== root; p = p.parentElement) {
-            if (p.tagName === 'TR' || p.tagName === 'LI' || p.getAttribute('role') === 'row'
-                || p.getAttribute('data-qa') || p.getAttribute('data-panel')) { row = p; break; }
+    for (const el of document.querySelectorAll('*')) {
+        const t = (el.textContent || '').trim();
+        if ((t === 'Pendiente' || t === 'Contactado' || t === 'Finalizado')
+            && el.children.length <= 2) {
+            let trig = el;
+            for (let p = el; p && p !== document.body; p = p.parentElement) {
+                if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
+                    || getComputedStyle(p).cursor === 'pointer') { trig = p; break; }
+            }
+            trig.setAttribute('data-byg-click', 'chip');
+            return { found: true, text: t };
         }
-        let chip = null;
-        for (const el of row.querySelectorAll('*')) {
-            const t = (el.textContent || '').trim();
-            if ((t === 'Pendiente' || t === 'Contactado' || t === 'Finalizado')
-                && el.children.length <= 2) { chip = el; break; }
-        }
-        if (!chip) return { found: false, reason: 'no_chip' };
-        let target = chip;
-        for (let p = chip; p && p !== row; p = p.parentElement) {
-            if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
-                || getComputedStyle(p).cursor === 'pointer') { target = p; break; }
-        }
-        target.setAttribute('data-byg-click', 'chip');
-        return { found: true, text: (chip.textContent || '').trim() };
     }
-    return { found: false, reason: 'no_lead' };
+    return { found: false, reason: 'no_chip' };
 }
 """
 
@@ -891,24 +870,18 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
     lead_id = str(lead.get("lead_id") or "").strip()
     if not lead_id:
         return False
-    tab = lead.get("source_tab", "mensajes")
-    tab_selector = dict(_TABS).get(tab)
 
-    # The click sequence is flaky (~1 in 3 attempts leaves the chip unchanged —
-    # the virtual list can re-render between measuring the chip and clicking).
-    # Retry with a fresh navigation; a second attempt has been seen to succeed
-    # where the first failed (lead 261605185, 2026-07-02).
+    # Work on the lead's DETAIL page, never the inbox list: the virtualized
+    # inbox recycles row DOM nodes, so any click strategy there could open a
+    # DIFFERENT row's dropdown (proven live 2026-07-03). The detail page shows
+    # exactly one lead and its header carries the same "Estado de consulta"
+    # dropdown; flipping it there was verified not to message the prospect.
     for attempt in (1, 2, 3):
         try:
-            await _navigate_spa(page, INTERESADOS_URL)
-            await asyncio.sleep(random.uniform(3.0, 5.0))
+            await _navigate_spa(page, f"{INTERESADOS_URL}/{lead_id}")
+            await asyncio.sleep(random.uniform(6.0, 9.0))
 
-            # The lead lives under its source tab (mensajes/telefono/whatsapp).
-            if tab_selector:
-                await page.evaluate(_CLICK_TAB_JS, tab_selector)
-                await asyncio.sleep(random.uniform(3.0, 5.0))
-
-            current = await page.evaluate(_READ_CHIP_JS, lead_id)
+            current = await page.evaluate(_DETAIL_READ_STATUS_JS)
             if current in ("Contactado", "Finalizado"):
                 if attempt == 1:
                     logger.info("Lead {} already '{}' on portal — no change", lead_id, current)
@@ -917,16 +890,14 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
                                 lead_id, attempt)
                 return True
             if current != "Pendiente":
-                # No chip to click (brand-new rows render without one for a
-                # while). The cross-run retry in main() picks it up later.
-                logger.warning("Lead {}: status chip not found ({}) — not marked", lead_id, current)
-                return False
+                logger.warning("Lead {}: status chip not found ({}) — attempt {}/3",
+                               lead_id, current, attempt)
+                continue
 
-            # Open the status dropdown: tag THIS row's chip, then let Playwright
-            # click the tagged element — it resolves the position at click time,
-            # so a list re-render/scroll can no longer land the click on another
-            # row (el.click() alone does not trigger this React popover).
-            chip = await page.evaluate(_TAG_CHIP_JS, lead_id)
+            # Open the status dropdown: tag the chip, then let Playwright click
+            # the tagged element (el.click() alone does not trigger this React
+            # popover).
+            chip = await page.evaluate(_DETAIL_TAG_CHIP_JS)
             if not chip.get("found"):
                 logger.warning("Lead {}: status chip not located ({}) — attempt {}/3",
                                lead_id, chip.get("reason"), attempt)
@@ -951,8 +922,8 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
             await page.click('[data-byg-click="option"]', timeout=8_000)
             await asyncio.sleep(random.uniform(2.0, 3.0))
 
-            # Verify the row chip now reads Contactado.
-            after = await page.evaluate(_READ_CHIP_JS, lead_id)
+            # Verify the detail-page chip now reads Contactado.
+            after = await page.evaluate(_DETAIL_READ_STATUS_JS)
             if after == "Contactado":
                 logger.info("Lead {} status -> Contactado via dropdown: OK (attempt {})",
                             lead_id, attempt)
