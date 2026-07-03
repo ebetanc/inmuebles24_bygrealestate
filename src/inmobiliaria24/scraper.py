@@ -389,16 +389,28 @@ _EXTRACT_LEAD_DETAIL_JS = """
         if (digits.length >= 10 && digits.length <= 13) phoneCands.push(digits);
     }
     if (phoneCands.length === 0) {
-        const phoneSection = text.match(
-            /(?:Datos de contacto|Tel[eé]fono|Tel)[\\s\\S]*?(?=\\n\\n|Acerca|$)/i
-        );
-        const scanArea = phoneSection ? phoneSection[0] : '';
-        for (const line of scanArea.split(/\\n+/)) {
-            const m = line.match(/\\d[\\d \\t-]{6,13}\\d/); // digits + spaces/dashes, NO newline
-            if (m) {
-                const digits = m[0].replace(/\\D/g, '');
-                if (digits.length >= 10 && digits.length <= 13) phoneCands.push(digits);
+        // The panel's numbers are NOT anchor tags (only the email is), so
+        // locate the "Datos de contacto" DOM block and scan ONLY its text.
+        // The old whole-text regex sliced at the first blank line and came up
+        // empty, then the full-page fallback grabbed a number typed inside a
+        // chat message (2026-07-03, lead 261642856).
+        for (const el of root.querySelectorAll('*')) {
+            if ((el.textContent || '').trim() !== 'Datos de contacto') continue;
+            let box = el.parentElement;
+            for (let p = el.parentElement, depth = 0; p && p !== root && depth < 6;
+                 p = p.parentElement, depth++) {
+                const t = p.innerText || '';
+                if (/\\d{10}/.test(t.replace(/[ \\t-]/g, ''))) { box = p; break; }
+                if (t.length > 1200) break; // grew past the contact card
             }
+            for (const line of (box.innerText || '').split(/\\n+/)) {
+                const m = line.match(/\\d[\\d \\t-]{6,13}\\d/); // digits, NO newline
+                if (m) {
+                    const digits = m[0].replace(/\\D/g, '');
+                    if (digits.length >= 10 && digits.length <= 13) phoneCands.push(digits);
+                }
+            }
+            break;
         }
     }
     if (phoneCands.length === 0) {
