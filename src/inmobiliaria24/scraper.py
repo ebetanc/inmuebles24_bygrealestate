@@ -804,12 +804,17 @@ _READ_CHIP_JS = """
 }
 """
 
-# Returns the viewport-center coords of the status chip for the inbox row
-# matching leadId (after scrolling it into view), so Playwright can issue a REAL
-# mouse click — el.click() does not open this React dropdown.
-_CHIP_BBOX_JS = """
+# Tags the status chip of the inbox row matching leadId with data-byg-click so
+# Playwright can click the ELEMENT (page.click resolves fresh coordinates at
+# click time). Clicking by pre-measured bbox coords mis-fired: the virtual list
+# re-renders/scrolls between measuring and clicking, and the click landed on a
+# DIFFERENT row's chip (seen live 2026-07-03: Roberto's flip opened Liliana's
+# dropdown 6 rows up — screenshot logs/mark_unverified_261642856.png).
+# el.click() alone does not open this React popover, hence tag + real click.
+_TAG_CHIP_JS = """
 (leadId) => {
     const root = document.getElementById('root') || document.body;
+    for (const el of document.querySelectorAll('[data-byg-click]')) el.removeAttribute('data-byg-click');
     const re = new RegExp('interesados/' + leadId + '(?:[^0-9]|$)');
     for (const a of root.querySelectorAll('a')) {
         if (!re.test(a.getAttribute('href') || '')) continue;
@@ -830,20 +835,19 @@ _CHIP_BBOX_JS = """
             if (p.tagName === 'BUTTON' || p.getAttribute('role') === 'button'
                 || getComputedStyle(p).cursor === 'pointer') { target = p; break; }
         }
-        target.scrollIntoView({ block: 'center' });
-        const r = target.getBoundingClientRect();
-        return { found: true, text: (chip.textContent || '').trim(),
-                 x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        target.setAttribute('data-byg-click', 'chip');
+        return { found: true, text: (chip.textContent || '').trim() };
     }
     return { found: false, reason: 'no_lead' };
 }
 """
 
-# Returns the viewport-center coords of the option labelled `label` inside the
-# open "Estado de consulta" popover (the container that holds Pendiente +
-# Contactado + Finalizado), so Playwright can mouse-click it.
-_OPTION_BBOX_JS = """
+# Tags the option labelled `label` inside the open "Estado de consulta" popover
+# (the container that holds Pendiente + Contactado + Finalizado) with
+# data-byg-click so Playwright can click the element itself.
+_TAG_OPTION_JS = """
 (label) => {
+    for (const el of document.querySelectorAll('[data-byg-click]')) el.removeAttribute('data-byg-click');
     for (const c of document.querySelectorAll('div, ul, section, [role="menu"], [role="listbox"], [role="dialog"]')) {
         const txt = c.textContent || '';
         if (!/Estado de consulta/i.test(txt)
@@ -855,7 +859,8 @@ _OPTION_BBOX_JS = """
             if (el.children.length > 1) continue;
             const r = el.getBoundingClientRect();
             if (r.width === 0 || r.height === 0) continue;
-            return { found: true, x: r.x + r.width / 2, y: r.y + r.height / 2 };
+            el.setAttribute('data-byg-click', 'option');
+            return { found: true };
         }
     }
     return { found: false };
@@ -917,18 +922,20 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
                 logger.warning("Lead {}: status chip not found ({}) — not marked", lead_id, current)
                 return False
 
-            # Open the status dropdown with a REAL mouse click (el.click() does
-            # not trigger this React popover).
-            chip = await page.evaluate(_CHIP_BBOX_JS, lead_id)
+            # Open the status dropdown: tag THIS row's chip, then let Playwright
+            # click the tagged element — it resolves the position at click time,
+            # so a list re-render/scroll can no longer land the click on another
+            # row (el.click() alone does not trigger this React popover).
+            chip = await page.evaluate(_TAG_CHIP_JS, lead_id)
             if not chip.get("found"):
                 logger.warning("Lead {}: status chip not located ({}) — attempt {}/3",
                                lead_id, chip.get("reason"), attempt)
                 continue
-            await page.mouse.click(chip["x"], chip["y"])
+            await page.click('[data-byg-click="chip"]', timeout=8_000)
             await asyncio.sleep(random.uniform(1.0, 1.6))
 
-            # Click the "Contactado" option in the open popover (real mouse click).
-            opt = await page.evaluate(_OPTION_BBOX_JS, "Contactado")
+            # Click the "Contactado" option in the open popover (same tag trick).
+            opt = await page.evaluate(_TAG_OPTION_JS, "Contactado")
             if not opt.get("found"):
                 logger.warning("Lead {}: 'Contactado' option not visible after opening dropdown"
                                " — attempt {}/3", lead_id, attempt)
@@ -941,7 +948,7 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
                 except Exception:
                     pass
                 continue
-            await page.mouse.click(opt["x"], opt["y"])
+            await page.click('[data-byg-click="option"]', timeout=8_000)
             await asyncio.sleep(random.uniform(2.0, 3.0))
 
             # Verify the row chip now reads Contactado.
