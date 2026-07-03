@@ -263,6 +263,17 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                 else:
                     logger.info("No new leads to send — all already pushed")
 
+                # Self-heal: a lead pushed on an earlier run can still be
+                # Pendiente on the portal when every previous status flip
+                # failed (the dropdown click is flaky). Re-try the flip for the
+                # already-seen leads too — mark_lead_contacted exits fast when
+                # the chip already reads Contactado, and it is gated by
+                # MARK_CONTACTED internally.
+                new_ids = {l.get("lead_id") for l in new_leads}
+                for lead in all_leads:
+                    if lead.get("lead_id") and lead["lead_id"] not in new_ids:
+                        await mark_lead_contacted(page, lead)
+
                 # Case A: write the Inmuebles24 advisor note ("Asignado a <asesor>")
                 # for any assigned lead that still lacks one. Reuses this logged-in
                 # session (shares Chrome profile/port 9222, so it cannot run as a

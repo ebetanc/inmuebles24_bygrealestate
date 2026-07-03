@@ -169,10 +169,15 @@ _EXTRACT_LEADS_LIST_JS = """
 
         const text = row.innerText || '';
 
-        // Status
+        // Status. Brand-new rows can render WITHOUT a status chip for a while
+        // (seen live 2026-07-03: fresh lead invisible to the Pendiente filter)
+        // — report '' and let the caller treat chipless rows as pending.
         const isPendiente = text.includes('Pendiente');
         const isContactado = text.includes('Contactado');
-        const status = isPendiente ? 'Pendiente' : isContactado ? 'Contactado' : '';
+        const isFinalizado = text.includes('Finalizado');
+        const status = isPendiente ? 'Pendiente'
+                     : isContactado ? 'Contactado'
+                     : isFinalizado ? 'Finalizado' : '';
 
         // Listing ID (e.g., "ID: 147450070")
         const idMatch = text.match(/ID:\\s*(\\d+)/);
@@ -301,6 +306,26 @@ async def extract_leads_list(page: Page) -> list[dict]:
 
         leads: list[dict] = await page.evaluate(_EXTRACT_LEADS_LIST_JS)
         pendiente = [l for l in leads if l.get("status") == "Pendiente"]
+
+        # Chipless rows (status '') are brand-new leads whose status chip has
+        # not rendered yet — include them as pending. Safety cap: if MANY rows
+        # come back chipless it is a page-render glitch, not a wave of new
+        # leads, and including them would re-push old attended inquiries.
+        chipless = [l for l in leads if l.get("status") == "" and l.get("lead_id")]
+        if chipless:
+            if len(chipless) <= 3:
+                logger.info(
+                    "Tab '{}': treating {} chipless row(s) as Pendiente: {}",
+                    tab_name, len(chipless),
+                    ", ".join(f"{l.get('name','?')}({l.get('lead_id')})" for l in chipless),
+                )
+                pendiente.extend(chipless)
+            else:
+                logger.warning(
+                    "Tab '{}': {} chipless rows — looks like a render glitch, skipping them",
+                    tab_name, len(chipless),
+                )
+
         other = len(leads) - len(pendiente)
 
         logger.info(
@@ -864,58 +889,78 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
     tab = lead.get("source_tab", "mensajes")
     tab_selector = dict(_TABS).get(tab)
 
-    try:
-        await _navigate_spa(page, INTERESADOS_URL)
-        await asyncio.sleep(random.uniform(3.0, 5.0))
-
-        # The lead lives under its source tab (mensajes/telefono/whatsapp).
-        if tab_selector:
-            await page.evaluate(_CLICK_TAB_JS, tab_selector)
+    # The click sequence is flaky (~1 in 3 attempts leaves the chip unchanged —
+    # the virtual list can re-render between measuring the chip and clicking).
+    # Retry with a fresh navigation; a second attempt has been seen to succeed
+    # where the first failed (lead 261605185, 2026-07-02).
+    for attempt in (1, 2, 3):
+        try:
+            await _navigate_spa(page, INTERESADOS_URL)
             await asyncio.sleep(random.uniform(3.0, 5.0))
 
-        current = await page.evaluate(_READ_CHIP_JS, lead_id)
-        if current in ("Contactado", "Finalizado"):
-            logger.info("Lead {} already '{}' on portal — no change", lead_id, current)
-            return True
-        if current != "Pendiente":
-            logger.warning("Lead {}: status chip not found ({}) — not marked", lead_id, current)
-            return False
+            # The lead lives under its source tab (mensajes/telefono/whatsapp).
+            if tab_selector:
+                await page.evaluate(_CLICK_TAB_JS, tab_selector)
+                await asyncio.sleep(random.uniform(3.0, 5.0))
 
-        # Open the status dropdown with a REAL mouse click (el.click() does not
-        # trigger this React popover).
-        chip = await page.evaluate(_CHIP_BBOX_JS, lead_id)
-        if not chip.get("found"):
-            logger.warning("Lead {}: status chip not located ({}) — not marked",
-                           lead_id, chip.get("reason"))
-            return False
-        await page.mouse.click(chip["x"], chip["y"])
-        await asyncio.sleep(random.uniform(1.0, 1.6))
+            current = await page.evaluate(_READ_CHIP_JS, lead_id)
+            if current in ("Contactado", "Finalizado"):
+                if attempt == 1:
+                    logger.info("Lead {} already '{}' on portal — no change", lead_id, current)
+                else:
+                    logger.info("Lead {} status -> Contactado via dropdown: OK on attempt {}",
+                                lead_id, attempt)
+                return True
+            if current != "Pendiente":
+                # No chip to click (brand-new rows render without one for a
+                # while). The cross-run retry in main() picks it up later.
+                logger.warning("Lead {}: status chip not found ({}) — not marked", lead_id, current)
+                return False
 
-        # Click the "Contactado" option in the open popover (real mouse click).
-        opt = await page.evaluate(_OPTION_BBOX_JS, "Contactado")
-        if not opt.get("found"):
-            logger.warning("Lead {}: 'Contactado' option not visible after opening dropdown", lead_id)
-            try:
-                await page.screenshot(path=f"logs/mark_fail_{lead_id}.png", full_page=True)
-            except Exception:
-                pass
-            try:
-                await page.keyboard.press("Escape")
-            except Exception:
-                pass
-            return False
-        await page.mouse.click(opt["x"], opt["y"])
-        await asyncio.sleep(random.uniform(1.2, 2.0))
+            # Open the status dropdown with a REAL mouse click (el.click() does
+            # not trigger this React popover).
+            chip = await page.evaluate(_CHIP_BBOX_JS, lead_id)
+            if not chip.get("found"):
+                logger.warning("Lead {}: status chip not located ({}) — attempt {}/3",
+                               lead_id, chip.get("reason"), attempt)
+                continue
+            await page.mouse.click(chip["x"], chip["y"])
+            await asyncio.sleep(random.uniform(1.0, 1.6))
 
-        # Verify the row chip now reads Contactado.
-        after = await page.evaluate(_READ_CHIP_JS, lead_id)
-        ok = after == "Contactado"
-        logger.info("Lead {} status -> Contactado via dropdown: {} (now '{}')",
-                    lead_id, "OK" if ok else "UNVERIFIED", after)
-        return ok
-    except Exception as e:
-        logger.warning("Lead {}: failed to set Contactado via dropdown: {}", lead_id, e)
-        return False
+            # Click the "Contactado" option in the open popover (real mouse click).
+            opt = await page.evaluate(_OPTION_BBOX_JS, "Contactado")
+            if not opt.get("found"):
+                logger.warning("Lead {}: 'Contactado' option not visible after opening dropdown"
+                               " — attempt {}/3", lead_id, attempt)
+                try:
+                    await page.screenshot(path=f"logs/mark_fail_{lead_id}.png", full_page=True)
+                except Exception:
+                    pass
+                try:
+                    await page.keyboard.press("Escape")
+                except Exception:
+                    pass
+                continue
+            await page.mouse.click(opt["x"], opt["y"])
+            await asyncio.sleep(random.uniform(2.0, 3.0))
+
+            # Verify the row chip now reads Contactado.
+            after = await page.evaluate(_READ_CHIP_JS, lead_id)
+            if after == "Contactado":
+                logger.info("Lead {} status -> Contactado via dropdown: OK (attempt {})",
+                            lead_id, attempt)
+                return True
+            logger.warning("Lead {} status -> Contactado via dropdown: UNVERIFIED"
+                           " (now '{}', attempt {}/3)", lead_id, after, attempt)
+            if attempt == 3:
+                try:
+                    await page.screenshot(path=f"logs/mark_unverified_{lead_id}.png", full_page=True)
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning("Lead {}: failed to set Contactado via dropdown (attempt {}/3): {}",
+                           lead_id, attempt, e)
+    return False
 
 
 # ---------------------------------------------------------------------------
