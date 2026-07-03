@@ -443,6 +443,19 @@ async def extract_lead_detail(page: Page, lead_id: str) -> dict | None:
     await _navigate_spa(page, url)
 
     detail = await page.evaluate(_EXTRACT_LEAD_DETAIL_JS)
+    if detail and not detail.get("phone") and not detail.get("email"):
+        # The SPA sometimes paints a transient error banner ("No tienes
+        # permisos...") before the contact panel loads, yielding a garbage
+        # extraction. One reload recovers the real content.
+        logger.warning(
+            "Lead {} detail has no phone/email (transient page?) — reloading once",
+            lead_id,
+        )
+        await page.reload(wait_until="domcontentloaded")
+        await asyncio.sleep(10)
+        retry = await page.evaluate(_EXTRACT_LEAD_DETAIL_JS)
+        if retry and (retry.get("phone") or retry.get("email")):
+            detail = retry
     if detail:
         logger.info(
             "Lead detail: name={}, email={}, phone={}, status={}",
@@ -1026,6 +1039,26 @@ async def scrape_pendiente_leads(page: Page, *, limit: int = 0) -> list[dict]:
     if not pendiente_leads:
         logger.warning("No Pendiente leads found — nothing to extract")
         return []
+
+    # The same lead shows up in several inbox tabs (mensajes / telefono /
+    # whatsapp). Detail-scrape each lead_id only once: the duplicate open races
+    # the SPA and can produce a half-loaded copy with no phone, which then wins
+    # the downstream per-lead_id dedup and drops the good copy.
+    seen_ids: set[str] = set()
+    unique_leads: list[dict] = []
+    for lead in pendiente_leads:
+        lid = str(lead.get("lead_id") or "").strip()
+        if lid:
+            if lid in seen_ids:
+                continue
+            seen_ids.add(lid)
+        unique_leads.append(lead)
+    if len(unique_leads) < len(pendiente_leads):
+        logger.info(
+            "Deduped {} duplicate tab row(s) ({} unique leads)",
+            len(pendiente_leads) - len(unique_leads), len(unique_leads),
+        )
+    pendiente_leads = unique_leads
 
     if limit and limit > 0 and len(pendiente_leads) > limit:
         logger.info(
