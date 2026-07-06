@@ -1,0 +1,14 @@
+[Unit]
+Description=Weekly snapshot of BYG n8n workflows into git (n8n-export/)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/inmobiliaria24
+ExecStart=/opt/inmobiliaria24/scripts/export-n8n-workflows.sh
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

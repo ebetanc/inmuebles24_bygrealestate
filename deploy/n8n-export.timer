@@ -1,0 +1,9 @@
+[Unit]
+Description=Dispara el export semanal de workflows n8n (Domingo 3am CDMX)
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00 America/Mexico_City
+Persistent=true
+
+[Install]
+WantedBy=timers.target
