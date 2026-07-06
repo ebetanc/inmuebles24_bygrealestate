@@ -1,0 +1,133 @@
+{
+  "id": "pYV88ntxI0Lc4NCB",
+  "name": "BYG WF20 Watchdog",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/30 8-20 * * *"
+            }
+          ]
+        }
+      },
+      "id": "9a1b0c1e-1111-4a1a-8000-000000000001",
+      "name": "Cada 30 min (8-20 MX)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {},
+      "id": "9a1b0c1e-1111-4a1a-8000-000000000007",
+      "name": "Manual (prueba)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 160]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH i24 AS (\n  SELECT max(completed_at) AS last_ok\n  FROM scrape_logs\n  WHERE status='ok' AND (metadata->>'source'='inmuebles24' OR metadata->>'source' IS NULL)\n),\neb AS (\n  SELECT max(completed_at) AS last_ok\n  FROM scrape_logs\n  WHERE status='ok' AND metadata->>'source'='easybroker'\n),\nerrs AS (\n  SELECT count(*) AS n\n  FROM scrape_logs\n  WHERE status IN ('error','auth_error') AND completed_at > now() - interval '1 hour'\n)\nSELECT\n  i24.last_ok AS i24_last_ok,\n  EXTRACT(EPOCH FROM (now() - i24.last_ok))/60 AS i24_minutes_since,\n  eb.last_ok AS eb_last_ok,\n  EXTRACT(EPOCH FROM (now() - eb.last_ok))/60 AS eb_minutes_since,\n  errs.n AS recent_error_count\nFROM i24, eb, errs;",
+        "options": {}
+      },
+      "id": "9a1b0c1e-1111-4a1a-8000-000000000002",
+      "name": "Check scraper health",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [224, 0],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first().json;\nconst reasons = [];\nconst i24Min = row.i24_last_ok ? Number(row.i24_minutes_since) : null;\nconst ebMin = row.eb_last_ok ? Number(row.eb_minutes_since) : null;\nconst errCount = Number(row.recent_error_count || 0);\n\nif (i24Min === null || i24Min > 45) {\n  reasons.push(`Scraper i24: ${i24Min === null ? 'sin corridas ok registradas' : 'ultima ok hace ' + Math.round(i24Min) + ' min'} (umbral 45 min)`);\n}\nif (ebMin === null || ebMin > 45) {\n  reasons.push(`Scraper EasyBroker: ${ebMin === null ? 'sin corridas ok registradas' : 'ultima ok hace ' + Math.round(ebMin) + ' min'} (umbral 45 min)`);\n}\nif (errCount >= 3) {\n  reasons.push(`${errCount} corridas con error/auth_error en la ultima hora`);\n}\n\nconst alert = reasons.length > 0;\nconst worstMin = Math.max(i24Min || 0, ebMin || 0);\nconst subject = alert\n  ? `\\u26A0\\uFE0F BYG: scraper sin corrida ok hace ${Math.round(worstMin)} min`\n  : 'BYG watchdog: ok';\nconst body = reasons.map(r => `- ${r}`).join('<br>');\n\nreturn [{ json: { alert, subject, body, i24Min, ebMin, errCount } }];"
+      },
+      "id": "9a1b0c1e-1111-4a1a-8000-000000000003",
+      "name": "Evaluar estado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a1b0c1e-1111-4a1a-8000-000000000004",
+              "leftValue": "={{ $json.alert }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9a1b0c1e-1111-4a1a-8000-000000000005",
+      "name": "Alertar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [672, 0]
+    },
+    {
+      "parameters": {
+        "sendTo": "esteban.betanc@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "9a1b0c1e-1111-4a1a-8000-000000000006",
+      "name": "Enviar alerta (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [896, -80],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Hx7tXWjVzyLEwMnJ",
+          "name": "Gmail ESTEBAN"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada 30 min (8-20 MX)": {
+      "main": [[{ "node": "Check scraper health", "type": "main", "index": 0 }]]
+    },
+    "Manual (prueba)": {
+      "main": [[{ "node": "Check scraper health", "type": "main", "index": 0 }]]
+    },
+    "Check scraper health": {
+      "main": [[{ "node": "Evaluar estado", "type": "main", "index": 0 }]]
+    },
+    "Evaluar estado": {
+      "main": [[{ "node": "Alertar?", "type": "main", "index": 0 }]]
+    },
+    "Alertar?": {
+      "main": [
+        [{ "node": "Enviar alerta (Gmail)", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Mexico_City"
+  }
+}

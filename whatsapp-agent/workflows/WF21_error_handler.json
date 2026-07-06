@@ -1,0 +1,53 @@
+{
+  "name": "BYG WF21 Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "9b2c1d2f-2222-4b2b-8000-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $input.first().json;\nconst wf = e.workflow || {};\nconst exec = e.execution || {};\nconst nodeErr = e.trigger && e.trigger.error ? e.trigger.error : (exec.error || {});\nconst message = (nodeErr && nodeErr.message) || e.message || 'Sin mensaje de error';\nconst nodeName = (nodeErr && nodeErr.node && nodeErr.node.name) || 'desconocido';\nconst subject = `\\uD83D\\uDD34 BYG: fall\\u00f3 el workflow \"${wf.name || 'desconocido'}\"`;\nconst body = `<b>Workflow:</b> ${wf.name || 'desconocido'} (${wf.id || '?'})<br>` +\n  `<b>Nodo:</b> ${nodeName}<br>` +\n  `<b>Execution ID:</b> ${exec.id || '?'}<br>` +\n  `<b>Mensaje:</b> ${message}<br>` +\n  `<b>URL:</b> ${exec.url || ''}`;\nreturn [{ json: { subject, body } }];"
+      },
+      "id": "9b2c1d2f-2222-4b2b-8000-000000000002",
+      "name": "Armar mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [224, 0]
+    },
+    {
+      "parameters": {
+        "sendTo": "esteban.betanc@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "9b2c1d2f-2222-4b2b-8000-000000000003",
+      "name": "Enviar alerta (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [448, 0],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Hx7tXWjVzyLEwMnJ",
+          "name": "Gmail ESTEBAN"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [[{ "node": "Armar mensaje", "type": "main", "index": 0 }]]
+    },
+    "Armar mensaje": {
+      "main": [[{ "node": "Enviar alerta (Gmail)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
