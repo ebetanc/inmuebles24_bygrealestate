@@ -43,6 +43,7 @@ async def log_scrape_run(
         "total_scraped": total,
         "new_listings": new,
         "error_message": error_message,
+        "metadata": {"source": "inmuebles24"},
     }
     headers = {
         "apikey": key,

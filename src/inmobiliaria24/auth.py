@@ -64,6 +64,15 @@ class AuthenticationError(Exception):
 
 _CF_TITLES = ("just a moment", "un momento")
 
+# Set to True the first time this process rotates the proxy IP, so a run
+# never rotates more than once even if _wait_for_cloudflare is hit again
+# later (login + navigate_to_avisos can each call it). Module-level state is
+# fine here: each scraper run is a fresh process (systemd timer), so this
+# naturally resets every run.
+_rotation_used = False
+
+ROTATE_PROXY_CMD = ["sudo", "/usr/local/bin/rotate-proxy-ip"]
+
 # Titles that mean we are NOT on a usable logged-in panel: the Cloudflare
 # interstitial AND the hard "1020 / Attention Required" block page. Used by the
 # session-validity check so a block/empty page is never mistaken for a live
@@ -79,6 +88,41 @@ def _is_cloudflare_page(title: str) -> bool:
     """Return True if the page title matches a Cloudflare challenge (EN or ES)."""
     lower = title.lower()
     return any(t in lower for t in _CF_TITLES)
+
+
+def _rotate_proxy_ip() -> str | None:
+    """Run rotate-proxy-ip (sudo) to bump the DataImpulse sticky sessid.
+
+    Returns the new egress IP on success, or None if the rotation failed
+    (script missing, sudoers not set up, gost-proxy didn't come back, etc).
+    Never raises — a failed rotation just falls through to the existing
+    "raise AuthenticationError" path.
+    """
+    try:
+        result = subprocess.run(
+            ROTATE_PROXY_CMD,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except Exception as e:
+        logger.warning("rotate-proxy-ip could not be run: {}", e)
+        return None
+
+    output = "\n".join(
+        line for line in (result.stdout or "").splitlines() + (result.stderr or "").splitlines()
+        if line.strip()
+    )
+    if output:
+        logger.info("rotate-proxy-ip: {}", output.replace("\n", " | "))
+    if result.returncode != 0:
+        logger.warning("rotate-proxy-ip exited with code {}", result.returncode)
+        return None
+
+    for line in reversed(output.splitlines()):
+        if line.startswith("ip:"):
+            return line.split(":", 1)[1].strip()
+    return None
 
 
 async def _session_is_valid(page: Page) -> bool:
@@ -163,6 +207,48 @@ async def _wait_for_cloudflare(page: Page, timeout_ms: int = 90_000) -> None:
                 if not _is_cloudflare_page(await page.title()):
                     logger.info("Cloudflare challenge gone after reload")
                     return
+
+    global _rotation_used
+    if not _rotation_used:
+        _rotation_used = True
+        logger.warning(
+            "CF block persists — rotating proxy IP (sessid bump), retrying once"
+        )
+        new_ip = _rotate_proxy_ip()
+        if new_ip:
+            logger.info("Proxy IP rotated -> {}", new_ip)
+
+            # Chrome already runs with --proxy-server=127.0.0.1:18080 (the
+            # local gost relay), so restarting gost is enough to change the
+            # egress IP for the same Chrome process — but the current page
+            # was loaded over the old IP, so it must be reloaded.
+            try:
+                await page.reload(wait_until="domcontentloaded")
+                await asyncio.sleep(random.uniform(1.5, 3.0))
+            except Exception as reload_err:
+                logger.warning("Reload after IP rotation failed: {}", reload_err)
+
+            if not _is_cloudflare_page(await page.title()):
+                logger.info("Cloudflare challenge gone after IP rotation")
+                return
+
+            try:
+                await page.wait_for_function(
+                    """() => {
+                        const t = document.title.toLowerCase();
+                        return !t.includes('just a moment') && !t.includes('un momento');
+                    }""",
+                    timeout=timeout_ms,
+                )
+                await page.wait_for_load_state("domcontentloaded")
+                await asyncio.sleep(random.uniform(1.5, 3.0))
+                logger.info("Cloudflare challenge resolved after IP rotation")
+                return
+            except Exception as e:
+                last_error = e
+                logger.warning("Cloudflare challenge still stuck after IP rotation")
+        else:
+            logger.warning("Proxy IP rotation failed — no point retrying on the same IP")
 
     raise AuthenticationError(
         f"Cloudflare challenge did not resolve within "
