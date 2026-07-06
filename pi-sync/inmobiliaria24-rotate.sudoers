@@ -1,0 +1,1 @@
+inmobiliaria24 ALL=(root) NOPASSWD: /usr/local/bin/rotate-proxy-ip
