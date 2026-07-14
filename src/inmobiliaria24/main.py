@@ -251,27 +251,18 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                         new_leads, webhook_url=settings.webhook_url
                     )
                     store.mark_seen(new_leads)
-
-                    # Set each sent lead's Inmuebles24 status to Contactado via
-                    # the inbox status dropdown (no message to the prospect).
-                    # Best-effort and only after a successful webhook + mark_seen,
-                    # so a failure here never drops a lead (local dedup already
-                    # prevents re-sending). No-op until MARK_CONTACTED=1.
-                    for lead in new_leads:
-                        if lead.get("lead_id"):
-                            await mark_lead_contacted(page, lead)
                 else:
                     logger.info("No new leads to send — all already pushed")
 
-                # Self-heal: a lead pushed on an earlier run can still be
-                # Pendiente on the portal when every previous status flip
-                # failed (the dropdown click is flaky). Re-try the flip for the
-                # already-seen leads too — mark_lead_contacted exits fast when
-                # the chip already reads Contactado, and it is gated by
-                # MARK_CONTACTED internally.
-                new_ids = {l.get("lead_id") for l in new_leads}
+                # Flip status only once the lead is genuinely claimed in
+                # Supabase. Claims happen minutes after intake, so a new lead
+                # flips on a later run. mark_lead_contacted is gated internally
+                # by MARK_CONTACTED and exits fast when already Contactado.
+                from inmobiliaria24.supa import fetch_claimed_i24_lead_ids
+
+                claimed_ids = await fetch_claimed_i24_lead_ids()
                 for lead in all_leads:
-                    if lead.get("lead_id") and lead["lead_id"] not in new_ids:
+                    if lead.get("lead_id") and str(lead["lead_id"]) in claimed_ids:
                         await mark_lead_contacted(page, lead)
 
                 # Case A: write the Inmuebles24 advisor note ("Asignado a <asesor>")

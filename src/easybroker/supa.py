@@ -2,9 +2,10 @@
 
 Source of truth for "which EB leads still need the Atendida + note actions":
 conversations that came from EasyBroker (eb_contact_id NOT NULL), have been
-assigned to an agent (assigned_agent_id NOT NULL), and have not yet been marked
-attended (eb_marked_attended = false). The bot performs the two UI actions, then
-flips eb_marked_attended so the lead is never touched again.
+genuinely claimed by an agent (claimed_via != escalation, or escalated but
+responded to), and have not yet been marked attended (eb_marked_attended =
+false). The bot performs the two UI actions, then flips eb_marked_attended so
+the lead is never touched again.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ def _headers(key: str) -> dict:
 
 
 async def fetch_pending_attend(settings) -> list[dict]:
-    """Return assigned EB leads not yet marked attended, with agent name resolved."""
+    """Return genuinely-claimed EB leads pending Atendida + note."""
     url = settings.supabase_url
     key = settings.supabase_service_key
     if not url or not key:
@@ -36,6 +37,7 @@ async def fetch_pending_attend(settings) -> list[dict]:
         "?select=conversation_id,lead_phone,lead_name,assigned_agent_id,eb_contact_id"
         "&eb_contact_id=not.is.null"
         "&assigned_agent_id=not.is.null"
+        "&or=(claimed_via.is.null,claimed_via.neq.escalation,first_response_at.not.is.null)"
         "&eb_marked_attended=is.false"
     )
     async with httpx.AsyncClient(timeout=20) as client:

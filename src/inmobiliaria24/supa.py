@@ -79,7 +79,10 @@ def _headers(key: str) -> dict:
 
 
 async def fetch_pending_i24_notes(limit: int = 20) -> list[dict]:
-    """i24 leads that are assigned, have a known i24 lead id, and have no note yet.
+    """i24 leads that are genuinely claimed, have a known id, and have no note yet.
+
+    A genuine claim excludes escalation-only assignments unless the escalated
+    lead has since received a first response.
 
     Returns dicts: conversation_id, i24_lead_id, assigned_agent_id, agent_name.
     """
@@ -90,6 +93,7 @@ async def fetch_pending_i24_notes(limit: int = 20) -> list[dict]:
     q = (
         f"{url}/rest/v1/conversations?source=eq.inmuebles24"
         "&assigned_agent_id=not.is.null&i24_lead_id=not.is.null&i24_note_added=eq.false"
+        "&or=(claimed_via.is.null,claimed_via.neq.escalation,first_response_at.not.is.null)"
         f"&select=conversation_id,i24_lead_id,assigned_agent_id,lead_name&limit={limit}"
     )
     try:
@@ -115,6 +119,29 @@ async def fetch_pending_i24_notes(limit: int = 20) -> list[dict]:
     except Exception as e:
         logger.warning("fetch_pending_i24_notes failed: {}", str(e))
         return []
+
+
+async def fetch_claimed_i24_lead_ids(limit: int = 200) -> set[str]:
+    """Return i24 lead ids that have been genuinely claimed or responded to."""
+    cfg = _supa_cfg()
+    if not cfg:
+        return set()
+    url, key = cfg
+    q = (
+        f"{url}/rest/v1/conversations?source=eq.inmuebles24"
+        "&i24_lead_id=not.is.null&assigned_agent_id=not.is.null"
+        "&or=(claimed_via.is.null,claimed_via.neq.escalation,first_response_at.not.is.null)"
+        f"&select=i24_lead_id&order=created_at.desc&limit={limit}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(q, headers=_headers(key))
+            r.raise_for_status()
+            rows = r.json()
+            return {str(row["i24_lead_id"]) for row in rows}
+    except Exception as e:
+        logger.warning("fetch_claimed_i24_lead_ids failed: {}", str(e))
+        return set()
 
 
 async def mark_i24_note_added(conversation_id: str) -> bool:
