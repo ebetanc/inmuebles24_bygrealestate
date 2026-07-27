@@ -1,0 +1,467 @@
+{
+  "updatedAt": "2026-07-16T18:48:29.018Z",
+  "createdAt": "2026-07-04T15:14:19.784Z",
+  "id": "zOHmTODH4QSqALnp",
+  "name": "WF19 - Guard Notify (Direct)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4ca5219c-ceae-4657-92ac-23c0f90bf8ab",
+      "name": "When Called",
+      "notes": "Input from WF10/WF7: { conversation_id, lead_phone, lead_name, property_id, property_title, property_price }"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Current on-shift guardia (calendar-aware), manager as guaranteed fallback.\nSELECT agent_id, name, whatsapp_number FROM (\n  SELECT a.agent_id, a.name, a.whatsapp_number, 1 AS pri\n  FROM get_on_shift_agents() g JOIN agents a ON a.agent_id = g.agent_id\n  UNION ALL\n  SELECT a.agent_id, a.name, a.whatsapp_number, 2\n  FROM agents a WHERE a.agent_id = 'agent_manager'\n) t ORDER BY pri, agent_id LIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        0
+      ],
+      "id": "a1000001-0000-4000-8000-000000000001",
+      "name": "Get Guardia",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Direct assignment to guardia. claimed_via='escalation' on purpose:\n-- the Pi note/status writers gate on it (supa.py) so NO i24 side-effects\n-- happen until a human actually responds.\nUPDATE conversations\nSET assigned_agent_id = $1,\n    claimed_via = 'escalation',\n    routing_tier = 'guard',\n    assigned_at = NOW(),\n    tier_notified_at = NOW(),\n    mode = 'ai'\nWHERE conversation_id = $2::uuid;",
+        "options": {
+          "queryReplacement": "={{ [$json.agent_id, $('When Called').first().json.conversation_id] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        440,
+        0
+      ],
+      "id": "a1000002-0000-4000-8000-000000000002",
+      "name": "Assign Guardia",
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('When Called').first().json;\nconst g = $('Get Guardia').first().json;\nconst propiedad = String(lead.property_title || lead.property_id || 'Propiedad');\nconst nombre = String(lead.lead_name || 'Sin nombre');\nconst tel = String(lead.lead_phone || 'N/D');\nreturn [{ json: {\n  number: g.whatsapp_number,\n  agent_id: g.agent_id,\n  agent_name: g.name,\n  t_propiedad: propiedad,\n  t_nombre: nombre,\n  t_tel: tel,\n  text: `\\u{1F3E0} Nuevo lead Inmuebles24: ${nombre} | ${propiedad} | Tel: ${tel}`,\n  conversation_id: lead.conversation_id\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "a1000003-0000-4000-8000-000000000003",
+      "name": "Build Guardia Message"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"lead_seguimiento_prompt\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_nombre) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_tel) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_propiedad) }} },\n          { \"type\": \"text\", \"text\": \"Contactar al cliente (lead NUEVO de Inmuebles24)\" }\n        ]\n      }\n    ]\n  }\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "a1000004-0000-4000-8000-000000000004",
+      "name": "Send to Guardia",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nVALUES ($1::uuid, 'outbound', 'system', $2, $3, $4::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [$('Build Guardia Message').item.json.conversation_id, $('Build Guardia Message').item.json.number, $('Build Guardia Message').item.json.text, JSON.stringify({ purpose: 'guard_notify', agent_id: $('Build Guardia Message').item.json.agent_id })] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1100,
+        0
+      ],
+      "id": "a1000005-0000-4000-8000-000000000005",
+      "name": "Log Outbound Message",
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Get Guardia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Guardia": {
+      "main": [
+        [
+          {
+            "node": "Assign Guardia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assign Guardia": {
+      "main": [
+        [
+          {
+            "node": "Build Guardia Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Guardia Message": {
+      "main": [
+        [
+          {
+            "node": "Send to Guardia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Guardia": {
+      "main": [
+        [
+          {
+            "node": "Log Outbound Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "timezone": "America/Mexico_City",
+    "errorWorkflow": "He95yJflKVspGFyb",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "35ee774d-f004-43a6-b3bb-27ae7035d2bb",
+  "activeVersionId": "35ee774d-f004-43a6-b3bb-27ae7035d2bb",
+  "versionCounter": 22,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "shared": [
+    {
+      "updatedAt": "2026-07-04T15:14:19.787Z",
+      "createdAt": "2026-07-04T15:14:19.787Z",
+      "role": "workflow:owner",
+      "workflowId": "zOHmTODH4QSqALnp",
+      "projectId": "q5HebGTNHrfaBGjx",
+      "project": {
+        "updatedAt": "2025-06-06T10:18:49.745Z",
+        "createdAt": "2025-06-06T10:17:16.319Z",
+        "id": "q5HebGTNHrfaBGjx",
+        "name": "Esteban Betancourt <esteban.betanc@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-16T18:48:29.019Z",
+    "createdAt": "2026-07-16T18:48:29.019Z",
+    "versionId": "35ee774d-f004-43a6-b3bb-27ae7035d2bb",
+    "workflowId": "zOHmTODH4QSqALnp",
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "passthrough"
+        },
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          0
+        ],
+        "id": "4ca5219c-ceae-4657-92ac-23c0f90bf8ab",
+        "name": "When Called",
+        "notes": "Input from WF10/WF7: { conversation_id, lead_phone, lead_name, property_id, property_title, property_price }"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "-- Current on-shift guardia (calendar-aware), manager as guaranteed fallback.\nSELECT agent_id, name, whatsapp_number FROM (\n  SELECT a.agent_id, a.name, a.whatsapp_number, 1 AS pri\n  FROM get_on_shift_agents() g JOIN agents a ON a.agent_id = g.agent_id\n  UNION ALL\n  SELECT a.agent_id, a.name, a.whatsapp_number, 2\n  FROM agents a WHERE a.agent_id = 'agent_manager'\n) t ORDER BY pri, agent_id LIMIT 1;",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          220,
+          0
+        ],
+        "id": "a1000001-0000-4000-8000-000000000001",
+        "name": "Get Guardia",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000,
+        "credentials": {
+          "postgres": {
+            "id": "dEHKygi1neTNvPtH",
+            "name": "Postgres account BYG project"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "-- Direct assignment to guardia. claimed_via='escalation' on purpose:\n-- the Pi note/status writers gate on it (supa.py) so NO i24 side-effects\n-- happen until a human actually responds.\nUPDATE conversations\nSET assigned_agent_id = $1,\n    claimed_via = 'escalation',\n    routing_tier = 'guard',\n    assigned_at = NOW(),\n    tier_notified_at = NOW(),\n    mode = 'ai'\nWHERE conversation_id = $2::uuid;",
+          "options": {
+            "queryReplacement": "={{ [$json.agent_id, $('When Called').first().json.conversation_id] }}"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          440,
+          0
+        ],
+        "id": "a1000002-0000-4000-8000-000000000002",
+        "name": "Assign Guardia",
+        "credentials": {
+          "postgres": {
+            "id": "dEHKygi1neTNvPtH",
+            "name": "Postgres account BYG project"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "alwaysOutputData": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const lead = $('When Called').first().json;\nconst g = $('Get Guardia').first().json;\nconst propiedad = String(lead.property_title || lead.property_id || 'Propiedad');\nconst nombre = String(lead.lead_name || 'Sin nombre');\nconst tel = String(lead.lead_phone || 'N/D');\nreturn [{ json: {\n  number: g.whatsapp_number,\n  agent_id: g.agent_id,\n  agent_name: g.name,\n  t_propiedad: propiedad,\n  t_nombre: nombre,\n  t_tel: tel,\n  text: `\\u{1F3E0} Nuevo lead Inmuebles24: ${nombre} | ${propiedad} | Tel: ${tel}`,\n  conversation_id: lead.conversation_id\n} }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          660,
+          0
+        ],
+        "id": "a1000003-0000-4000-8000-000000000003",
+        "name": "Build Guardia Message"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"lead_seguimiento_prompt\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_nombre) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_tel) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_propiedad) }} },\n          { \"type\": \"text\", \"text\": \"Contactar al cliente (lead NUEVO de Inmuebles24)\" }\n        ]\n      }\n    ]\n  }\n}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          880,
+          0
+        ],
+        "id": "a1000004-0000-4000-8000-000000000004",
+        "name": "Send to Guardia",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000,
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nVALUES ($1::uuid, 'outbound', 'system', $2, $3, $4::jsonb);",
+          "options": {
+            "queryReplacement": "={{ [$('Build Guardia Message').item.json.conversation_id, $('Build Guardia Message').item.json.number, $('Build Guardia Message').item.json.text, JSON.stringify({ purpose: 'guard_notify', agent_id: $('Build Guardia Message').item.json.agent_id })] }}"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          1100,
+          0
+        ],
+        "id": "a1000005-0000-4000-8000-000000000005",
+        "name": "Log Outbound Message",
+        "credentials": {
+          "postgres": {
+            "id": "dEHKygi1neTNvPtH",
+            "name": "Postgres account BYG project"
+          }
+        },
+        "continueOnFail": true
+      }
+    ],
+    "connections": {
+      "When Called": {
+        "main": [
+          [
+            {
+              "node": "Get Guardia",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Guardia": {
+        "main": [
+          [
+            {
+              "node": "Assign Guardia",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Assign Guardia": {
+        "main": [
+          [
+            {
+              "node": "Build Guardia Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Guardia Message": {
+        "main": [
+          [
+            {
+              "node": "Send to Guardia",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send to Guardia": {
+        "main": [
+          [
+            {
+              "node": "Log Outbound Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Esteban Betancourt",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-16T18:48:29.058Z",
+        "id": 1729,
+        "workflowId": "zOHmTODH4QSqALnp",
+        "versionId": "35ee774d-f004-43a6-b3bb-27ae7035d2bb",
+        "event": "activated",
+        "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
+      },
+      {
+        "createdAt": "2026-07-16T18:48:29.440Z",
+        "id": 1731,
+        "workflowId": "zOHmTODH4QSqALnp",
+        "versionId": "35ee774d-f004-43a6-b3bb-27ae7035d2bb",
+        "event": "activated",
+        "userId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
+      }
+    ]
+  }
+}
