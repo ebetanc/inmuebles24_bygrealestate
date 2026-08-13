@@ -34,8 +34,6 @@ export async function saveMonthSchedule(scheduleData: DaySchedule[]) {
     }
   }
 
-  if (rows.length === 0) return { success: true, inserted: 0 };
-
   // C5 fix: Use atomic RPC function (DELETE + INSERT in single transaction)
   const { data, error } = await supabase.rpc("save_month_schedule", {
     p_first_date: firstDate,

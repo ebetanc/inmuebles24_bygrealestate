@@ -1,1 +1,651 @@
-{"updatedAt":"2026-07-06T19:30:20.000Z","createdAt":"2026-06-25T06:13:15.896Z","id":"Bo2YbbUpmBzRbhDa","name":"WF13 - Directed Owner Notify (Cloud API)","description":null,"active":true,"isArchived":false,"nodes":[{"parameters":{"inputSource":"passthrough"},"id":"d1d2d3d4-0001-4000-8000-000000000001","name":"When Called by WF10","type":"n8n-nodes-base.executeWorkflowTrigger","typeVersion":1,"position":[200,300],"notes":"NIVEL owner. Input from WF10 after WF12 resolved an owner:\n{\n  conversation_id: UUID,\n  lead_phone, lead_name,\n  property_id: listing_id | EB code,\n  property_title, property_price,\n  owner_agent_id, owner_name, owner_number\n}\nCreates a 2-min auction scoped to the owner and DMs the owner a claim\ncode. Owner replies TOMO-XXXX -> WF1 -> WF3b atomic claim (same table).\nIf unclaimed in 2 min, WF3c escalates owner -> guard auction."},{"parameters":{"operation":"executeQuery","query":"-- Create a 2-minute auction scoped to the owner agent, and mark the\n-- conversation as being in the 'owner' tier.\nWITH new_auction AS (\n  INSERT INTO auctions (conversation_id, property_id, short_code, expires_at, notified_agents)\n  VALUES ($1::uuid, $2, generate_tomo_code(), NOW() + INTERVAL '2 minutes', ARRAY[$3]::text[])\n  RETURNING auction_id, short_code, expires_at\n),\nupd AS (\n  UPDATE conversations\n  SET owner_agent_id = $3, routing_tier = 'owner', tier_notified_at = NOW()\n  WHERE conversation_id = $1::uuid\n  RETURNING conversation_id\n)\nSELECT a.auction_id, a.short_code, a.expires_at FROM new_auction a;","options":{"queryReplacement":"={{ $json.conversation_id }},={{ $json.property_id }},={{ $json.owner_agent_id }}"}},"id":"d1d2d3d4-0002-4000-8000-000000000002","name":"Create Owner Auction + Set Tier","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[440,300],"credentials":{"postgres":{"id":"dEHKygi1neTNvPtH","name":"Postgres account BYG project"}}},{"parameters":{"jsCode":"// Build owner claim DM params for the Cloud-API template (lead_subasta_notify).\nconst t = $('When Called by WF10').first().json;\nconst a = $input.first().json;\nconst title = String(t.property_title || 'tu propiedad');\nconst price = String(t.property_price || 'Precio por confirmar');\nconst name  = String(t.lead_name || 'Sin nombre');\nconst code  = 'TOMO-' + a.short_code;\nreturn [{ json: {\n  number: t.owner_number,\n  auction_id: a.auction_id,\n  short_code: a.short_code,\n  conversation_id: t.conversation_id,\n  agent_id: t.owner_agent_id,\n  t_propiedad: title,\n  t_precio: price,\n  t_nombre: name,\n  t_codigo: code,\n  t_minutos: '2',\n  text: 'Lead directo (owner): ' + title + ' | ' + price + ' | ' + name + ' | ' + code + ' (2 min)'\n}}];"},"id":"d1d2d3d4-0003-4000-8000-000000000003","name":"Build Owner Message","type":"n8n-nodes-base.code","typeVersion":2,"position":[680,300]},{"parameters":{"method":"POST","url":"={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Authorization","value":"=Bearer {{ $env.WA_ACCESS_TOKEN }}"},{"name":"Content-Type","value":"application/json"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"lead_subasta_notify\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_propiedad) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_precio) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_nombre) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_codigo) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify($json.t_minutos) }} }\n        ]\n      }\n    ]\n  }\n}","options":{"timeout":15000}},"id":"d1d2d3d4-0004-4000-8000-000000000004","name":"Send to Owner (Cloud API)","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[920,300],"continueOnFail":true},{"parameters":{"operation":"executeQuery","query":"INSERT INTO messages (conversation_id, direction, sender_type, recipient_phone, body, metadata)\nVALUES ($1::uuid, 'outbound', 'system', $2, $3, $4::jsonb);","options":{"queryReplacement":"={{ [$json.conversation_id, $json.number, $json.text, JSON.stringify({ purpose: 'owner_notify', auction_id: $json.auction_id, agent_id: $json.agent_id })] }}"}},"id":"d1d2d3d4-0005-4000-8000-000000000005","name":"Log Owner Message","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[1160,300],"credentials":{"postgres":{"id":"dEHKygi1neTNvPtH","name":"Postgres account BYG project"}},"continueOnFail":true}],"connections":{"When Called by WF10":{"main":[[{"node":"Create Owner Auction + Set Tier","type":"main","index":0}]]},"Create Owner Auction + Set Tier":{"main":[[{"node":"Build Owner Message","type":"main","index":0}]]},"Build Owner Message":{"main":[[{"node":"Send to Owner (Cloud API)","type":"main","index":0}]]},"Send to Owner (Cloud API)":{"main":[[{"node":"Log Owner Message","type":"main","index":0}]]}},"settings":{"saveManualExecutions":true,"callerPolicy":"workflowsFromSameOwner","executionOrder":"v1","errorWorkflow":"He95yJflKVspGFyb"},"staticData":null,"meta":null,"pinData":null,"versionId":"efd98dc0-dcea-4429-b572-b1413abfb7e0","activeVersionId":"efd98dc0-dcea-4429-b572-b1413abfb7e0","versionCounter":10,"triggerCount":0,"tags":[],"shared":[{"updatedAt":"2026-06-25T06:13:15.899Z","createdAt":"2026-06-25T06:13:15.899Z","role":"workflow:owner","workflowId":"Bo2YbbUpmBzRbhDa","projectId":"q5HebGTNHrfaBGjx","project":{"updatedAt":"2025-06-06T10:18:49.745Z","createdAt":"2025-06-06T10:17:16.319Z","id":"q5HebGTNHrfaBGjx","name":"Esteban Betancourt <esteban.betanc@gmail.com>","type":"personal","icon":null,"description":null,"creatorId":"df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"}}]}
+{
+    "updatedAt":  "2026-07-06T19:30:20.000Z",
+    "createdAt":  "2026-06-25T06:13:15.896Z",
+    "id":  "Bo2YbbUpmBzRbhDa",
+    "name":  "WF13 - Directed Owner Notify (Cloud API)",
+    "description":  null,
+    "active":  false,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "passthrough"
+                                     },
+                      "id":  "wf13-trigger",
+                      "name":  "When Called by Router",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       240,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input=$input.first().json; const opportunityId=Number(input.opportunity_id); const tier=String(input.routing_tier||\u0027owner\u0027);\nif(!Number.isSafeInteger(opportunityId)||opportunityId\u003c=0) throw new Error(\u0027valid opportunity_id required\u0027);\nif(![\u0027owner\u0027,\u0027primary_guard\u0027,\u0027backup_guard\u0027].includes(tier)) throw new Error(\u0027invalid routing tier\u0027);\nconst number=input.owner_number||input.recipient_number||null; if(!input.attempt_id\u0026\u0026!number) throw new Error(\u0027recipient number required\u0027);\nconst button_id=`claim:${opportunityId}:${tier}`; const text=[`Nuevo prospecto para ${input.property_title||\u0027una propiedad\u0027}`,`Lead: ${input.lead_name||\u0027Sin nombre\u0027}`,\u0027Tienes 5 minutos desde la entrega confirmada.\u0027].join(\u0027\\n\u0027);\nreturn [{json:{...input,opportunity_id:opportunityId,routing_tier:tier,button_id,text,number,target_agent_id:input.owner_agent_id||input.agent_id||null}}];"
+                                     },
+                      "id":  "wf13-build-owner-offer",
+                      "name":  "Build Owner Offer",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       480,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH prepared AS (SELECT d.* FROM public.create_delivery_attempt($1::bigint,$6,\u0027offer:\u0027||$1::text||\u0027:\u0027||$6,$8,$2) d WHERE $5::bigint IS NULL UNION ALL SELECT a.*,TRUE AS should_send FROM public.lead_routing_delivery_attempts a JOIN public.lead_routing_opportunities o ON o.current_delivery_attempt_id=a.attempt_id JOIN public.agents g ON g.agent_id=a.target_agent_id AND g.is_available=true AND g.whatsapp_number=a.target_number WHERE $5::bigint IS NOT NULL AND a.attempt_id=$5::bigint AND a.opportunity_id=$1::bigint AND a.routing_tier=$6 AND a.status=\u0027requested\u0027 AND a.provider_message_id IS NULL AND a.lease_token=$7 AND a.lease_expires_at\u003eNOW()) SELECT prepared.*,target_number AS number,$3 AS text,$4 AS button_id FROM prepared;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.opportunity_id, $json.number, $json.text, $json.button_id, $json.attempt_id || null, $json.routing_tier, $json.lease_token || null, $json.target_agent_id || null] }}"
+                                                     }
+                                     },
+                      "id":  "wf13-create-attempt",
+                      "name":  "Create Delivery Attempt",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       700,
+                                       300
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict"
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "wf13-should-send-true",
+                                                                                   "leftValue":  "={{ $json.should_send }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        }
+                                     },
+                      "id":  "wf13-should-send",
+                      "name":  "Should Send?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       820,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.WA_CLOUD_API_BASE_URL + \"/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Authorization",
+                                                                                         "value":  "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"button\",\n    \"body\": { \"text\": {{ JSON.stringify($json.text) }} },\n    \"action\": { \"buttons\": [{ \"type\": \"reply\", \"reply\": { \"id\": \"{{ $json.button_id }}\", \"title\": \"Tomar prospecto\" } }] }\n  }\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "wf13-send-owner-offer",
+                      "name":  "Send Owner Offer",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       920,
+                                       300
+                                   ],
+                      "continueOnFail":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict"
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "wf13-has-wamid",
+                                                                                   "leftValue":  "={{ $json.messages \u0026\u0026 $json.messages[0] \u0026\u0026 $json.messages[0].id }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "notEmpty",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        }
+                                     },
+                      "id":  "wf13-send-succeeded",
+                      "name":  "Provider Accepted Send?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       1120,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT * FROM public.bind_delivery_message($1::bigint, $2, $3);",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$(\u0027Create Delivery Attempt\u0027).first().json.attempt_id, $json.messages[0].id, $(\u0027Create Delivery Attempt\u0027).first().json.lease_token] }}"
+                                                     }
+                                     },
+                      "id":  "wf13-persist-request",
+                      "name":  "Bind Provider Message",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1340,
+                                       220
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT * FROM public.fail_unbound_delivery_attempt($1::bigint, $2, $3);",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$(\u0027Create Delivery Attempt\u0027).first().json.attempt_id, String($json.error \u0026\u0026 $json.error.message || \u0027provider_send_failed\u0027), $(\u0027Create Delivery Attempt\u0027).first().json.lease_token] }}"
+                                                     }
+                                     },
+                      "id":  "wf13-fail-attempt",
+                      "name":  "Fail Unbound Attempt",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1340,
+                                       420
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "wf13-skip-send",
+                      "name":  "End (Already Handled)",
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1040,
+                                       460
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "When Called by Router":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Build Owner Offer",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Build Owner Offer":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Create Delivery Attempt",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Create Delivery Attempt":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Should Send?",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "Should Send?":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "Send Owner Offer",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ],
+                                                          [
+                                                              {
+                                                                  "node":  "End (Already Handled)",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "Send Owner Offer":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Provider Accepted Send?",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Provider Accepted Send?":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Bind Provider Message",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ],
+                                                                     [
+                                                                         {
+                                                                             "node":  "Fail Unbound Attempt",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "saveExecutionProgress":  false,
+                     "saveManualExecutions":  false,
+                     "saveDataErrorExecution":  "none",
+                     "saveDataSuccessExecution":  "none"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "nodeGroups":  [
+
+                   ],
+    "pinData":  null,
+    "versionId":  "efd98dc0-dcea-4429-b572-b1413abfb7e0",
+    "activeVersionId":  null,
+    "versionCounter":  11,
+    "triggerCount":  0,
+    "sourceWorkflowId":  null,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-06-25T06:13:15.899Z",
+                       "createdAt":  "2026-06-25T06:13:15.899Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "Bo2YbbUpmBzRbhDa",
+                       "projectId":  "q5HebGTNHrfaBGjx",
+                       "project":  {
+                                       "updatedAt":  "2025-06-06T10:18:49.745Z",
+                                       "createdAt":  "2025-06-06T10:17:16.319Z",
+                                       "id":  "q5HebGTNHrfaBGjx",
+                                       "name":  "Esteban Betancourt \u003cesteban.betanc@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "customTelemetryTags":  [
+
+                                                               ],
+                                       "creatorId":  "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-07-06T19:30:20.000Z",
+                          "createdAt":  "2026-06-25T06:13:15.896Z",
+                          "versionId":  "efd98dc0-dcea-4429-b572-b1413abfb7e0",
+                          "workflowId":  "Bo2YbbUpmBzRbhDa",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "passthrough"
+                                                           },
+                                            "id":  "wf13-trigger",
+                                            "name":  "When Called by Router",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "typeVersion":  1.1,
+                                            "position":  [
+                                                             240,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const input=$input.first().json; const opportunityId=Number(input.opportunity_id); const tier=String(input.routing_tier||\u0027owner\u0027);\nif(!Number.isSafeInteger(opportunityId)||opportunityId\u003c=0) throw new Error(\u0027valid opportunity_id required\u0027);\nif(![\u0027owner\u0027,\u0027primary_guard\u0027,\u0027backup_guard\u0027].includes(tier)) throw new Error(\u0027invalid routing tier\u0027);\nconst number=input.owner_number||input.recipient_number||null; if(!input.attempt_id\u0026\u0026!number) throw new Error(\u0027recipient number required\u0027);\nconst button_id=`claim:${opportunityId}:${tier}`; const text=[`Nuevo prospecto para ${input.property_title||\u0027una propiedad\u0027}`,`Lead: ${input.lead_name||\u0027Sin nombre\u0027}`,\u0027Tienes 5 minutos desde la entrega confirmada.\u0027].join(\u0027\\n\u0027);\nreturn [{json:{...input,opportunity_id:opportunityId,routing_tier:tier,button_id,text,number,target_agent_id:input.owner_agent_id||input.agent_id||null}}];"
+                                                           },
+                                            "id":  "wf13-build-owner-offer",
+                                            "name":  "Build Owner Offer",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             480,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "WITH prepared AS (SELECT d.* FROM public.create_delivery_attempt($1::bigint,$6,\u0027offer:\u0027||$1::text||\u0027:\u0027||$6,$8,$2) d WHERE $5::bigint IS NULL UNION ALL SELECT a.*,TRUE AS should_send FROM public.lead_routing_delivery_attempts a JOIN public.lead_routing_opportunities o ON o.current_delivery_attempt_id=a.attempt_id JOIN public.agents g ON g.agent_id=a.target_agent_id AND g.is_available=true AND g.whatsapp_number=a.target_number WHERE $5::bigint IS NOT NULL AND a.attempt_id=$5::bigint AND a.opportunity_id=$1::bigint AND a.routing_tier=$6 AND a.status=\u0027requested\u0027 AND a.provider_message_id IS NULL AND a.lease_token=$7 AND a.lease_expires_at\u003eNOW()) SELECT prepared.*,target_number AS number,$3 AS text,$4 AS button_id FROM prepared;",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{ [$json.opportunity_id, $json.number, $json.text, $json.button_id, $json.attempt_id || null, $json.routing_tier, $json.lease_token || null, $json.target_agent_id || null] }}"
+                                                                           }
+                                                           },
+                                            "id":  "wf13-create-attempt",
+                                            "name":  "Create Delivery Attempt",
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.5,
+                                            "position":  [
+                                                             700,
+                                                             300
+                                                         ],
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                                                 "name":  "Postgres - Supabase"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "typeValidation":  "strict"
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "wf13-should-send-true",
+                                                                                                         "leftValue":  "={{ $json.should_send }}",
+                                                                                                         "rightValue":  true,
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true"
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              }
+                                                           },
+                                            "id":  "wf13-should-send",
+                                            "name":  "Should Send?",
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.2,
+                                            "position":  [
+                                                             820,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.WA_CLOUD_API_BASE_URL + \"/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Authorization",
+                                                                                                               "value":  "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"button\",\n    \"body\": { \"text\": {{ JSON.stringify($json.text) }} },\n    \"action\": { \"buttons\": [{ \"type\": \"reply\", \"reply\": { \"id\": \"{{ $json.button_id }}\", \"title\": \"Tomar prospecto\" } }] }\n  }\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "wf13-send-owner-offer",
+                                            "name":  "Send Owner Offer",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             920,
+                                                             300
+                                                         ],
+                                            "continueOnFail":  true
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "typeValidation":  "strict"
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "wf13-has-wamid",
+                                                                                                         "leftValue":  "={{ $json.messages \u0026\u0026 $json.messages[0] \u0026\u0026 $json.messages[0].id }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "string",
+                                                                                                                          "operation":  "notEmpty",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              }
+                                                           },
+                                            "id":  "wf13-send-succeeded",
+                                            "name":  "Provider Accepted Send?",
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.2,
+                                            "position":  [
+                                                             1120,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT * FROM public.bind_delivery_message($1::bigint, $2, $3);",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{ [$(\u0027Create Delivery Attempt\u0027).first().json.attempt_id, $json.messages[0].id, $(\u0027Create Delivery Attempt\u0027).first().json.lease_token] }}"
+                                                                           }
+                                                           },
+                                            "id":  "wf13-persist-request",
+                                            "name":  "Bind Provider Message",
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.5,
+                                            "position":  [
+                                                             1340,
+                                                             220
+                                                         ],
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                                                 "name":  "Postgres - Supabase"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT * FROM public.fail_unbound_delivery_attempt($1::bigint, $2, $3);",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{ [$(\u0027Create Delivery Attempt\u0027).first().json.attempt_id, String($json.error \u0026\u0026 $json.error.message || \u0027provider_send_failed\u0027), $(\u0027Create Delivery Attempt\u0027).first().json.lease_token] }}"
+                                                                           }
+                                                           },
+                                            "id":  "wf13-fail-attempt",
+                                            "name":  "Fail Unbound Attempt",
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.5,
+                                            "position":  [
+                                                             1340,
+                                                             420
+                                                         ],
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                                                 "name":  "Postgres - Supabase"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+
+                                                           },
+                                            "id":  "wf13-skip-send",
+                                            "name":  "End (Already Handled)",
+                                            "type":  "n8n-nodes-base.noOp",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             1040,
+                                                             460
+                                                         ]
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Called by Router":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "Build Owner Offer",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "Build Owner Offer":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "Create Delivery Attempt",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "Create Delivery Attempt":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "Should Send?",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          },
+                                              "Should Send?":  {
+                                                                   "main":  [
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "Send Owner Offer",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ],
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "End (Already Handled)",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ]
+                                                                            ]
+                                                               },
+                                              "Send Owner Offer":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "Provider Accepted Send?",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                              "Provider Accepted Send?":  {
+                                                                              "main":  [
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "Bind Provider Message",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ],
+                                                                                           [
+                                                                                               {
+                                                                                                   "node":  "Fail Unbound Attempt",
+                                                                                                   "type":  "main",
+                                                                                                   "index":  0
+                                                                                               }
+                                                                                           ]
+                                                                                       ]
+                                                                          }
+                                          },
+                          "nodeGroups":  [
+
+                                         ],
+                          "authors":  [
+
+                                      ],
+                          "name":  "WF13 - Directed Owner Notify (Cloud API)",
+                          "description":  null,
+                          "autosaved":  false,
+                          "workflowPublishHistory":  [
+
+                                                     ],
+                          "settings":  {
+                                           "executionOrder":  "v1",
+                                           "saveExecutionProgress":  false,
+                                           "saveManualExecutions":  false,
+                                           "saveDataErrorExecution":  "none",
+                                           "saveDataSuccessExecution":  "none"
+                                       }
+                      }
+}

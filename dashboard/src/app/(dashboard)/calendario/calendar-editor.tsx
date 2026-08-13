@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useTransition, useEffect } from "react";
+import { useState, useCallback, useTransition, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { saveMonthSchedule } from "./actions";
 import { mxToday } from "@/lib/datetime";
@@ -14,11 +14,14 @@ interface ScheduleRow {
   schedule_date: string;
   shift: string;
   agent_id: string;
+  coverage_role: "primary" | "backup" | null;
 }
 
 interface DayData {
-  m: string;
-  t: string;
+  mp: string;
+  mb: string;
+  tp: string;
+  tb: string;
 }
 
 const DAY_NAMES = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
@@ -27,8 +30,18 @@ const MONTH_NAMES = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
-const AGENT_COLORS: Record<string, string> = {};
 const PALETTE = ["var(--blue)", "var(--orchid)", "var(--amber)", "var(--rose)", "var(--green)", "var(--teal)"];
+
+function legacyConflictKeys(existing: ScheduleRow[]): string[] {
+  const groups = new Map<string, ScheduleRow[]>();
+  for (const row of existing) {
+    const key = `${row.schedule_date}:${row.shift}`;
+    groups.set(key, [...(groups.get(key) || []), row]);
+  }
+  return [...groups]
+    .filter(([, rows]) => rows.some((row) => row.coverage_role === null) && rows.length > 1)
+    .map(([key]) => key);
+}
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month, 0).getDate();
@@ -44,17 +57,17 @@ function buildInitialState(
 
   for (let d = 1; d <= days; d++) {
     const date = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    state[date] = { m: "", t: "" };
+    state[date] = { mp: "", mb: "", tp: "", tb: "" };
   }
 
-  // Group existing data by date+shift (first agent per shift wins)
+  const conflicts = new Set(legacyConflictKeys(existing));
   for (const row of existing) {
     if (!state[row.schedule_date]) continue;
-    if (row.shift === "morning") {
-      if (!state[row.schedule_date].m) state[row.schedule_date].m = row.agent_id;
-    } else {
-      if (!state[row.schedule_date].t) state[row.schedule_date].t = row.agent_id;
-    }
+    if (conflicts.has(`${row.schedule_date}:${row.shift}`)) continue;
+    const slot = row.shift === "morning"
+      ? row.coverage_role === "backup" ? "mb" : "mp"
+      : row.coverage_role === "backup" ? "tb" : "tp";
+    if (!state[row.schedule_date][slot]) state[row.schedule_date][slot] = row.agent_id;
   }
 
   return state;
@@ -64,15 +77,15 @@ function buildInitialState(
 // a VALID, intentional arrangement (e.g. weekends with a single advisor on duty
 // the whole day). Surfaced as info only — it does NOT block saving.
 function dayIsFullDay(day: DayData): boolean {
-  return !!day.m && !!day.t && day.m === day.t;
+  return !!day.mp && !!day.tp && day.mp === day.tp;
 }
 
 function countShifts(schedule: Record<string, DayData>, agents: Agent[]) {
   const counts: Record<string, { morning: number; afternoon: number }> = {};
   for (const a of agents) counts[a.agent_id] = { morning: 0, afternoon: 0 };
   for (const day of Object.values(schedule)) {
-    if (day.m && counts[day.m]) counts[day.m].morning++;
-    if (day.t && counts[day.t]) counts[day.t].afternoon++;
+    for (const agentId of [day.mp, day.mb]) if (agentId && counts[agentId]) counts[agentId].morning++;
+    for (const agentId of [day.tp, day.tb]) if (agentId && counts[agentId]) counts[agentId].afternoon++;
   }
   return counts;
 }
@@ -97,19 +110,22 @@ export default function CalendarEditor({
   );
   const [toast, setToast] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [unresolvedLegacy, setUnresolvedLegacy] = useState(() => legacyConflictKeys(initialSchedule));
 
   // Sync state when server sends new props (month navigation)
   useEffect(() => {
+    // Calendar navigation changes server props; reset editor draft to that month.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setYear(initialYear);
     setMonth(initialMonth);
     setSchedule(buildInitialState(initialYear, initialMonth, initialSchedule));
+    setUnresolvedLegacy(legacyConflictKeys(initialSchedule));
     setDirty(false);
   }, [initialYear, initialMonth, initialSchedule]);
 
-  // Assign colors
-  agents.forEach((a, i) => {
-    AGENT_COLORS[a.agent_id] = PALETTE[i % PALETTE.length];
-  });
+  const agentColors = useMemo(() => Object.fromEntries(
+    agents.map((agent, index) => [agent.agent_id, PALETTE[index % PALETTE.length]])
+  ), [agents]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -125,6 +141,8 @@ export default function CalendarEditor({
       ...prev,
       [date]: { ...prev[date], [slot]: value },
     }));
+    const shift = slot.startsWith("m") ? "morning" : "afternoon";
+    setUnresolvedLegacy((current) => current.filter((key) => key !== `${date}:${shift}`));
     setDirty(true);
   };
 
@@ -134,10 +152,13 @@ export default function CalendarEditor({
     const newSchedule = { ...schedule };
     let idx = 0;
     for (const date of Object.keys(newSchedule).sort()) {
-      // Morning agent and afternoon agent are always different people
+      const primary = agents[idx % agents.length].agent_id;
+      const backup = agents[(idx + 1) % agents.length].agent_id;
       newSchedule[date] = {
-        m: agents[idx % agents.length].agent_id,
-        t: agents[(idx + 1) % agents.length].agent_id,
+        mp: primary,
+        mb: backup,
+        tp: backup,
+        tb: primary,
       };
       idx++;
     }
@@ -149,6 +170,9 @@ export default function CalendarEditor({
   const clearAll = () => {
     if (!confirm("Limpiar todas las asignaciones del mes?")) return;
     setSchedule(buildInitialState(year, month, []));
+    // Explicit destructive user choice: legacy ambiguity no longer blocks the
+    // empty save that clears this month through the atomic RPC.
+    setUnresolvedLegacy([]);
     setDirty(true);
   };
 
@@ -157,10 +181,20 @@ export default function CalendarEditor({
     .map(([date]) => date);
 
   const handleSave = () => {
+    if (unresolvedLegacy.length > 0) {
+      showToast("Resuelva las coberturas legacy ambiguas antes de guardar");
+      return;
+    }
+    if (Object.values(schedule).some((day) =>
+      (!!day.mp && day.mp === day.mb) || (!!day.tp && day.tp === day.tb)
+    )) {
+      showToast("Primaria y respaldo deben ser agentes distintos");
+      return;
+    }
     const data = Object.entries(schedule).map(([date, day]) => ({
       date,
-      morning: [day.m].filter(Boolean),
-      afternoon: [day.t].filter(Boolean),
+      morning: [day.mp, day.mb].filter(Boolean),
+      afternoon: [day.tp, day.tb].filter(Boolean),
     }));
 
     startTransition(async () => {
@@ -179,10 +213,10 @@ export default function CalendarEditor({
   const today = mxToday();
   const stats = countShifts(schedule, agents);
   const filledSlots = Object.values(schedule).reduce(
-    (n, d) => n + [d.m, d.t].filter(Boolean).length,
+    (n, d) => n + [d.mp, d.mb, d.tp, d.tb].filter(Boolean).length,
     0
   );
-  const totalSlots = dates.length * 2;
+  const totalSlots = dates.length * 4;
   const pct = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
 
   const prevMonth = month === 1 ? { y: year - 1, m: 12 } : { y: year, m: month - 1 };
@@ -195,13 +229,13 @@ export default function CalendarEditor({
         <div>
           <h2 className="font-display text-base font-bold text-foreground">Calendario de Guardias</h2>
           <div className="text-xs text-muted-foreground">
-            Asigne 1 agente por turno por dia — los cambios se guardan en Supabase
+            Asigne guardia primaria y respaldo por turno — los cambios se guardan en Supabase
           </div>
         </div>
         <div className="flex items-center gap-2">
           {fullDayDates.length > 0 && (
             <span className="nb-chip">
-              {fullDayDates.length} dia(s) cobertura completa (1 asesor)
+              {fullDayDates.length} dia(s) con la misma primaria todo el dia
             </span>
           )}
           {dirty && (
@@ -220,6 +254,11 @@ export default function CalendarEditor({
       </div>
 
       {/* Controls */}
+      {unresolvedLegacy.length > 0 && (
+        <div className="mb-4 rounded-[var(--radius-sm)] border-2 border-foreground bg-[var(--amber)] px-4 py-3 text-xs font-bold text-foreground">
+          Cobertura legacy ambigua en {unresolvedLegacy.length} turno(s). Vuelva a elegir primaria o respaldo en cada turno marcado antes de guardar.
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3 bg-card rounded-[var(--radius)] border-2 border-foreground shadow-[var(--shadow-sm)] px-4 py-3 mb-4">
         <button
           onClick={() => changeMonth(prevMonth.y, prevMonth.m)}
@@ -306,31 +345,39 @@ export default function CalendarEditor({
                 )}
               </div>
 
-              {/* Slot selects */}
-              {(["m", "t"] as const).map((slot) => {
-                const isMorning = slot === "m";
+              {/* Ordered primary/backup coverage. */}
+              {([[["mp", "mb"], true], [["tp", "tb"], false]] as const).map(([slots, isMorning]) => {
                 return (
-                  <div key={slot} className="px-1.5 py-1.5 border-l border-[var(--line-2)]">
-                    <select
-                      value={day[slot]}
-                      onChange={(e) => updateSlot(date, slot, e.target.value)}
-                      className={`w-full px-2 py-1.5 rounded-[var(--radius-sm)] text-xs font-bold border-2 border-foreground transition-colors cursor-pointer ${
-                        fullDay
-                          ? "bg-[var(--green)] text-foreground"
-                          : day[slot]
-                          ? isMorning
-                            ? "bg-[var(--accent-fill)] text-foreground"
-                            : "bg-[var(--neutral)] text-foreground"
-                          : "bg-card text-muted-foreground"
-                      } focus:outline-none focus:-translate-x-px focus:-translate-y-px focus:shadow-[var(--shadow-sm)]`}
-                    >
-                      <option value="">--</option>
-                      {agents.map((a) => (
-                        <option key={a.agent_id} value={a.agent_id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
+                  <div key={slots[0]} className={`grid grid-cols-2 gap-1 px-1.5 py-1.5 border-l border-[var(--line-2)] ${
+                    unresolvedLegacy.includes(`${date}:${isMorning ? "morning" : "afternoon"}`) ? "bg-[var(--amber)]" : ""
+                  }`}>
+                    {slots.map((slot, index) => (
+                      <label key={slot} className="min-w-0">
+                        <span className="block px-1 pb-0.5 font-display text-[9px] font-extrabold uppercase text-muted-foreground">
+                          {index === 0 ? "Primaria" : "Respaldo"}
+                        </span>
+                        <select
+                          value={day[slot]}
+                          onChange={(e) => updateSlot(date, slot, e.target.value)}
+                          className={`w-full px-1.5 py-1.5 rounded-[var(--radius-sm)] text-xs font-bold border-2 border-foreground transition-colors cursor-pointer ${
+                            fullDay && index === 0
+                              ? "bg-[var(--green)] text-foreground"
+                              : day[slot]
+                              ? isMorning
+                                ? "bg-[var(--accent-fill)] text-foreground"
+                                : "bg-[var(--neutral)] text-foreground"
+                              : "bg-card text-muted-foreground"
+                          } focus:outline-none focus:-translate-x-px focus:-translate-y-px focus:shadow-[var(--shadow-sm)]`}
+                        >
+                          <option value="">--</option>
+                          {agents.map((a) => (
+                            <option key={a.agent_id} value={a.agent_id} disabled={a.agent_id === day[slots[index === 0 ? 1 : 0]]}>
+                              {a.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
                   </div>
                 );
               })}
@@ -349,7 +396,7 @@ export default function CalendarEditor({
           const s = stats[a.agent_id] || { morning: 0, afternoon: 0 };
           return (
             <div key={a.agent_id} className="nb nb-hover p-4 text-center">
-              <div className="font-mono text-2xl font-bold" style={{ color: AGENT_COLORS[a.agent_id] }}>
+              <div className="font-mono text-2xl font-bold" style={{ color: agentColors[a.agent_id] }}>
                 {s.morning + s.afternoon}
               </div>
               <div className="font-display text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground truncate">

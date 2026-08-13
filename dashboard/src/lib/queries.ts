@@ -1,5 +1,5 @@
 import { createSupabaseServer } from "./supabase";
-import type { Agent, Conversation, Auction, NightQueueItem, KPIs, ScrapeRun } from "./types";
+import type { Agent, Conversation, Auction, NightQueueItem, KPIs, ScrapeRun, SLABreach, RoutingV2OpsRow, RoutingV2KPIs } from "./types";
 import { mxStartOfToday, mxToday } from "./datetime";
 
 const db = () => createSupabaseServer();
@@ -10,7 +10,7 @@ export async function getKPIs(): Promise<KPIs> {
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - 7);
 
-  const [todayRes, weekRes, auctionRes, nightRes, sourceRes] = await Promise.all([
+  const [todayRes, weekRes, auctionRes, nightRes, sourceRes, slaRes, metricsRes] = await Promise.all([
     supabase
       .from("conversations")
       .select("conversation_id", { count: "exact", head: true })
@@ -29,26 +29,69 @@ export async function getKPIs(): Promise<KPIs> {
       .eq("processed", false),
     supabase
       .from("conversations")
-      .select("source")
+      .select("source, mode, assigned_agent_id, assigned_at, first_response_at")
       .gte("created_at", weekStart.toISOString()),
+    supabase
+      .from("sla_breaches")
+      .select("conversation_id", { count: "exact", head: true }),
+    supabase
+      .from("agent_metrics")
+      .select("avg_response_sec_30d"),
   ]);
 
-  const sources = (sourceRes.data || []) as { source: string }[];
+  const convList = (sourceRes.data || []) as {
+    source: string;
+    mode: string;
+    assigned_agent_id: string | null;
+    assigned_at: string | null;
+    first_response_at: string | null;
+  }[];
+
   const bySource = {
-    inmuebles24: sources.filter((s) => s.source === "inmuebles24").length,
-    easybroker: sources.filter((s) => s.source === "easybroker").length,
-    whatsapp_direct: sources.filter((s) => s.source === "whatsapp_direct").length,
+    inmuebles24: convList.filter((s) => s.source === "inmuebles24").length,
+    easybroker: convList.filter((s) => s.source === "easybroker").length,
+    whatsapp_direct: convList.filter((s) => s.source === "whatsapp_direct").length,
   };
+
+  const assignedCount = convList.filter((c) => c.assigned_agent_id !== null || c.mode === "assigned" || c.mode === "human").length;
+  const conversionRate = convList.length > 0 ? Math.round((assignedCount / convList.length) * 100) : 0;
+
+  let avgResponseMin = 0;
+  const metrics = (metricsRes.data || []) as { avg_response_sec_30d: number | null }[];
+  const validMetrics = metrics.map((m) => m.avg_response_sec_30d).filter((sec): sec is number => typeof sec === "number" && sec > 0);
+  if (validMetrics.length > 0) {
+    const avgSec = validMetrics.reduce((a, b) => a + b, 0) / validMetrics.length;
+    avgResponseMin = Math.round(avgSec / 60);
+  } else {
+    const responseTimesSec = convList
+      .filter((c) => c.assigned_at && c.first_response_at)
+      .map((c) => (new Date(c.first_response_at!).getTime() - new Date(c.assigned_at!).getTime()) / 1000)
+      .filter((sec) => sec > 0);
+
+    if (responseTimesSec.length > 0) {
+      avgResponseMin = Math.round(responseTimesSec.reduce((a, b) => a + b, 0) / responseTimesSec.length / 60);
+    }
+  }
 
   return {
     totalLeadsToday: todayRes.count || 0,
     totalLeadsWeek: weekRes.count || 0,
     activeAuctions: auctionRes.count || 0,
     nightQueuePending: nightRes.count || 0,
-    avgResponseMin: 0,
-    conversionRate: 0,
+    avgResponseMin,
+    conversionRate,
+    slaBreachesCount: slaRes.count || 0,
     bySource,
   };
+}
+
+export async function getSLABreaches(): Promise<SLABreach[]> {
+  const supabase = db();
+  const { data } = await supabase
+    .from("sla_breaches")
+    .select("*")
+    .order("pending_seconds", { ascending: false });
+  return (data || []) as SLABreach[];
 }
 
 export async function getRecentConversations(limit = 20): Promise<Conversation[]> {
@@ -168,6 +211,23 @@ export async function getGuardSchedule() {
   return data || [];
 }
 
+// LRV2-014: routing-v2 pilot observability. State/SLA/evidence come from the
+// DB view (routing_v2_ops_view), never from n8n workflow memory.
+export async function getRoutingV2Ops(): Promise<RoutingV2OpsRow[]> {
+  const supabase = db();
+  const { data } = await supabase
+    .from("routing_v2_ops_view")
+    .select("*")
+    .order("detected_at", { ascending: false });
+  return (data || []) as RoutingV2OpsRow[];
+}
+
+export async function getRoutingV2KPIs(daysBack = 7): Promise<RoutingV2KPIs> {
+  const supabase = db();
+  const { data } = await supabase.rpc("get_routing_v2_kpis", { p_days_back: daysBack });
+  return data as RoutingV2KPIs;
+}
+
 export async function getMonthSchedule(year: number, month: number) {
   const supabase = db();
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -176,10 +236,10 @@ export async function getMonthSchedule(year: number, month: number) {
 
   const { data } = await supabase
     .from("agent_schedule")
-    .select("id, schedule_date, shift, agent_id")
+    .select("id, schedule_date, shift, agent_id, coverage_role")
     .gte("schedule_date", startDate)
     .lte("schedule_date", endDate)
     .order("schedule_date")
     .order("shift");
-  return (data || []) as { id: number; schedule_date: string; shift: string; agent_id: string }[];
+  return (data || []) as { id: number; schedule_date: string; shift: string; agent_id: string; coverage_role: "primary" | "backup" | null }[];
 }

@@ -10,7 +10,6 @@ export interface Agent {
   shift_slot: "morning" | "afternoon" | null;
   role: AgentRole;
 }
-
 export interface Conversation {
   conversation_id: string;
   lead_phone: string;
@@ -57,6 +56,7 @@ export interface GuardShift {
   schedule_date: string;
   shift: string;
   agent_id: string;
+  coverage_role: "primary" | "backup" | null;
   agents?: { name: string };
 }
 
@@ -76,6 +76,56 @@ export interface ScrapeRun {
   created_at: string;
 }
 
+export interface SLABreach {
+  conversation_id: string;
+  lead_name: string | null;
+  lead_phone: string;
+  assigned_agent_id: string;
+  agent_name: string;
+  assigned_at: string;
+  pending_seconds: number;
+  stage: string;
+}
+
+// LRV2-014: routing-v2 pilot observability. Mirrors routing_v2_ops_view.
+export interface RoutingV2OpsRow {
+  opportunity_id: number;
+  state: string;
+  routing_tier: "owner" | "primary_guard" | "backup_guard" | null;
+  assigned_agent_id: string | null;
+  assigned_agent_name: string | null;
+  conversation_id: string | null;
+  conversation_source: string | null;
+  property_id: string | null;
+  detected_at: string;
+  delivered_at: string | null;
+  expires_at: string | null;
+  sla_remaining_seconds: number | null;
+  is_unassigned: boolean;
+  last_evidence_type: string | null;
+  last_evidence_at: string | null;
+  last_evidence: Record<string, unknown> | null;
+}
+
+// Mirrors get_routing_v2_kpis(); values are null until enough data exists.
+export interface RoutingV2KPIs {
+  generated_at: string;
+  days: number;
+  avg_detection_to_delivery_seconds: number | null;
+  avg_delivery_to_acceptance_seconds: number | null;
+  avg_total_seconds: number | null;
+  acceptance_rate_by_tier: Record<string, number>;
+  escalations: number;
+  late_claims: number;
+  failures_by_integration: {
+    whatsapp: number;
+    inmuebles24: number;
+    easybroker: number;
+  };
+  unassigned_cases_open: number;
+  unassigned_cases_in_window: number;
+}
+
 export interface KPIs {
   totalLeadsToday: number;
   totalLeadsWeek: number;
@@ -83,6 +133,7 @@ export interface KPIs {
   nightQueuePending: number;
   avgResponseMin: number;
   conversionRate: number;
+  slaBreachesCount: number;
   bySource: {
     inmuebles24: number;
     easybroker: number;

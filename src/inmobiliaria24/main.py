@@ -254,16 +254,43 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                 else:
                     logger.info("No new leads to send — all already pushed")
 
-                # Flip status only once the lead is genuinely claimed in
-                # Supabase. Claims happen minutes after intake, so a new lead
-                # flips on a later run. mark_lead_contacted is gated internally
-                # by MARK_CONTACTED and exits fast when already Contactado.
-                from inmobiliaria24.supa import fetch_claimed_i24_lead_ids
+                # Portal side effect starts only after routing-v2 committed the
+                # exact opportunity assignment. Work comes from Supabase rather
+                # than the Pendiente scrape so a portal-success/DB-failure is
+                # reconciled next run as the idempotent "already Contactado" case.
+                if os.environ.get("MARK_CONTACTED", "").strip().lower() in ("1", "true", "yes"):
+                    from inmobiliaria24.supa import (
+                        claim_pending_i24_contacts,
+                        finish_i24_contact_attempt,
+                        validate_i24_contact_attempt,
+                    )
 
-                claimed_ids = await fetch_claimed_i24_lead_ids()
-                for lead in all_leads:
-                    if lead.get("lead_id") and str(lead["lead_id"]) in claimed_ids:
-                        await mark_lead_contacted(page, lead)
+                    for contact in await claim_pending_i24_contacts():
+                        try:
+                            opportunity_id = int(contact["opportunity_id"])
+                            lease_token = str(contact["lease_token"])
+                            if not await validate_i24_contact_attempt(opportunity_id, lease_token):
+                                await finish_i24_contact_attempt(
+                                    opportunity_id, lease_token, success=False,
+                                    error_code="assignment_changed_before_portal",
+                                )
+                                logger.warning("Skipping stale i24 Contactado lease for opportunity {}", opportunity_id)
+                                continue
+                            evidence: dict = {}
+                            contacted = await mark_lead_contacted(
+                                page,
+                                {"lead_id": contact["i24_lead_id"]},
+                                evidence=evidence,
+                            )
+                            await finish_i24_contact_attempt(
+                                opportunity_id,
+                                lease_token,
+                                success=contacted,
+                                error_code=evidence.get("error_code"),
+                                screenshot_path=evidence.get("screenshot_path"),
+                            )
+                        except Exception as e:
+                            logger.warning("i24 Contactado task failed safely: {}", str(e))
 
                 # Case A: write the Inmuebles24 advisor note ("Asignado a <asesor>")
                 # for any assigned lead that still lacks one. Reuses this logged-in

@@ -1,0 +1,54 @@
+{
+  "schema": "lead-routing-v2-production-baseline/v1",
+  "captured_at": "2026-08-12",
+  "authority": {
+    "manifest": "n8n-workflow-manifest.json",
+    "snapshot_pattern": "wf_*_backup_20260812T083420Z.json",
+    "rule": "Snapshot metadata is inventory authority; local exports are reusable artifacts, not proof of production activation."
+  },
+  "supervisor_approval": {
+    "status": "approved",
+    "approved_at": "2026-08-12",
+    "approved_scope": "contract_and_baseline_only",
+    "production_changes_authorized": false,
+    "approved_by": "codex_supervisor"
+  },
+  "sanitization": {
+    "contains_credentials": false,
+    "contains_private_urls_or_hosts": false,
+    "omitted": ["URLs", "hosts", "API keys", "service-role values", "authorization headers", "credential payloads"]
+  },
+  "active_call_edges_proven": [
+    {"caller_id": "Obr38705ZZYS3FB8", "callee_id": "zOHmTODH4QSqALnp"},
+    {"caller_id": "xzBG0GIsHCUd44DC", "callee_id": "zOHmTODH4QSqALnp"}
+  ],
+  "workflows": [
+    {"id":"04aQhTOiXlDmN9bK","name":"WF3a - Auction Launcher (Evolution)","active":false,"version_id":"731fb834-4da9-4fbc-b4be-6d4548164105","sha256":"c32d8f8b4a332093738735e53ca703f2b930c0955d24429342dba81c3a269c36","source_file":"wf_04aQhTOiXlDmN9bK_backup_20260812T083420Z.json","callers":["UNIKqyAvIUAZkNIs"],"callees":[],"role":"owner_first_reusable_inactive","do_not_activate":true},
+    {"id":"2nB5HkGii7ftzosn","name":"WF18 - EB Owner Sync","active":true,"version_id":"088b8300-693d-475c-a911-56965d7ae46f","sha256":"1c32d034ecf561265f93a8d758ad987580654a4ced5fbda210955917ded48e5a","source_file":"wf_2nB5HkGii7ftzosn_backup_20260812T083420Z.json","callers":[],"callees":[]},
+    {"id":"Bo2YbbUpmBzRbhDa","name":"WF13 - Directed Owner Notify (Cloud API)","active":false,"version_id":"efd98dc0-dcea-4429-b572-b1413abfb7e0","sha256":"ba45d48f1e18829092f94c796dd5eedc4530bc1b0ebac871a6ad2f3b144ecfbb","source_file":"wf_Bo2YbbUpmBzRbhDa_backup_20260812T083420Z.json","callers":[],"callees":[],"role":"owner_first_reusable_inactive","do_not_activate":true},
+    {"id":"He95yJflKVspGFyb","name":"BYG WF21 Error Handler","active":true,"version_id":"a3b84eb5-64a9-4ff3-8f17-fd94e6513962","sha256":"0c8bde9c7cd004a273fe0349cc96b56cf1c3579203c740b971ddf0d7e02810cb","source_file":"wf_He95yJflKVspGFyb_backup_20260812T083420Z.json","callers":[],"callees":[]},
+    {"id":"JM2HxJxl53k4zlki","name":"WF3b - Claim Handler (Evolution)","active":false,"version_id":"6c7b28af-e718-442f-9554-208094ac6b5a","sha256":"db4cc9eb5bc454dfbeaf8dbe7da65b301e9518e1cc1035dec138d35b1ae7f3d7","source_file":"wf_JM2HxJxl53k4zlki_backup_20260812T083420Z.json","callers":["snF6Sr9CBJIevMVD via environment reference"],"callees":[],"role":"owner_first_reusable_inactive","do_not_activate":true},
+    {"id":"K8Hzk2fCYjZHWNKi","name":"WF14 - Follow-Up Sweeper (Evolution)","active":false,"version_id":"c0f032c6-d949-4127-b510-c56465b1af93","sha256":"211204f5fd1abddf8148ffe77af3d8a3b818c2e6f00d073bbd18313417d6818a","source_file":"wf_K8Hzk2fCYjZHWNKi_backup_20260812T083420Z.json","callers":[],"callees":[],"do_not_activate":true},
+    {"id":"LHQukWVhcmSfPwQb","name":"WF6 - Guard Schedule Sync (Supabase)","active":true,"version_id":"ec06e3f1-7a0b-49b4-854a-38a3ccc38c62","sha256":"5e8897deab89cf6d494ea4751c7ba68802b886cd6583a12ce6cefcdb76b69320","source_file":"wf_LHQukWVhcmSfPwQb_backup_20260812T083420Z.json","callers":[],"callees":[]},
+    {"id":"Mu3YTTH8IgtaH7Ml","name":"WF8b - EasyBroker Lead Intake","active":false,"version_id":"e47a9738-b1e7-42ba-b8e5-448246f08aef","sha256":"33f78ce8b6985bd8b401549f48e26f2f165aae1b623ae65bad9b2919fe907d9e","source_file":"wf_Mu3YTTH8IgtaH7Ml_backup_20260812T083420Z.json","callers":[],"callees":["zOHmTODH4QSqALnp"],"role":"owner_first_reusable_inactive","do_not_activate":true},
+    {"id":"Obr38705ZZYS3FB8","name":"WF10 - Scraper Lead Intake","active":true,"version_id":"99e1a74b-ed24-4ea0-8586-9e71547873f1","sha256":"dd7b9bcfe885a735b354afeb88a7526a35a9c7af0ee2a3b02b6678d0f1dfcdfc","source_file":"wf_Obr38705ZZYS3FB8_backup_20260812T083420Z.json","callers":["scraper webhook"],"callees":["zOHmTODH4QSqALnp"]},
+    {"id":"pYGcyX1ur24dQVew","name":"WF5 - Human Handoff (Evolution)","active":true,"version_id":"5dbdbf01-1c1a-42e7-b9db-b38656d616f4","sha256":"57b8e7936c00c9d6852bcc4b53948aea7e66f21025a7e8240ab0691f7e7eb576","source_file":"wf_pYGcyX1ur24dQVew_backup_20260812T083420Z.json","callers":["tnvPoAmVZ0zqGzOs via environment reference"],"callees":[]},
+    {"id":"pYV88ntxI0Lc4NCB","name":"BYG WF20 Watchdog","active":true,"version_id":"4bab3892-4b30-4aa2-96b8-13cfd00a8b78","sha256":"a99cd90c38e414ac6d84fc4bc3d885e5a74185e5249c2d32b9ffd41eaca2fc2b","source_file":"wf_pYV88ntxI0Lc4NCB_backup_20260812T083420Z.json","callers":[],"callees":[]},
+    {"id":"snF6Sr9CBJIevMVD","name":"WF1 - Inbound Router (Evolution)","active":true,"version_id":"96c94594-2988-4519-8cb6-61fa90aeba44","sha256":"32aea69ac069ff5aea320a8df67e2c99a764feb002a79d881151b9688a6287ca","source_file":"wf_snF6Sr9CBJIevMVD_backup_20260812T083420Z.json","callers":["WhatsApp webhook"],"callees":["WF2 via environment reference","WF3b via environment reference","WF4 via environment reference","WF15 via environment reference"]},
+    {"id":"T9hj26uXtPUR69Xh","name":"WF16 - Weekly Gerente Report (Evolution)","active":true,"version_id":"2ed61211-1c78-4a03-b271-bd63b8523052","sha256":"8b0a1bf9f0e304b4a1112875423c430e8f6f1232316d83d05087202b49048da6","source_file":"wf_T9hj26uXtPUR69Xh_backup_20260812T083420Z.json","callers":[],"callees":[]},
+    {"id":"tnvPoAmVZ0zqGzOs","name":"WF4 - AI Conversation (Evolution + OpenRouter)","active":true,"version_id":"def2df89-4dc7-4d76-aeba-3897aa749f53","sha256":"113e664d0ef03d73c4cbfbe79351c16bde394890379e6f0fb45c611a516bc2dc","source_file":"wf_tnvPoAmVZ0zqGzOs_backup_20260812T083420Z.json","callers":["snF6Sr9CBJIevMVD via environment reference"],"callees":["WF5 via environment reference"]},
+    {"id":"UNIKqyAvIUAZkNIs","name":"WF3c - Auction Expiry Sweeper (Tiered)","active":false,"version_id":"eba7651d-7aa2-4dc3-902c-c1bd76d5261b","sha256":"5194ed90f65f61d14e68b74e3e8241d7c7672effb8d0c23395b02b025d6814cd","source_file":"wf_UNIKqyAvIUAZkNIs_backup_20260812T083420Z.json","callers":[],"callees":["04aQhTOiXlDmN9bK"],"role":"owner_first_reusable_inactive","do_not_activate":true},
+    {"id":"w7yJr7naWoxPq6Pw","name":"WF12 - Owner Resolver (EB owner table)","active":false,"version_id":"811e1bec-3b54-4ba9-8716-146bc7fa2af5","sha256":"e15add2b9dcc58c3b49986882bec0c83395e05f8d05b06ad016ac052241ff94a","source_file":"wf_w7yJr7naWoxPq6Pw_backup_20260812T083420Z.json","callers":[],"callees":[],"role":"owner_first_reusable_inactive","do_not_activate":true},
+    {"id":"wf15smoketest01","name":"WF15 SMOKE TEST (temp)","active":false,"version_id":"3e25a41d-65da-42fc-a04b-1b1940dfeb00","sha256":"f41d86907e1e734ea73987d2d00a426b71a8e57fcd494f99da45508b19bf8705","source_file":"wf_wf15smoketest01_backup_20260812T083420Z.json","callers":[],"callees":[],"role":"temporary_inactive","do_not_activate":true},
+    {"id":"wf16smoketest01","name":"WF16 SMOKE TEST (temp)","active":false,"version_id":"278e0936-8688-45df-bfc0-5defd1130289","sha256":"40db46ad089be8d11d68e3193c33255bf1ba26d3393a04e871a484c7537b9dc0","source_file":"wf_wf16smoketest01_backup_20260812T083420Z.json","callers":[],"callees":[],"role":"temporary_inactive","do_not_activate":true},
+    {"id":"wf1smoketest01","name":"WF1 SMOKE TEST (temp)","active":false,"version_id":"3a623a8f-aed6-4dd5-9973-ee5536ae8721","sha256":"45a654d32b7482da3c948482c3b47f5be8dab10dfb382ebdf35b0d6c05224828","source_file":"wf_wf1smoketest01_backup_20260812T083420Z.json","callers":[],"callees":["WF2 via environment reference","WF3b via environment reference","WF4 via environment reference","WF15 via environment reference"],"role":"temporary_inactive","do_not_activate":true},
+    {"id":"xzBG0GIsHCUd44DC","name":"WF7 - Morning Report & Night Queue Processing","active":true,"version_id":"1427f218-b008-4026-bbfe-71bb898a9255","sha256":"424b7ad33c7aa5ada65597aee0960807e0b8bb9b2ea5bb34bfb8afc95f51bf52","source_file":"wf_xzBG0GIsHCUd44DC_backup_20260812T083420Z.json","callers":["scheduled 08:00/08:05"],"callees":["zOHmTODH4QSqALnp"]},
+    {"id":"YkhDEps0WbqaszMX","name":"WF17 - Reporte Semanal Email (Gerencia)","active":true,"version_id":"4d668e2b-25d4-47dc-ac10-76f66a30809b","sha256":"32189fbf0607aff54d2c573a5e769c5fcdf10588d4959ed09431ffb6f4b468db","source_file":"wf_YkhDEps0WbqaszMX_backup_20260812T083420Z.json","callers":[],"callees":[]},
+    {"id":"ZI5mD6269xSZhltN","name":"WF8 - EasyBroker Contact Polling","active":false,"version_id":"511f86a4-6843-4bd3-99a1-7353da1b9761","sha256":"e45f8370fd46f34a54b0c35eae337bcb448fd6d62e8a97943cb4bcb1ba65897b","source_file":"wf_ZI5mD6269xSZhltN_backup_20260812T083420Z.json","callers":[],"callees":["WF3a via environment reference"],"role":"inactive_reusable","do_not_activate":true},
+    {"id":"zOHmTODH4QSqALnp","name":"WF19 - Guard Notify (Direct)","active":true,"version_id":"94df0eb7-6591-4cc5-97b0-e97ed1fcc0df","sha256":"a6a50f3bdc9a4203100275276c92dd3f3e186756a5d3424fb0a4381819483b86","source_file":"wf_zOHmTODH4QSqALnp_backup_20260812T083420Z.json","callers":["Obr38705ZZYS3FB8","xzBG0GIsHCUd44DC","Mu3YTTH8IgtaH7Ml (inactive)"],"callees":[]},
+    {"id":"ZUO5otqPzu9VYv8Z","name":"WF2 - Lead Intake (Evolution)","active":true,"version_id":"9b2d6f16-ace0-4c8f-858c-9640673460cb","sha256":"96cc7acb7d93f70852690a78e2b4660f2e53103a9b738f3acb056024b8e9ec53","source_file":"wf_ZUO5otqPzu9VYv8Z_backup_20260812T083420Z.json","callers":["snF6Sr9CBJIevMVD via environment reference"],"callees":["WF3a via environment reference"]},
+    {"id":"Zwp2aENlqLQwF3Ry","name":"WF15 - Follow-Up Reply Handler (Evolution)","active":false,"version_id":"8f75af44-c140-4263-b6c3-3989aab939fa","sha256":"134274fafffed5791e362cf4222d9c228d23a8e9f7772cdddc04632f016c9f06","source_file":"wf_Zwp2aENlqLQwF3Ry_backup_20260812T083420Z.json","callers":["snF6Sr9CBJIevMVD via environment reference"],"callees":[],"do_not_activate":true}
+  ],
+  "do_not_activate_yet": ["04aQhTOiXlDmN9bK", "Bo2YbbUpmBzRbhDa", "JM2HxJxl53k4zlki", "K8Hzk2fCYjZHWNKi", "Mu3YTTH8IgtaH7Ml", "UNIKqyAvIUAZkNIs", "w7yJr7naWoxPq6Pw", "ZI5mD6269xSZhltN", "Zwp2aENlqLQwF3Ry", "wf15smoketest01", "wf16smoketest01", "wf1smoketest01"],
+  "rollback": "Restore only from this snapshot after approved LRV2-015 runbook; LRV2-001 performs no production write."
+}

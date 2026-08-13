@@ -1,0 +1,11 @@
+[
+  {"name":"sent-does-not-start-sla","status":"sent","message_id":"wamid.owner.100","opportunity_id":100,"tier":"owner"},
+  {"name":"delivered-starts-sla","status":"delivered","message_id":"wamid.owner.100","opportunity_id":100,"tier":"owner"},
+  {"name":"duplicate-delivered-is-idempotent","status":"delivered","message_id":"wamid.owner.100","opportunity_id":100,"tier":"owner"},
+  {"name":"failed-does-not-start-sla","status":"failed","message_id":"wamid.owner.101","opportunity_id":101,"tier":"owner"},
+  {"name":"accepted-is-ignored","status":"accepted","message_id":"wamid.owner.102","opportunity_id":102,"tier":"owner"},
+  {"name":"late-failed-cannot-revert-delivered","status":"failed","message_id":"wamid.owner.100","opportunity_id":100,"tier":"owner"},
+  {"name":"owner_without_primary_uses_backup","status":"failed","message_id":"wamid.owner.103","opportunity_id":103,"tier":"owner"},
+  {"name":"stale_lease_token_rejected","status":"sent","message_id":"wamid.owner.104","opportunity_id":104,"tier":"owner"},
+  {"name":"purge_redacts_target_number","status":"failed","message_id":"wamid.owner.105","opportunity_id":105,"tier":"owner"}
+]

@@ -2,13 +2,7 @@
   "name": "WF3c - Tiered Escalation Sweeper (Evolution)",
   "nodes": [
     {
-      "parameters": {
-        "rule": {
-          "interval": [
-            { "field": "minutes", "minutesInterval": 1 }
-          ]
-        }
-      },
+      "parameters": {"rule": {"interval": [{"field": "minutes", "minutesInterval": 1}]}},
       "id": "38f75920-a753-410b-a9b3-c2f04daefb9a",
       "name": "Every Minute",
       "type": "n8n-nodes-base.scheduleTrigger",
@@ -16,180 +10,66 @@
       "position": [240, 300]
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Expire any open auction past its deadline, then classify the next tier\n-- for conversations that are STILL unassigned.\n--   routing_tier='owner'  -> escalate to guard auction (to_guard)\n--   routing_tier='guard'  -> escalate to manager      (to_manager)\n--   routing_tier IS NULL  -> legacy TOMO auction -> manager (to_manager)\nWITH expired AS (\n  UPDATE auctions\n  SET status = 'expired'\n  WHERE status = 'open' AND expires_at <= NOW()\n  RETURNING auction_id, conversation_id, property_id, short_code\n)\nSELECT\n  e.auction_id,\n  e.conversation_id,\n  e.property_id,\n  e.short_code,\n  c.routing_tier,\n  c.owner_agent_id,\n  c.lead_phone,\n  c.lead_name,\n  COALESCE(pc.payload->>'title', c.current_property, 'Propiedad') AS property_title,\n  COALESCE(pc.payload->>'price', 'Precio por confirmar')          AS property_price,\n  CASE WHEN c.routing_tier = 'owner' THEN 'to_guard' ELSE 'to_manager' END AS next_action\nFROM expired e\nJOIN conversations c ON c.conversation_id = e.conversation_id\nLEFT JOIN properties_cache pc ON pc.property_id = e.property_id\nWHERE c.assigned_agent_id IS NULL;",
-        "options": {}
-      },
+      "parameters": {"operation": "executeQuery", "query": "SELECT * FROM public.sweep_expired_routing_tiers(100);", "options": {}},
       "id": "4907bdf7-6514-4c5e-b147-3cecbfee7398",
-      "name": "Expire + Classify Tier",
+      "name": "Advance Expired Tiers",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [460, 300],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      },
-      "alwaysOutputData": true
+      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
     },
     {
-      "parameters": {
-        "rules": {
-          "values": [
-            {
-              "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
-                "conditions": [
-                  {
-                    "id": "route-guard",
-                    "leftValue": "={{ $json.next_action }}",
-                    "rightValue": "to_guard",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "to_guard"
-            },
-            {
-              "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
-                "conditions": [
-                  {
-                    "id": "route-manager",
-                    "leftValue": "={{ $json.next_action }}",
-                    "rightValue": "to_manager",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "to_manager"
-            }
-          ],
-          "fallbackOutput": "none"
-        },
-        "options": {}
-      },
+      "parameters": {"rules": {"values": [
+        {"conditions": {"options": {"caseSensitive": true, "typeValidation": "strict", "version": 2}, "conditions": [{"id": "route-guard", "leftValue": "={{ $json.state }}", "rightValue": "guard_delivery_pending", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "guard_pending"},
+        {"conditions": {"options": {"caseSensitive": true, "typeValidation": "strict", "version": 2}, "conditions": [{"id": "route-unassigned", "leftValue": "={{ $json.state }}", "rightValue": "unassigned_alerted", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "unassigned"}
+      ], "fallbackOutput": "none"}, "options": {}},
       "id": "a1a2a3a4-0003-4000-8000-000000000003",
-      "name": "Route by Tier",
+      "name": "Route Transition",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [700, 300]
+      "position": [680, 300]
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Owner did not claim in time: move conversation to the guard tier.\nUPDATE conversations\nSET routing_tier = 'guard', tier_notified_at = NOW()\nWHERE conversation_id = $1::uuid\nRETURNING conversation_id;",
-        "options": {
-          "queryReplacement": "={{ $json.conversation_id }}"
-        }
-      },
+      "parameters": {"operation": "executeQuery", "query": "SELECT * FROM public.claim_pending_guard_deliveries(100);", "options": {}},
       "id": "a1a2a3a4-0004-4000-8000-000000000004",
-      "name": "Set Tier = Guard",
+      "name": "Claim Pending Guard Deliveries",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [940, 180],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
+      "position": [900, 180],
+      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
     },
     {
-      "parameters": {
-        "jsCode": "// Shape the WF3a (guard auction) input from the classified row.\nconst r = $('Expire + Classify Tier').item.json;\nreturn [{\n  json: {\n    conversation_id: r.conversation_id,\n    lead_phone: r.lead_phone,\n    lead_name: r.lead_name,\n    property_id: r.property_id,\n    property_title: r.property_title,\n    property_price: r.property_price,\n    assigned_agent_id: null\n  }\n}];"
-      },
+      "parameters": {"jsCode": "return $input.all().map(({json:a})=>({json:{attempt_id:a.attempt_id,opportunity_id:a.opportunity_id,routing_tier:a.routing_tier,recipient_number:a.target_number,target_agent_id:a.target_agent_id,lease_token:a.lease_token}}));"},
       "id": "a1a2a3a4-0005-4000-8000-000000000005",
-      "name": "Prepare Guard Auction Input",
+      "name": "Shape Guard Delivery",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1160, 180]
+      "position": [1120, 180]
     },
     {
-      "parameters": {
-        "source": "database",
-        "workflowId": "={{ $env.WF3A_WORKFLOW_ID }}",
-        "options": {}
-      },
+      "parameters": {"source": "database", "workflowId": "={{ $env.WF13_WORKFLOW_ID }}", "options": {}},
       "id": "a1a2a3a4-0006-4000-8000-000000000006",
-      "name": "Call WF3a: Guard Auction",
+      "name": "Call Directed Guard Offer",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1380, 180]
+      "position": [1340, 180]
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Final tier: assign the manager and mark the conversation handled.\nUPDATE conversations\nSET routing_tier = 'manager',\n    assigned_agent_id = 'agent_manager',\n    mode = 'human',\n    claimed_via = COALESCE(claimed_via, 'manual'),\n    tier_notified_at = NOW()\nWHERE conversation_id = $1::uuid\nRETURNING conversation_id, lead_phone, lead_name;",
-        "options": {
-          "queryReplacement": "={{ $json.conversation_id }}"
-        }
-      },
+      "parameters": {"method": "POST", "url": "={{ $env.WA_CLOUD_API_BASE_URL + '/' + $env.WA_API_VERSION + '/' + $env.WA_PHONE_NUMBER_ID + '/messages' }}", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"}, {"name": "Content-Type", "value": "application/json"}]}, "sendBody": true, "specifyBody": "json", "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $env.MANAGER_PHONE }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify('Lead sin asignar. Oportunidad ' + $json.opportunity_id + ', propiedad ' + ($json.property_id || 'sin referencia') + '. Revision manual requerida.') }} }\n}", "options": {"timeout": 10000}},
       "id": "a1a2a3a4-0007-4000-8000-000000000007",
-      "name": "Assign Manager",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [940, 420],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $env.MANAGER_PHONE }}\",\n  \"text\": {{ JSON.stringify('\\u26A0\\uFE0F Lead sin asignar\\n\\nLead: ' + ($('Expire + Classify Tier').item.json.lead_name || 'Sin nombre') + ' (' + $('Expire + Classify Tier').item.json.lead_phone + ')\\nPropiedad: ' + $('Expire + Classify Tier').item.json.property_title + '\\n\\nNadie tomo el lead a tiempo. Asignacion manual requerida.') }}\n}",
-        "options": { "timeout": 10000 }
-      },
-      "id": "a1a2a3a4-0008-4000-8000-000000000008",
-      "name": "Notify Manager via Evolution",
+      "name": "Alert Unassigned (No Assignment)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1160, 420],
+      "position": [900, 420],
       "continueOnFail": true
     }
   ],
   "connections": {
-    "Every Minute": {
-      "main": [[{ "node": "Expire + Classify Tier", "type": "main", "index": 0 }]]
-    },
-    "Expire + Classify Tier": {
-      "main": [[{ "node": "Route by Tier", "type": "main", "index": 0 }]]
-    },
-    "Route by Tier": {
-      "main": [
-        [{ "node": "Set Tier = Guard", "type": "main", "index": 0 }],
-        [{ "node": "Assign Manager", "type": "main", "index": 0 }]
-      ]
-    },
-    "Set Tier = Guard": {
-      "main": [[{ "node": "Prepare Guard Auction Input", "type": "main", "index": 0 }]]
-    },
-    "Prepare Guard Auction Input": {
-      "main": [[{ "node": "Call WF3a: Guard Auction", "type": "main", "index": 0 }]]
-    },
-    "Assign Manager": {
-      "main": [[{ "node": "Notify Manager via Evolution", "type": "main", "index": 0 }]]
-    }
+    "Every Minute": {"main": [[{"node": "Advance Expired Tiers", "type": "main", "index": 0}]]},
+    "Advance Expired Tiers": {"main": [[{"node": "Route Transition", "type": "main", "index": 0}]]},
+    "Route Transition": {"main": [[{"node": "Claim Pending Guard Deliveries", "type": "main", "index": 0}], [{"node": "Alert Unassigned (No Assignment)", "type": "main", "index": 0}]]},
+    "Claim Pending Guard Deliveries": {"main": [[{"node": "Shape Guard Delivery", "type": "main", "index": 0}]]},
+    "Shape Guard Delivery": {"main": [[{"node": "Call Directed Guard Offer", "type": "main", "index": 0}]]}
   },
-  "settings": {
-    "executionOrder": "v1"
-  }
+  "settings": {"executionOrder": "v1", "saveExecutionProgress": false, "saveManualExecutions": false, "saveDataErrorExecution": "none", "saveDataSuccessExecution": "none"}
 }

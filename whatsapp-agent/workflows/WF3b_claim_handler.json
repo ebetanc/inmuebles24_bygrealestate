@@ -17,8 +17,68 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "typeValidation": "strict"},
+          "conditions": [{
+            "id": "wf3b-routing-v2-id",
+            "leftValue": "={{ String($json.opportunity_id || '') }}",
+            "rightValue": "",
+            "operator": {"type": "string", "operation": "notEmpty", "singleValue": true}
+          }],
+          "combinator": "and"
+        }
+      },
+      "id": "wf3b-is-routing-v2",
+      "name": "Is Routing V2 Claim?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
-        "query": "-- ATOMIC CLAIM: WHERE status='open' ensures first-reply-wins.\nWITH claim AS (\n  UPDATE auctions\n  SET status='claimed', winner_agent_id=$1, claimed_at=NOW()\n  WHERE short_code=$2 AND status='open' AND expires_at > NOW()\n  RETURNING auction_id, conversation_id, property_id, winner_agent_id, notified_agents\n)\nSELECT c.*, conv.lead_phone, conv.lead_name, pc.payload AS property_payload\nFROM claim c\nJOIN conversations conv ON conv.conversation_id = c.conversation_id\nLEFT JOIN properties_cache pc ON pc.property_id = c.property_id;",
+        "query": "SELECT * FROM public.claim_lead_opportunity($1::bigint,$2,$3,encode(digest($4,'sha256'),'hex'),$5);",
+        "options": {"queryReplacement": "={{ [$json.opportunity_id, $json.routing_tier, $json.agent_id, $json.agent_phone, $json.messageId] }}"}
+      },
+      "id": "wf3b-claim-routing-v2",
+      "name": "Claim Routing V2 Opportunity",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [640, 120],
+      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "const trigger=$('When Called by WF1').first().json; const claim=$input.first().json;\nconst text={accepted:'Prospecto asignado. Ya puedes atenderlo.',already_assigned:'Este prospecto ya fue asignado.',expired:'La oferta ya vencio o pertenece a un turno anterior.',not_authorized:'Esta oferta no estaba dirigida a tu usuario.',delivery_pending:'La oferta aun no tiene entrega confirmada.'}[claim.claim_status]||'No fue posible procesar la aceptacion.';\nreturn [{json:{number:trigger.agent_phone,text,claim_status:claim.claim_status,opportunity_id:claim.result_opportunity_id}}];"
+      },
+      "id": "wf3b-build-v2-result",
+      "name": "Build Routing V2 Claim Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WA_CLOUD_API_BASE_URL + '/' + $env.WA_API_VERSION + '/' + $env.WA_PHONE_NUMBER_ID + '/messages' }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"}, {"name": "Content-Type", "value": "application/json"}]},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify($json.text) }} }\n}",
+        "options": {"timeout": 10000}
+      },
+      "id": "wf3b-send-v2-result",
+      "name": "Send Routing V2 Claim Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 120],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Legacy TOMO claim. Routing-v2 opportunities are claimed only through claim_lead_opportunity.\nWITH claim AS (\n  UPDATE auctions\n  SET status='claimed', winner_agent_id=$1, claimed_at=NOW()\n  WHERE short_code=$2 AND status='open' AND expires_at > NOW()\n    AND NOT EXISTS (\n      SELECT 1 FROM public.lead_routing_opportunities o\n      WHERE o.conversation_id=auctions.conversation_id\n        AND o.state NOT IN ('closed_won','closed_lost')\n    )\n  RETURNING auction_id, conversation_id, property_id, winner_agent_id, notified_agents\n)\nSELECT c.*, conv.lead_phone, conv.lead_name, pc.payload AS property_payload\nFROM claim c\nJOIN conversations conv ON conv.conversation_id = c.conversation_id\nLEFT JOIN properties_cache pc ON pc.property_id = c.property_id;",
         "options": {
           "queryReplacement": "={{ $json.agent_id }},={{ $json.short_code }}"
         }
@@ -291,12 +351,24 @@
       "main": [
         [
           {
-            "node": "Atomic Claim (WHERE status=open)",
+            "node": "Is Routing V2 Claim?",
             "type": "main",
             "index": 0
           }
         ]
       ]
+    },
+    "Is Routing V2 Claim?": {
+      "main": [
+        [{"node": "Claim Routing V2 Opportunity", "type": "main", "index": 0}],
+        [{"node": "Atomic Claim (WHERE status=open)", "type": "main", "index": 0}]
+      ]
+    },
+    "Claim Routing V2 Opportunity": {
+      "main": [[{"node": "Build Routing V2 Claim Result", "type": "main", "index": 0}]]
+    },
+    "Build Routing V2 Claim Result": {
+      "main": [[{"node": "Send Routing V2 Claim Result", "type": "main", "index": 0}]]
     },
     "Atomic Claim (WHERE status=open)": {
       "main": [
@@ -414,6 +486,9 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "saveExecutionProgress": true
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none"
   }
 }

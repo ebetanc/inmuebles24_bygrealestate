@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Flujo operativo detallado para la atención, asignación y seguimiento de oportunidades de Inmuebles24 y EasyBroker.">
+  <title>Flujo detallado de atención de leads</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --navy-950: #071b33;
+      --navy-900: #0b2748;
+      --navy-800: #123a63;
+      --blue-700: #145da0;
+      --blue-600: #0878bd;
+      --blue-500: #009bd2;
+      --cyan-200: #a9e5f5;
+      --cyan-100: #dff5fb;
+      --blue-050: #f3f9fc;
+      --surface: #ffffff;
+      --ink: #10283f;
+      --muted: #526a7e;
+      --line: #c9dce7;
+      --line-strong: #92b4c8;
+      --focus: #006cae;
+      --shadow: 0 18px 48px rgba(18, 58, 99, .10);
+      --radius: 14px;
+      --nav-h: 68px;
+      --max: 1240px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + 20px); }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--surface);
+      color: var(--ink);
+      font-family: "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+      line-height: 1.55;
+      overflow-x: hidden;
+    }
+    button, input, select { font: inherit; }
+    button { touch-action: manipulation; }
+    a { color: inherit; }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .skip-link {
+      position: fixed; left: 16px; top: -60px; z-index: 30;
+      padding: 10px 14px; border-radius: var(--radius);
+      background: var(--navy-950); color: #fff; text-decoration: none;
+    }
+    .skip-link:focus { top: 12px; }
+    .shell { width: min(calc(100% - 40px), var(--max)); margin-inline: auto; }
+    .site-nav {
+      position: sticky; top: 0; z-index: 20;
+      min-height: var(--nav-h); border-bottom: 1px solid rgba(146, 180, 200, .65);
+      background: rgba(255, 255, 255, .95); backdrop-filter: blur(14px);
+    }
+    .nav-inner { min-height: var(--nav-h); display: flex; align-items: center; gap: 28px; }
+    .brand { display: flex; align-items: center; gap: 11px; white-space: nowrap; font-weight: 760; color: var(--navy-950); }
+    .brand-mark {
+      width: 34px; height: 34px; display: grid; place-items: center;
+      border-radius: 10px; background: var(--navy-900); color: white;
+      font-size: 13px; letter-spacing: -.02em;
+    }
+    .nav-links { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; margin-left: auto; }
+    .nav-links::-webkit-scrollbar { display: none; }
+    .nav-links a {
+      padding: 9px 11px; border-radius: 10px; color: var(--muted);
+      font-size: 13px; font-weight: 650; text-decoration: none; white-space: nowrap;
+    }
+    .nav-links a:hover, .nav-links a[aria-current="true"] { background: var(--cyan-100); color: var(--navy-900); }
+
+    main { display: block; }
+    section { padding: 82px 0; }
+    .hero { padding: 64px 0 58px; min-height: calc(100dvh - var(--nav-h)); display: grid; align-items: center; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(300px, .82fr); gap: 62px; align-items: center; }
+    .eyebrow { margin: 0 0 18px; color: var(--blue-700); font-size: 12px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+    h1, h2, h3 { color: var(--navy-950); letter-spacing: -.035em; line-height: 1.08; }
+    h1 { max-width: 820px; margin: 0; font-size: clamp(42px, 5.4vw, 72px); font-weight: 790; }
+    h2 { max-width: 860px; margin: 0 0 18px; font-size: clamp(32px, 4vw, 50px); }
+    h3 { margin: 0; font-size: 20px; }
+    .hero-copy { max-width: 620px; margin: 24px 0 0; color: var(--muted); font-size: 20px; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .button {
+      min-height: 46px; display: inline-flex; align-items: center; justify-content: center;
+      padding: 11px 17px; border: 1px solid var(--navy-900); border-radius: 11px;
+      background: var(--navy-900); color: #fff; font-weight: 730; text-decoration: none; white-space: nowrap;
+      transition: transform .18s ease, background-color .18s ease;
+    }
+    .button.secondary { background: white; color: var(--navy-900); border-color: var(--line-strong); }
+    .button:hover { background: var(--blue-700); }
+    .button.secondary:hover { background: var(--cyan-100); }
+    .button:active { transform: translateY(1px); }
+    .hero-brief {
+      position: relative; overflow: hidden; padding: 28px; border-radius: var(--radius);
+      border: 1px solid var(--line); background: var(--blue-050); box-shadow: var(--shadow);
+    }
+    .hero-brief::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 7px; background: var(--blue-500); }
+    .brief-label { margin: 0 0 22px; color: var(--muted); font-size: 13px; font-weight: 750; }
+    .brief-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 24px 18px; }
+    .metric strong { display: block; color: var(--navy-950); font-size: 31px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .metric span { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; }
+    .guardrail { grid-column: 1 / -1; padding-top: 20px; border-top: 1px solid var(--line); color: var(--navy-800); font-weight: 700; }
+    .section-intro { max-width: 760px; margin-bottom: 34px; }
+    .section-intro p { margin: 0; max-width: 68ch; color: var(--muted); font-size: 18px; }
+    .tint { background: var(--blue-050); }
+
+    .summary-grid { display: grid; grid-template-columns: .85fr 1.15fr; gap: 28px; align-items: start; }
+    .promise {
+      position: sticky; top: calc(var(--nav-h) + 24px); padding: 28px;
+      border-radius: var(--radius); background: var(--navy-900); color: white;
+    }
+    .promise h3 { color: white; font-size: 28px; }
+    .promise p { margin: 14px 0 0; color: #d9eaf3; }
+    .principles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .principle { padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: white; }
+    .principle strong { display: block; margin-bottom: 8px; color: var(--navy-900); font-size: 17px; }
+    .principle p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    .route-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 0 0 18px; }
+    .route-toolbar span { margin-right: 5px; color: var(--muted); font-size: 13px; font-weight: 700; }
+    .route-button, .filter-button {
+      min-height: 40px; padding: 8px 13px; border: 1px solid var(--line-strong); border-radius: 10px;
+      background: white; color: var(--navy-800); cursor: pointer; font-size: 13px; font-weight: 730;
+    }
+    .route-button[aria-pressed="true"], .filter-button[aria-pressed="true"] { background: var(--navy-900); border-color: var(--navy-900); color: white; }
+    .flow-wrap { max-width: 100%; overflow-x: auto; padding: 1px 1px 12px; scrollbar-color: var(--line-strong) transparent; }
+    .flow { min-width: 1040px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: white; }
+    .lane { display: grid; grid-template-columns: 144px repeat(6, minmax(132px, 1fr)); min-height: 106px; border-bottom: 1px solid var(--line); }
+    .lane:last-child { border-bottom: 0; }
+    .lane-name { display: flex; align-items: center; padding: 16px; background: var(--blue-050); border-right: 1px solid var(--line); color: var(--navy-900); font-size: 13px; font-weight: 800; }
+    .flow-cell { position: relative; display: grid; place-items: center; padding: 12px 9px; }
+    .flow-cell:not(:last-child)::after { content: ""; position: absolute; width: 28px; height: 2px; right: -14px; top: 50%; background: var(--line-strong); }
+    .node {
+      width: 100%; min-height: 58px; display: grid; place-items: center; padding: 10px;
+      border: 1px solid var(--line-strong); border-radius: 11px; background: white;
+      color: var(--navy-800); text-align: center; font-size: 12px; font-weight: 700;
+      transition: opacity .18s ease, transform .18s ease, background-color .18s ease;
+    }
+    .node.primary { border-color: var(--blue-600); background: var(--cyan-100); }
+    .node.final { border-color: var(--navy-900); background: var(--navy-900); color: white; }
+    .node.empty { visibility: hidden; }
+    .flow[data-highlight]:not([data-highlight="all"]) .node { opacity: .24; }
+    .flow[data-highlight="normal"] .node[data-route~="normal"],
+    .flow[data-highlight="timeout"] .node[data-route~="timeout"],
+    .flow[data-highlight="safe"] .node[data-route~="safe"] { opacity: 1; transform: translateY(-2px); }
+    .flow-caption { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+
+    .scenario-controls { display: flex; flex-wrap: wrap; gap: 9px; margin: 0 0 22px; }
+    .scenario-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    details.scenario { border: 1px solid var(--line); border-radius: var(--radius); background: white; overflow: clip; }
+    details.scenario[open] { border-color: var(--blue-600); box-shadow: 0 10px 30px rgba(18, 58, 99, .08); }
+    details.scenario[hidden] { display: none; }
+    summary { list-style: none; cursor: pointer; padding: 20px 52px 20px 20px; position: relative; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "+"; position: absolute; right: 20px; top: 18px; color: var(--blue-700); font-size: 24px; line-height: 1; }
+    details[open] summary::after { content: "−"; }
+    .scenario-title { display: block; color: var(--navy-950); font-size: 17px; font-weight: 760; }
+    .scenario-summary { display: block; margin-top: 5px; color: var(--muted); font-size: 13px; }
+    .status-label { display: inline-block; margin-top: 10px; padding: 4px 8px; border-radius: 7px; background: var(--cyan-100); color: var(--navy-800); font-size: 11px; font-weight: 800; }
+    .status-label.pending { background: var(--blue-050); border: 1px solid var(--line); }
+    .scenario-body { padding: 0 20px 20px; border-top: 1px solid var(--line); }
+    .scenario-body dl { display: grid; grid-template-columns: 102px 1fr; gap: 9px 14px; margin: 18px 0 0; font-size: 13px; }
+    .scenario-body dt { color: var(--navy-900); font-weight: 800; }
+    .scenario-body dd { margin: 0; color: var(--muted); }
+
+    .matrix-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+    table { width: 100%; min-width: 880px; border-collapse: collapse; background: white; text-align: left; }
+    th { padding: 15px; background: var(--navy-900); color: white; font-size: 12px; letter-spacing: .02em; }
+    td { padding: 15px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; vertical-align: top; }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child { color: var(--navy-950); font-weight: 760; }
+
+    .obs-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 24px; align-items: stretch; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--line); overflow: hidden; }
+    .kpi { padding: 22px; background: white; }
+    .kpi strong { display: block; color: var(--navy-900); font-size: 18px; }
+    .kpi span { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; }
+    .alert-box { padding: 26px; border-radius: var(--radius); background: var(--cyan-100); }
+    .alert-box h3 { font-size: 25px; }
+    .alert-box p { color: var(--navy-800); }
+    .alert-box ul { margin: 18px 0 0; padding-left: 20px; color: var(--navy-800); }
+
+    .rollout { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .phase { padding: 24px; border-top: 5px solid var(--blue-500); border-radius: var(--radius); background: white; box-shadow: var(--shadow); }
+    .phase:nth-child(2) { border-color: var(--blue-700); }
+    .phase:nth-child(3) { border-color: var(--navy-900); }
+    .phase-time { color: var(--blue-700); font-size: 12px; font-weight: 800; }
+    .phase h3 { margin-top: 10px; }
+    .phase ul { padding-left: 18px; color: var(--muted); font-size: 14px; }
+    .gate { margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--line); color: var(--navy-900); font-size: 13px; font-weight: 760; }
+
+    .decisions { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+    .decision-panel { border-radius: var(--radius); padding: 28px; }
+    .decision-panel.confirmed { background: var(--navy-900); color: white; }
+    .decision-panel.pending { background: var(--blue-050); border: 1px solid var(--line); }
+    .decision-panel h3 { font-size: 27px; }
+    .decision-panel.confirmed h3 { color: white; }
+    .decision-panel ul { padding-left: 20px; }
+    .decision-panel.confirmed li { color: #dceaf3; }
+    .decision-panel.pending li { color: var(--muted); }
+    .decision-panel li + li { margin-top: 10px; }
+
+    footer { padding: 34px 0; border-top: 1px solid var(--line); background: var(--blue-050); color: var(--muted); font-size: 12px; }
+    .footer-inner { display: flex; justify-content: space-between; gap: 24px; }
+    .footer-inner p { margin: 0; max-width: 74ch; }
+    .reveal { opacity: 1; transform: none; }
+    @media (prefers-reduced-motion: no-preference) {
+      .reveal.is-pending { opacity: 0; transform: translateY(16px); }
+      .reveal.is-visible { opacity: 1; transform: none; transition: opacity .5s ease, transform .5s ease; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+    @media (max-width: 900px) {
+      section { padding: 62px 0; }
+      .hero { min-height: 0; }
+      .hero-grid, .summary-grid, .obs-grid { grid-template-columns: 1fr; gap: 30px; }
+      .promise { position: static; }
+      .rollout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      :root { --nav-h: 58px; }
+      .shell { width: min(calc(100% - 28px), var(--max)); }
+      .nav-inner { min-height: var(--nav-h); gap: 12px; }
+      .brand span:last-child { display: none; }
+      .brand-mark { width: 32px; height: 32px; }
+      .nav-links { gap: 2px; }
+      .nav-links a { padding: 8px; font-size: 12px; }
+      .hero { padding: 45px 0; }
+      h1 { font-size: clamp(38px, 12vw, 54px); }
+      .hero-copy { font-size: 17px; }
+      .principles, .scenario-grid, .decisions { grid-template-columns: 1fr; }
+      .brief-metrics, .kpi-grid { grid-template-columns: 1fr 1fr; }
+      .footer-inner { flex-direction: column; }
+      .scenario-body dl { grid-template-columns: 1fr; gap: 3px; }
+      .scenario-body dd + dt { margin-top: 8px; }
+    }
+    @media (max-width: 420px) {
+      .hero-actions .button { width: 100%; }
+      .brief-metrics, .kpi-grid { grid-template-columns: 1fr; }
+      .guardrail { grid-column: auto; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+  <header class="site-nav">
+    <nav class="shell nav-inner" aria-label="Navegación del documento">
+      <a class="brand" href="#inicio" aria-label="Ir al inicio">
+        <span class="brand-mark" aria-hidden="true">I24</span>
+        <span>Flujo de atención</span>
+      </a>
+      <div class="nav-links">
+        <a href="#flujo">Flujo</a>
+        <a href="#escenarios">Escenarios</a>
+        <a href="#control">Control</a>
+        <a href="#despliegue">Despliegue</a>
+        <a href="#decisiones">Decisiones</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="contenido">
+    <section class="hero" id="inicio">
+      <div class="shell hero-grid">
+        <div>
+          <p class="eyebrow">Proceso operativo acordado</p>
+          <h1>Una oportunidad. Un responsable. Evidencia completa.</h1>
+          <p class="hero-copy">Flujo detallado para detectar, ofrecer, escalar y cerrar cada consulta sin doble asignación.</p>
+          <div class="hero-actions">
+            <a class="button" href="#flujo">Ver flujo principal</a>
+            <a class="button secondary" href="#escenarios">Explorar escenarios</a>
+          </div>
+        </div>
+        <aside class="hero-brief" aria-label="Parámetros principales">
+          <p class="brief-label">Parámetros confirmados</p>
+          <div class="brief-metrics">
+            <div class="metric"><strong>15 min</strong><span>frecuencia de monitoreo</span></div>
+            <div class="metric"><strong>5 min</strong><span>SLA desde entrega</span></div>
+            <div class="metric"><strong>20:00</strong><span>inicio de silencio</span></div>
+            <div class="metric"><strong>08:05</strong><span>arranque de atención</span></div>
+            <div class="guardrail">Regla de integridad: la primera aceptación válida gana.</div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="tint" id="resumen">
+      <div class="shell summary-grid reveal">
+        <aside class="promise">
+          <h3>Resultado operativo</h3>
+          <p>Cada oportunidad conserva su origen, responsable, reloj, decisión, escalamiento y cierre. La operación puede reconstruir qué pasó y cuándo.</p>
+        </aside>
+        <div class="principles" aria-label="Principios del proceso">
+          <article class="principle"><strong>Captura unificada</strong><p>Mensajes, Teléfono y WhatsApp se revisan cada 15 minutos.</p></article>
+          <article class="principle"><strong>Identidad estable</strong><p>La misma persona y propiedad se unen. Otra propiedad crea otra oportunidad.</p></article>
+          <article class="principle"><strong>Preferencia con límite</strong><p>El primer tag de EasyBroker tiene la primera opción por 5 minutos desde la entrega.</p></article>
+          <article class="principle"><strong>Cobertura por guardia</strong><p>Si el plazo vence, la guardia primaria recibe el caso y después entra el respaldo.</p></article>
+          <article class="principle"><strong>Cierre en origen</strong><p>La asignación final se anota en la conversación exacta y se marca Atendida.</p></article>
+          <article class="principle"><strong>Seguridad operativa</strong><p>Ante falla crítica, se conserva la captura y los casos nuevos pasan directo a guardia.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="flujo">
+      <div class="shell">
+        <div class="section-intro reveal">
+          <h2>Flujo principal por sistema y actor</h2>
+          <p>Use los controles para aislar la ruta normal, el vencimiento o el modo seguro. En móvil, deslice el diagrama horizontalmente.</p>
+        </div>
+        <div class="route-toolbar" aria-label="Resaltar ruta">
+          <span>Resaltar:</span>
+          <button class="route-button" type="button" data-route-filter="all" aria-pressed="true">Todo</button>
+          <button class="route-button" type="button" data-route-filter="normal" aria-pressed="false">Aceptación</button>
+          <button class="route-button" type="button" data-route-filter="timeout" aria-pressed="false">Vencimiento</button>
+          <button class="route-button" type="button" data-route-filter="safe" aria-pressed="false">Modo seguro</button>
+        </div>
+        <div class="flow-wrap" role="region" aria-label="Diagrama de flujo operativo" tabindex="0">
+          <div class="flow" id="main-flow" data-highlight="all">
+            <div class="lane">
+              <div class="lane-name">Inmuebles24</div>
+              <div class="flow-cell"><div class="node primary" data-route="normal timeout safe">Monitorear 3 canales cada 15 min</div></div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout safe">Capturar persona y propiedad</div></div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout safe">Cambiar a Contactado al iniciar</div></div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+            </div>
+            <div class="lane">
+              <div class="lane-name">Orquestación</div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout safe">Deduplicar oportunidad</div></div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout safe">Resolver código EB y primer tag</div></div>
+              <div class="flow-cell"><div class="node primary" data-route="normal timeout">Entregar oferta e iniciar SLA</div></div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout">Validar aceptación atómica</div></div>
+              <div class="flow-cell"><div class="node" data-route="timeout">Escalar por vencimiento</div></div>
+              <div class="flow-cell"><div class="node" data-route="safe">Derivar directo a guardia</div></div>
+            </div>
+            <div class="lane">
+              <div class="lane-name">Ejecutivo</div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout">Recibir WhatsApp</div></div>
+              <div class="flow-cell"><div class="node primary" data-route="normal">Tomar prospecto antes de 5 min</div></div>
+              <div class="flow-cell"><div class="node" data-route="timeout">Respuesta tardía no reasigna</div></div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+            </div>
+            <div class="lane">
+              <div class="lane-name">Guardias</div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node" data-route="safe">Recibir caso nuevo</div></div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node primary" data-route="timeout safe">Primaria, luego respaldo</div></div>
+              <div class="flow-cell"><div class="node" data-route="timeout safe">Aceptar responsabilidad</div></div>
+            </div>
+            <div class="lane">
+              <div class="lane-name">EasyBroker</div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout safe">Aportar código y tags</div></div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node empty">Vacío</div></div>
+              <div class="flow-cell"><div class="node final" data-route="normal timeout safe">Anotar responsable y marcar Atendida</div></div>
+            </div>
+            <div class="lane">
+              <div class="lane-name">Control</div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout safe">Registrar detección</div></div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout safe">Registrar resolución</div></div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout safe">Registrar entrega</div></div>
+              <div class="flow-cell"><div class="node" data-route="normal timeout safe">Registrar decisión</div></div>
+              <div class="flow-cell"><div class="node" data-route="timeout safe">Registrar escalamiento</div></div>
+              <div class="flow-cell"><div class="node final" data-route="normal timeout safe">Cerrar evidencia completa</div></div>
+            </div>
+          </div>
+        </div>
+        <p class="flow-caption">El diagrama expresa reglas confirmadas. Los detalles de reintento por componente siguen en validación técnica.</p>
+      </div>
+    </section>
+
+    <section class="tint" id="escenarios">
+      <div class="shell">
+        <div class="section-intro reveal">
+          <h2>Catálogo de escenarios</h2>
+          <p>Cada ficha separa el comportamiento confirmado de los puntos que todavía requieren una decisión de implementación.</p>
+        </div>
+        <div class="scenario-controls" role="group" aria-label="Filtrar escenarios">
+          <button class="filter-button" type="button" data-scenario-filter="all" aria-pressed="true">Todos</button>
+          <button class="filter-button" type="button" data-scenario-filter="normal" aria-pressed="false">Normales</button>
+          <button class="filter-button" type="button" data-scenario-filter="night" aria-pressed="false">Nocturnos</button>
+          <button class="filter-button" type="button" data-scenario-filter="exception" aria-pressed="false">Excepciones</button>
+          <button class="filter-button" type="button" data-scenario-filter="recovery" aria-pressed="false">Recuperación</button>
+        </div>
+        <div class="scenario-grid" id="scenario-grid">
+          <details class="scenario" data-category="normal">
+            <summary><span class="scenario-title">Oportunidad nueva con responsable</span><span class="scenario-summary">Código EB resuelto y primer tag disponible.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Ruta</dt><dd>Captura, deduplicación, oferta por WhatsApp, SLA de 5 minutos y primera aceptación válida.</dd><dt>Cierre</dt><dd>Responsable anotado en la conversación exacta y estatus Atendida.</dd><dt>Evidencia</dt><dd>Detección, entrega, aceptación, asignación y tiempo total.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="normal">
+            <summary><span class="scenario-title">Misma persona y misma propiedad</span><span class="scenario-summary">La repetición no abre una segunda oportunidad.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>Unir con la oportunidad existente por persona y propiedad.</dd><dt>Resultado</dt><dd>No se reinicia competencia ni se crea doble asignación.</dd><dt>Pendiente</dt><dd>Ventana temporal exacta y precedencia cuando faltan identificadores.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="normal">
+            <summary><span class="scenario-title">Misma persona, otra propiedad</span><span class="scenario-summary">El interés adicional sí crea otra oportunidad.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>Nueva propiedad equivale a nueva oportunidad, aunque la persona ya exista.</dd><dt>Responsable</dt><dd>Se resuelve con el código EB y primer tag de esa propiedad.</dd><dt>Evidencia</dt><dd>Relación con la persona existente y propiedad diferenciada.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="night">
+            <summary><span class="scenario-title">Consulta entre 20:00 y 08:00</span><span class="scenario-summary">Se captura sin enviar mensajes.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Ruta</dt><dd>Conservar la oportunidad en cola nocturna.</dd><dt>Activación</dt><dd>La atención inicia a las 08:05.</dd><dt>Evidencia</dt><dd>Hora de captura, entrada a cola y hora de activación.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="exception">
+            <summary><span class="scenario-title">Vence el SLA del ejecutivo</span><span class="scenario-summary">No hay aceptación válida dentro de 5 minutos.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Ruta</dt><dd>Escalamiento directo a guardia primaria y, si falla, a respaldo.</dd><dt>Integridad</dt><dd>Una aceptación tardía del ejecutivo no modifica al responsable vigente.</dd><dt>Evidencia</dt><dd>Entrega, vencimiento, escalamiento y aceptación de guardia.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="exception">
+            <summary><span class="scenario-title">Aceptaciones simultáneas</span><span class="scenario-summary">Dos respuestas intentan tomar la misma oportunidad.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>La primera aceptación válida gana.</dd><dt>Resultado</dt><dd>Las demás respuestas se registran sin cambiar al responsable.</dd><dt>Pendiente</dt><dd>Texto exacto de confirmación para quien no obtuvo la oportunidad.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="exception">
+            <summary><span class="scenario-title">Respuesta tardía</span><span class="scenario-summary">El ejecutivo responde después del vencimiento.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>La respuesta no cambia al responsable que ya ganó la asignación.</dd><dt>Control</dt><dd>Registrar respuesta tardía para medir comportamiento y explicar el resultado.</dd><dt>Pendiente</dt><dd>Canal y redacción de la notificación de rechazo.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="exception">
+            <summary><span class="scenario-title">Falla de entrega por WhatsApp</span><span class="scenario-summary">No puede comprobarse la entrega al ejecutivo.</span><span class="status-label pending">Pendiente técnico</span></summary>
+            <div class="scenario-body"><dl><dt>Confirmado</dt><dd>El SLA se mide desde la entrega, no desde el intento de envío.</dd><dt>Criterio</dt><dd>No iniciar reloj sin evidencia de entrega. Mantener captura y evitar pérdida del caso.</dd><dt>Por definir</dt><dd>Número de reintentos, espera y umbral para derivar a guardia.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="exception">
+            <summary><span class="scenario-title">EasyBroker sin tag</span><span class="scenario-summary">La propiedad existe, pero no ofrece responsable preferente.</span><span class="status-label pending">Pendiente técnico</span></summary>
+            <div class="scenario-body"><dl><dt>Confirmado</dt><dd>El primer tag es la fuente del ejecutivo responsable cuando existe.</dd><dt>Criterio seguro</dt><dd>No inventar responsable. Mantener trazabilidad y resolver por cobertura operativa.</dd><dt>Por definir</dt><dd>Si entra directo a guardia o queda como caso manual alertado.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="exception">
+            <summary><span class="scenario-title">Propiedad sin código EB</span><span class="scenario-summary">No es posible enlazar de forma confiable la propiedad.</span><span class="status-label pending">Pendiente técnico</span></summary>
+            <div class="scenario-body"><dl><dt>Riesgo</dt><dd>Asignar con una coincidencia ambigua puede escribir en la conversación incorrecta.</dd><dt>Criterio seguro</dt><dd>No completar automáticamente un enlace incierto.</dd><dt>Por definir</dt><dd>Cola manual, reglas de coincidencia y tiempo máximo de resolución.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="recovery">
+            <summary><span class="scenario-title">Caída crítica de n8n, Supabase o scraper</span><span class="scenario-summary">Un componente central impide el flujo normal.</span><span class="status-label">Modo seguro confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>Conservar la captura y enviar casos nuevos directo a guardia.</dd><dt>Alerta</dt><dd>Dashboard y correo muestran casos sin asignar sin asignarlos por sí mismos.</dd><dt>Por definir</dt><dd>Umbrales particulares, detección de salud y política de reintentos por componente.</dd></dl></div>
+          </details>
+          <details class="scenario" data-category="recovery">
+            <summary><span class="scenario-title">Recuperación del servicio</span><span class="scenario-summary">El componente afectado vuelve a estar disponible.</span><span class="status-label pending">Pendiente técnico</span></summary>
+            <div class="scenario-body"><dl><dt>Objetivo</dt><dd>Reconciliar capturas preservadas sin duplicar ofertas ni cambiar responsables finales.</dd><dt>Control</dt><dd>Comparar estado actual, evidencia de entrega y asignación antes de reanudar.</dd><dt>Por definir</dt><dd>Orden de reproceso, lotes, límite de antigüedad y autorización de salida del modo seguro.</dd></dl></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section id="control">
+      <div class="shell">
+        <div class="section-intro reveal">
+          <h2>Matriz de estado, responsabilidad y evidencia</h2>
+          <p>La matriz alinea operación, temporizadores y prueba auditable. Los SLA no confirmados quedan expresamente abiertos.</p>
+        </div>
+        <div class="matrix-wrap" role="region" aria-label="Matriz operativa" tabindex="0">
+          <table>
+            <thead><tr><th>Estado</th><th>Responsable</th><th>SLA</th><th>Evidencia mínima</th><th>Salida</th></tr></thead>
+            <tbody>
+              <tr><td>Capturada</td><td>Sistema de monitoreo</td><td>Revisión cada 15 min</td><td>Canal, persona, propiedad, hora y origen</td><td>Deduplicar</td></tr>
+              <tr><td>En silencio</td><td>Orquestación</td><td>Hasta 08:05</td><td>Hora de entrada y activación prevista</td><td>Activar atención</td></tr>
+              <tr><td>Resuelta</td><td>Orquestación y EasyBroker</td><td>Pendiente técnico</td><td>Código EB, tags y ejecutivo elegido</td><td>Preparar entrega</td></tr>
+              <tr><td>Entregada</td><td>Ejecutivo preferente</td><td>5 min desde entrega</td><td>ID de mensaje, entrega y vencimiento</td><td>Aceptar o escalar</td></tr>
+              <tr><td>Escalada</td><td>Guardia primaria</td><td>Pendiente técnico</td><td>Motivo, hora y destinatario</td><td>Aceptar o pasar a respaldo</td></tr>
+              <tr><td>En respaldo</td><td>Guardia de respaldo</td><td>Pendiente técnico</td><td>Falla primaria y nueva entrega</td><td>Aceptar o alertar</td></tr>
+              <tr><td>Asignada</td><td>Primer aceptante válido</td><td>Inmediato tras validación</td><td>Aceptación ganadora y respuestas rechazadas</td><td>Cerrar en EasyBroker</td></tr>
+              <tr><td>Atendida</td><td>Responsable final</td><td>Pendiente técnico</td><td>Nota en conversación exacta y estatus Atendida</td><td>Seguimiento operativo</td></tr>
+              <tr><td>Modo seguro</td><td>Guardia y operación</td><td>Pendiente técnico</td><td>Falla, captura preservada, alertas y derivación</td><td>Reconciliar al recuperar</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="tint">
+      <div class="shell obs-grid reveal">
+        <div>
+          <div class="section-intro"><h2>Observabilidad para operar y mejorar</h2><p>Medir el embudo completo permite detectar pérdida, demora y concentración sin confundir alertas con asignaciones.</p></div>
+          <div class="kpi-grid">
+            <div class="kpi"><strong>Detección</strong><span>Oportunidades por canal, retraso de captura y duplicados unidos.</span></div>
+            <div class="kpi"><strong>Entrega</strong><span>Intentos, confirmaciones, fallas y tiempo hasta recepción.</span></div>
+            <div class="kpi"><strong>Aceptación</strong><span>Tasa dentro del SLA, primer aceptante y respuestas tardías.</span></div>
+            <div class="kpi"><strong>Escalamiento</strong><span>Vencimientos, uso de guardia primaria y respaldo.</span></div>
+            <div class="kpi"><strong>Cierre</strong><span>Tiempo total, nota EasyBroker y estatus Atendida.</span></div>
+            <div class="kpi"><strong>Salud</strong><span>Modo seguro, casos sin asignar y recuperación de componentes.</span></div>
+          </div>
+        </div>
+        <aside class="alert-box">
+          <h3>Alertar no es asignar</h3>
+          <p>Dashboard y correo hacen visible la excepción. No deciden por sí mismos quién recibe el caso.</p>
+          <ul>
+            <li>Mostrar oportunidades sin responsable.</li>
+            <li>Identificar componente y momento de falla.</li>
+            <li>Evitar una segunda asignación automática.</li>
+            <li>Conservar vínculo a la evidencia original.</li>
+          </ul>
+        </aside>
+      </div>
+    </section>
+
+    <section id="despliegue">
+      <div class="shell">
+        <div class="section-intro reveal"><h2>Despliegue con puertas de control</h2><p>El avance depende de evidencia real. Cada etapa tiene una condición clara antes de ampliar exposición.</p></div>
+        <div class="rollout">
+          <article class="phase"><span class="phase-time">Preparación</span><h3>Validar antes del primer lead</h3><ul><li>Confirmar ejecutivos, tags y guardias.</li><li>Probar entrega y aceptación concurrente.</li><li>Simular horario nocturno y modo seguro.</li><li>Verificar escritura en conversación exacta.</li></ul><div class="gate">Puerta: pruebas críticas aprobadas y pendientes operativos resueltos.</div></article>
+          <article class="phase"><span class="phase-time">Primeros 7 días</span><h3>Revisión diaria</h3><ul><li>Reconciliar capturas contra oportunidades.</li><li>Revisar entregas, vencimientos y tardías.</li><li>Auditar nota EasyBroker y Atendida.</li><li>Ajustar solo con evidencia registrada.</li></ul><div class="gate">Puerta: cero casos perdidos y asignación única sostenida.</div></article>
+          <article class="phase"><span class="phase-time">Día 14 o 100 oportunidades</span><h3>Evaluación formal</h3><ul><li>Analizar conversión por tramo del flujo.</li><li>Medir carga de guardias y concentración.</li><li>Cerrar pendientes de SLA y recuperación.</li><li>Decidir continuidad, ajuste o expansión.</li></ul><div class="gate">Puerta: decisión conjunta basada en KPIs y excepciones reales.</div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="tint" id="decisiones">
+      <div class="shell">
+        <div class="section-intro reveal"><h2>Decisiones confirmadas y pendientes</h2><p>Separar ambos grupos protege el alcance: el equipo implementa lo acordado y valida lo que todavía puede cambiar.</p></div>
+        <div class="decisions">
+          <article class="decision-panel confirmed"><h3>Confirmado</h3><ul><li>Monitoreo de tres canales cada 15 minutos.</li><li>Deduplicación por persona y propiedad.</li><li>Silencio de 20:00 a 08:00 y arranque 08:05.</li><li>Código EB y primer tag para preferencia.</li><li>Botón Tomar prospecto y SLA de 5 minutos desde entrega.</li><li>Contactado al iniciar y primera aceptación válida.</li><li>Guardia primaria, respaldo y respuesta tardía sin reasignación.</li><li>Nota en conversación exacta y estatus Atendida.</li><li>Telemetría, revisión diaria y evaluación formal.</li><li>Modo seguro con captura preservada y derivación a guardia.</li></ul></article>
+          <article class="decision-panel pending"><h3>Pendiente de validación</h3><ul><li>SLA de guardia primaria y respaldo.</li><li>Política de reintentos de WhatsApp y umbral de falla.</li><li>Tratamiento final de propiedad sin código EB.</li><li>Tratamiento final de propiedad sin tag.</li><li>Umbrales de salud para n8n, Supabase y scraper.</li><li>Orden de reconciliación después de una recuperación.</li><li>Mensajes exactos para aceptación perdida o tardía.</li><li>Roles autorizados para activar y cerrar modo seguro.</li><li>Ventana temporal y precedencia de identificadores para deduplicación.</li></ul></article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footer-inner">
+      <p>Fuente principal: definición ejecutiva local en tmp/client-one-slide/build.mjs. Los escenarios técnicos no confirmados se marcan como pendientes.</p>
+      <p>Documento operativo autónomo. Sin dependencias externas.</p>
+    </div>
+  </footer>
+
+  <script>
+    (() => {
+      const flow = document.querySelector('#main-flow');
+      document.querySelectorAll('[data-route-filter]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const selected = button.dataset.routeFilter;
+          flow.dataset.highlight = selected;
+          document.querySelectorAll('[data-route-filter]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        });
+      });
+
+      document.querySelectorAll('[data-scenario-filter]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const selected = button.dataset.scenarioFilter;
+          document.querySelectorAll('.scenario').forEach((scenario) => {
+            scenario.hidden = selected !== 'all' && scenario.dataset.category !== selected;
+          });
+          document.querySelectorAll('[data-scenario-filter]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        });
+      });
+
+      const links = [...document.querySelectorAll('.nav-links a')];
+      const sections = links.map((link) => document.querySelector(link.getAttribute('href'))).filter(Boolean);
+      const sectionObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          links.forEach((link) => link.removeAttribute('aria-current'));
+          const active = links.find((link) => link.getAttribute('href') === `#${entry.target.id}`);
+          active?.setAttribute('aria-current', 'true');
+        });
+      }, { rootMargin: '-25% 0px -65% 0px' });
+      sections.forEach((section) => sectionObserver.observe(section));
+
+      if (matchMedia('(prefers-reduced-motion: no-preference)').matches) {
+        const items = document.querySelectorAll('.reveal');
+        items.forEach((item) => item.classList.add('is-pending'));
+        const revealObserver = new IntersectionObserver((entries, observer) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          });
+        }, { threshold: .12 });
+        items.forEach((item) => revealObserver.observe(item));
+      }
+    })();
+  </script>
+</body>
+</html>

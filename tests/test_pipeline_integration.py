@@ -197,3 +197,14 @@ def test_pipeline_crm_duplicate_detection(store: StateStore) -> None:
     # Already seen in state, so nothing to push.
     assert len(pushed) == 0
     store2.close()
+
+
+def test_i24_contact_effect_lease_recovers_only_after_expiry() -> None:
+    """Two workers skip locked rows; a crash becomes claimable only after lease expiry."""
+    sql = (Path(__file__).parents[1] / "whatsapp-agent/migrations/0032_i24_contact_effect_lease.sql").read_text()
+    compact = " ".join(sql.lower().split())
+
+    assert "for update of o, c skip locked" in compact
+    assert "e.status='leased' and e.lease_expires_at<=p_now" in compact
+    assert "p_now + interval '2 minutes'" in compact
+    assert "v_effect.lease_expires_at<=now()" in compact
