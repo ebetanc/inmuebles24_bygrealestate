@@ -121,27 +121,77 @@ async def fetch_pending_i24_notes(limit: int = 20) -> list[dict]:
         return []
 
 
-async def fetch_claimed_i24_lead_ids(limit: int = 200) -> set[str]:
-    """Return i24 lead ids that have been genuinely claimed or responded to."""
+async def claim_pending_i24_contacts(limit: int = 20) -> list[dict]:
+    """Atomically lease assigned i24 opportunities for one portal mutation."""
     cfg = _supa_cfg()
     if not cfg:
-        return set()
+        return []
     url, key = cfg
-    q = (
-        f"{url}/rest/v1/conversations?source=eq.inmuebles24"
-        "&i24_lead_id=not.is.null&assigned_agent_id=not.is.null"
-        "&or=(claimed_via.is.null,claimed_via.neq.escalation,first_response_at.not.is.null)"
-        f"&select=i24_lead_id&order=created_at.desc&limit={limit}"
-    )
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.get(q, headers=_headers(key))
-            r.raise_for_status()
-            rows = r.json()
-            return {str(row["i24_lead_id"]) for row in rows}
+            response = await client.post(
+                f"{url}/rest/v1/rpc/claim_i24_contact_effects",
+                json={"p_limit": limit}, headers=_headers(key),
+            )
+            response.raise_for_status()
+            return response.json()
     except Exception as e:
-        logger.warning("fetch_claimed_i24_lead_ids failed: {}", str(e))
-        return set()
+        logger.warning("claim_pending_i24_contacts failed: {}", str(e))
+        return []
+
+
+async def finish_i24_contact_attempt(
+    opportunity_id: int,
+    lease_token: str,
+    *,
+    success: bool | None,
+    error_code: str | None = None,
+    screenshot_path: str | None = None,
+) -> bool:
+    """Finish only worker-held lease; RPC writes append-only result evidence first."""
+    cfg = _supa_cfg()
+    if not cfg:
+        return False
+    url, key = cfg
+    if success is None:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{url}/rest/v1/rpc/finish_i24_contact_effect",
+                json={
+                    "p_opportunity_id": opportunity_id,
+                    "p_lease_token": lease_token,
+                    "p_success": success,
+                    "p_error_code": error_code,
+                    "p_screenshot_path": screenshot_path,
+                }, headers=_headers(key),
+            )
+            response.raise_for_status()
+        return response.json() is True
+    except Exception as e:
+        logger.warning("finish_i24_contact_attempt failed for opportunity {}: {}", opportunity_id, str(e))
+        return False
+
+
+async def validate_i24_contact_attempt(opportunity_id: int, lease_token: str) -> bool:
+    """Revalidate lease and exact assignment immediately before portal I/O."""
+    cfg = _supa_cfg()
+    if not cfg:
+        return False
+    url, key = cfg
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{url}/rest/v1/rpc/validate_i24_contact_effect",
+                json={"p_opportunity_id": opportunity_id, "p_lease_token": lease_token},
+                headers=_headers(key),
+            )
+            response.raise_for_status()
+        return response.json() is True
+    except Exception as e:
+        logger.warning("validate_i24_contact_attempt failed for opportunity {}: {}", opportunity_id, str(e))
+        return False
 
 
 async def mark_i24_note_added(conversation_id: str) -> bool:

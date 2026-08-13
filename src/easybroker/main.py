@@ -10,7 +10,7 @@ Modes:
     --inspect-login      Dump the EB login form controls (read-only). Then exit.
     --inspect-buzon [PH] Open the Buzón (optionally select phone PH) and dump the
                          action-bar / status-menu / note-modal controls. Then exit.
-    --once PHONE         Attend exactly one lead by phone (agent via --agent).
+    --once REQUEST_ID    Attend exactly one lead by exact EasyBroker request ID.
                          Forces EB_MARK_ATTENDED for this run; does not touch Supabase.
     --dry-run            Log in, verify session, then exit.
 
@@ -30,7 +30,7 @@ from easybroker.auth import AuthenticationError, dump_login_form, load_or_login
 from easybroker.browser import launch_chrome
 from easybroker.config import EBSettings
 from easybroker.inbox import attend_lead, dump_buzon
-from easybroker.supa import fetch_pending_attend, mark_attended
+from easybroker.supa import fetch_pending_attend, finish_attend_attempt, list_pending_attend
 
 logger.remove()
 logger.add(sys.stderr, level="INFO", format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
@@ -52,8 +52,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--inspect-buzon", nargs="?", const="", default=None, metavar="PHONE",
                    dest="inspect_buzon",
                    help="Dump Buzón controls (optionally selecting PHONE) and exit (read-only)")
-    p.add_argument("--once", default=None, metavar="PHONE",
-                   help="Attend exactly one lead by phone (use with --agent). Forces the gate on.")
+    p.add_argument("--once", default=None, metavar="REQUEST_ID",
+                   help="Attend exactly one lead by exact EasyBroker request ID. Forces the gate on.")
     p.add_argument("--agent", default="asesor", help="Agent name for --once note")
     p.add_argument("--note", default=None, help="Override the note text for --once")
     return p.parse_args()
@@ -91,14 +91,15 @@ async def async_main(args: argparse.Namespace) -> int:
 
             if args.once:
                 os.environ["EB_MARK_ATTENDED"] = "1"
-                res = await attend_lead(page, phone=args.once, agent_name=args.agent,
+                res = await attend_lead(page, request_id=args.once, agent_name=args.agent,
                                         note_text=args.note)
                 print(f"--once {args.once}: {res}")
                 return 0 if (res["status_ok"] and res["note_ok"]) else 1
 
             # Default: poll + attend each pending EB lead.
             gate = os.environ.get("EB_MARK_ATTENDED", "").strip() == "1"
-            leads = await fetch_pending_attend(settings)
+            leads = (await fetch_pending_attend(settings) if gate
+                     else await list_pending_attend(settings))
             if not leads:
                 print("No EB leads pending Atendida + note.")
                 return 0
@@ -111,20 +112,35 @@ async def async_main(args: argparse.Namespace) -> int:
             attended = 0
             for l in leads:
                 res = await attend_lead(
-                    page, phone=l["lead_phone"], agent_name=l["agent_name"],
+                    page, request_id=l["eb_contact_id"], phone=l["lead_phone"],
+                    agent_name=l["agent_name"], note_done=l["eb_note_added"],
+                    status_done=l["eb_marked_attended"],
                     note_text=f"Atendido por {l['agent_name']}",
                 )
-                if res["status_ok"] and res["note_ok"]:
-                    await mark_attended(settings, l["conversation_id"])
+                error_code = None
+                if not res["found"]:
+                    error_code = "request_not_found"
+                elif not res["note_ok"]:
+                    error_code = "note_failed"
+                elif not res["status_ok"]:
+                    error_code = "status_failed"
+                evidence_ok = await finish_attend_attempt(
+                    settings, l["conversation_id"], l["lease_token"],
+                    note_ok=res["note_ok"], status_ok=res["status_ok"],
+                    error_code=error_code,
+                )
+                if res["status_ok"] and res["note_ok"] and evidence_ok:
                     attended += 1
-                elif not res["found"]:
-                    # Not in Buzón "Activas" = the conversation was archived or
-                    # attended manually in the EB UI. It will never reappear, so
-                    # retrying every run loops forever — mark it done and move on.
+                elif not evidence_ok:
                     logger.warning(
-                        "Lead {} not found in Buzón Activas (archived/manually attended) — "
-                        "marking eb_marked_attended to stop retries", l.get("lead_phone"))
-                    await mark_attended(settings, l["conversation_id"])
+                        "EasyBroker lease expired or evidence persistence failed for {}",
+                        l["conversation_id"],
+                    )
+                elif not res["found"]:
+                    logger.warning(
+                        "EasyBroker request {} not found; preserving pending evidence for retry",
+                        l.get("eb_contact_id"),
+                    )
                 else:
                     logger.warning("Lead {} not fully attended: {}", l.get("lead_phone"), res)
             print(f"Attended {attended}/{len(leads)} EB lead(s)")

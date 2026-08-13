@@ -109,6 +109,15 @@ async def find_request_by_phone(page: Page, phone: str) -> bool:
     return False
 
 
+async def find_request_by_id(page: Page, request_id: int | str) -> bool:
+    """Open one exact Buzón request by its EasyBroker contact request ID."""
+    value = str(request_id).strip()
+    if not value.isdigit():
+        return False
+    rendered = await _open_conv_href(page, f"/agent/conversations/{value}")
+    return rendered and bool(re.search(rf"/conversations/{re.escape(value)}(?:[/?#]|$)", page.url))
+
+
 # The action-bar controls are <a>/<span> (not <button>) and the status options
 # live in a hidden "Cambiar estatus" dropdown that only renders visible after the
 # trigger is clicked. We tag the precise target in JS, then click it with a real
@@ -269,34 +278,72 @@ async def add_note(page: Page, note_text: str) -> bool:
         return False
 
     await asyncio.sleep(random.uniform(1.0, 2.0))
-    logger.info("Note saved: {!r}", note_text)
-    return True
+    ok = await note_exists(page, note_text)
+    logger.info("Note saved: {!r} (ok={})", note_text, ok)
+    return ok
+
+
+async def note_exists(page: Page, note_text: str) -> bool:
+    """Return whether the exact bot note is already visible in this request."""
+    try:
+        return await page.get_by_text(note_text, exact=True).count() > 0
+    except Exception as e:
+        logger.warning("Could not verify existing EasyBroker note: {}", e)
+        return False
 
 
 async def attend_lead(
-    page: Page, *, phone: str, agent_name: str, note_text: str | None = None
+    page: Page, *, request_id: int | str | None = None, phone: str = "",
+    agent_name: str, note_text: str | None = None, note_done: bool = False,
+    status_done: bool = False, allow_phone_fallback: bool = False,
 ) -> dict:
     """Full flow for one lead: open request, set Atendida, add the agent note.
 
-    Returns {found, status_ok, note_ok}. The caller should treat the lead as
-    attended only when status_ok AND note_ok are both True.
+    Exact request ID is primary. Phone fallback must be explicitly enabled.
+    Completed steps are skipped so retries only repeat missing side effects.
     """
     note = note_text or f"Atendido por {agent_name}"
-    result = {"found": False, "status_ok": False, "note_ok": False}
+    if request_id is not None:
+        note = f"{note} [BYG-EB:{str(request_id).strip()}]"
+    result = {
+        "found": False,
+        "match_method": None,
+        "status_ok": status_done,
+        "note_ok": note_done,
+        "status_changed": False,
+        "note_changed": False,
+    }
 
     if not await goto_buzon(page):
         await screenshot(page, "buzon_no_render")
         logger.error("Buzón did not render — skipping lead {} this run", phone)
         return result
-    found = await find_request_by_phone(page, phone)
+    found = False
+    if request_id is not None:
+        found = await find_request_by_id(page, request_id)
+        if found:
+            result["match_method"] = "request_id"
+    if not found and allow_phone_fallback:
+        found = await find_request_by_phone(page, phone)
+        if found:
+            result["match_method"] = "phone_fallback"
     result["found"] = found
     if not found:
-        await screenshot(page, f"request_not_found_{_norm_phone(phone)}")
-        logger.error("Could not find Buzón request for phone {}", phone)
+        await screenshot(page, f"request_not_found_{request_id or _norm_phone(phone)}")
+        logger.error("Could not find Buzón request id={} (phone fallback={})", request_id, allow_phone_fallback)
         return result
 
-    result["status_ok"] = await set_status_atendida(page)
-    result["note_ok"] = await add_note(page, note)
+    if not note_done:
+        # The deterministic request marker is the external idempotency key.  If
+        # the process died after Guardar but before Supabase evidence, reconcile
+        # that evidence without writing a duplicate note.
+        result["note_ok"] = await note_exists(page, note)
+        if not result["note_ok"]:
+            result["note_ok"] = await add_note(page, note)
+        result["note_changed"] = result["note_ok"]
+    if result["note_ok"] and not status_done:
+        result["status_ok"] = await set_status_atendida(page)
+        result["status_changed"] = result["status_ok"]
     return result
 
 

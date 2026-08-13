@@ -3,13 +3,10 @@
 Source of truth for "which EB leads still need the Atendida + note actions":
 conversations that came from EasyBroker (eb_contact_id NOT NULL), have been
 genuinely claimed by an agent (claimed_via != escalation, or escalated but
-responded to), and have not yet been marked attended (eb_marked_attended =
-false). The bot performs the two UI actions, then flips eb_marked_attended so
-the lead is never touched again.
+responded to), and still need note or status evidence. An expiring lease keeps
+portal side effects exclusive across workers and permits crash recovery.
 """
 from __future__ import annotations
-
-from datetime import datetime, timezone
 
 import httpx
 from loguru import logger
@@ -24,7 +21,7 @@ def _headers(key: str) -> dict:
 
 
 async def fetch_pending_attend(settings) -> list[dict]:
-    """Return genuinely-claimed EB leads pending Atendida + note."""
+    """Atomically lease genuinely-claimed EB leads pending Atendida + note."""
     url = settings.supabase_url
     key = settings.supabase_service_key
     if not url or not key:
@@ -32,30 +29,18 @@ async def fetch_pending_attend(settings) -> list[dict]:
         return []
 
     base = url.rstrip("/")
-    convs_endpoint = (
-        f"{base}/rest/v1/conversations"
-        "?select=conversation_id,lead_phone,lead_name,assigned_agent_id,eb_contact_id"
-        "&eb_contact_id=not.is.null"
-        "&assigned_agent_id=not.is.null"
-        "&or=(claimed_via.is.null,claimed_via.neq.escalation,first_response_at.not.is.null)"
-        "&eb_marked_attended=is.false"
-    )
     async with httpx.AsyncClient(timeout=20) as client:
-        resp = await client.get(convs_endpoint, headers=_headers(key))
+        resp = await client.post(
+            f"{base}/rest/v1/rpc/claim_easybroker_attend_effects",
+            json={"p_limit": 20}, headers=_headers(key),
+        )
         resp.raise_for_status()
         convs = resp.json()
         if not convs:
             return []
         # Resolve agent names in one extra call (avoids PostgREST embed FK
         # ambiguity — conversations has multiple FKs to agents).
-        agent_ids = sorted({c["assigned_agent_id"] for c in convs if c.get("assigned_agent_id")})
-        names: dict[str, str] = {}
-        if agent_ids:
-            in_list = ",".join(f'"{a}"' for a in agent_ids)
-            ag_endpoint = f"{base}/rest/v1/agents?select=agent_id,name&agent_id=in.({in_list})"
-            ag_resp = await client.get(ag_endpoint, headers=_headers(key))
-            ag_resp.raise_for_status()
-            names = {a["agent_id"]: a["name"] for a in ag_resp.json()}
+        names = await _agent_names(client, base, key, convs)
 
     for c in convs:
         c["agent_name"] = names.get(c.get("assigned_agent_id"), c.get("assigned_agent_id") or "asesor")
@@ -63,26 +48,68 @@ async def fetch_pending_attend(settings) -> list[dict]:
     return convs
 
 
-async def mark_attended(settings, conversation_id: str) -> bool:
-    """Set eb_marked_attended=true + eb_attended_at=now for one conversation."""
+async def list_pending_attend(settings) -> list[dict]:
+    """Read-only listing used while the EasyBroker mutation gate is disabled."""
+    url = settings.supabase_url
+    key = settings.supabase_service_key
+    if not url or not key:
+        return []
+    base = url.rstrip("/")
+    endpoint = (
+        f"{base}/rest/v1/conversations"
+        "?select=conversation_id,lead_phone,lead_name,assigned_agent_id,eb_contact_id,eb_note_added,eb_marked_attended"
+        "&eb_contact_id=not.is.null&assigned_agent_id=not.is.null"
+        "&and=(or(claimed_via.is.null,claimed_via.neq.escalation,first_response_at.not.is.null),"
+        "or(eb_note_added.is.false,eb_marked_attended.is.false))"
+    )
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.get(endpoint, headers=_headers(key))
+        response.raise_for_status()
+        rows = response.json()
+        names = await _agent_names(client, base, key, rows)
+    for row in rows:
+        row["agent_name"] = names.get(
+            row.get("assigned_agent_id"), row.get("assigned_agent_id") or "asesor"
+        )
+    return rows
+
+
+async def _agent_names(client, base: str, key: str, rows: list[dict]) -> dict[str, str]:
+    """Resolve names without ambiguous PostgREST relationship embedding."""
+    agent_ids = sorted({row["assigned_agent_id"] for row in rows if row.get("assigned_agent_id")})
+    if not agent_ids:
+        return {}
+    in_list = ",".join(f'"{agent_id}"' for agent_id in agent_ids)
+    response = await client.get(
+        f"{base}/rest/v1/agents?select=agent_id,name&agent_id=in.({in_list})",
+        headers=_headers(key),
+    )
+    response.raise_for_status()
+    return {agent["agent_id"]: agent["name"] for agent in response.json()}
+
+
+async def finish_attend_attempt(
+    settings, conversation_id: str, lease_token: str, *, note_ok: bool,
+    status_ok: bool, error_code: str | None = None,
+) -> bool:
+    """Persist step evidence and release only the worker-held lease."""
     url = settings.supabase_url
     key = settings.supabase_service_key
     if not url or not key:
         return False
-    endpoint = (
-        f"{url.rstrip('/')}/rest/v1/conversations?conversation_id=eq.{conversation_id}"
-    )
+    endpoint = f"{url.rstrip('/')}/rest/v1/rpc/finish_easybroker_attend_effect"
     payload = {
-        "eb_marked_attended": True,
-        "eb_attended_at": datetime.now(timezone.utc).isoformat(),
+        "p_conversation_id": conversation_id,
+        "p_lease_token": lease_token,
+        "p_note_ok": note_ok,
+        "p_status_ok": status_ok,
+        "p_error_code": error_code,
     }
-    headers = {**_headers(key), "Prefer": "return=minimal"}
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.patch(endpoint, json=payload, headers=headers)
+            resp = await client.post(endpoint, json=payload, headers=_headers(key))
             resp.raise_for_status()
-        logger.info("Marked conversation {} eb_marked_attended=true", conversation_id)
-        return True
+        return resp.json() is True
     except Exception as e:
-        logger.warning("Failed to mark conversation {} attended: {}", conversation_id, e)
+        logger.warning("Failed to finish EasyBroker attempt for {}: {}", conversation_id, e)
         return False
