@@ -1,0 +1,8 @@
+{
+  "known_first_tag": {"public_id": "EB-TEST1", "tags": ["paty"], "expected": "resolved"},
+  "unknown_first_tag": {"public_id": "EB-TEST2", "tags": ["unknown"], "expected": "missing_alias"},
+  "empty_tags": {"public_id": "EB-TEST3", "tags": [], "expected": "missing_tag"},
+  "inactive_agent": {"public_id": "EB-TEST4", "tags": ["inactive_fixture"], "expected": "inactive_agent"},
+  "missing_phone": {"public_id": "EB-TEST5", "tags": ["no_phone_fixture"], "expected": "missing_phone"},
+  "second_tag_ignored": {"public_id": "EB-TEST6", "tags": ["unknown", "paty"], "expected": "missing_alias"}
+}
