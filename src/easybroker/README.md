@@ -17,18 +17,22 @@ Polls Supabase `conversations` for rows where:
 ```
 eb_contact_id IS NOT NULL          -- came from EasyBroker (WF8b)
 AND assigned_agent_id IS NOT NULL  -- an agent claimed it
-AND eb_marked_attended = false     -- not done yet (idempotency guard)
+AND (eb_note_added = false OR eb_marked_attended = false)
 ```
 
-After both UI actions succeed it sets `eb_marked_attended = true` +
-`eb_attended_at = now()` so the lead is never touched again
-(migration `whatsapp-agent/migrations/0015_eb_marked_attended.sql`).
+`attend_lead` navigates by exact `eb_contact_id` (URL `/agent/conversations/{id}`);
+phone lookup only runs when `allow_phone_fallback=True` is passed explicitly (never
+enabled in production or `--once`).
+
+An atomic expiring lease prevents two workers from opening the same request.
+Each retry executes only the missing step and persists note/status evidence with
+the lease token before releasing it.
 
 ## Run
 
 ```bash
-# one lead, by phone (forces the gate on; ignores Supabase)
-python -m easybroker --once 5519205636 --agent "Sandy" --headful
+# one lead, by exact EasyBroker request ID (forces the gate on; ignores Supabase)
+python -m easybroker --once 12345678 --agent "Sandy" --headful
 
 # poll + attend every pending EB lead (gated)
 EB_MARK_ATTENDED=1 python -m easybroker

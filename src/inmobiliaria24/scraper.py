@@ -859,7 +859,27 @@ _TAG_OPTION_JS = """
 """
 
 
-async def mark_lead_contacted(page: Page, lead: dict) -> bool:
+async def _capture_i24_status_evidence(page: Page, lead_id: str) -> str | None:
+    """Capture only the status chip, never the PII-bearing lead page."""
+    import hashlib
+    from pathlib import Path
+
+    try:
+        tagged = await page.evaluate(_DETAIL_TAG_CHIP_JS)
+        if not tagged.get("found"):
+            return None
+        Path("logs").mkdir(exist_ok=True)
+        safe_id = hashlib.sha256(lead_id.encode()).hexdigest()[:12]
+        path = f"logs/i24_status_error_{safe_id}.png"
+        await page.locator('[data-byg-click="chip"]').screenshot(path=path)
+        return path
+    except Exception:
+        return None
+
+
+async def mark_lead_contacted(
+    page: Page, lead: dict, *, evidence: dict | None = None
+) -> bool:
     """Set a scraped lead's Inmuebles24 status to *Contactado* via the inbox
     row's "Estado de consulta" dropdown (Pendiente / Contactado / Finalizado).
 
@@ -875,12 +895,19 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
     """
     import os
 
+    if evidence is not None:
+        evidence.clear()
+
     if os.environ.get("MARK_CONTACTED", "").strip().lower() not in ("1", "true", "yes"):
         logger.debug("MARK_CONTACTED not enabled — skipping portal status change")
+        if evidence is not None:
+            evidence["error_code"] = "feature_disabled"
         return False
 
     lead_id = str(lead.get("lead_id") or "").strip()
     if not lead_id:
+        if evidence is not None:
+            evidence["error_code"] = "missing_lead_id"
         return False
 
     # Work on the lead's DETAIL page, never the inbox list: the virtualized
@@ -894,14 +921,23 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
             await asyncio.sleep(random.uniform(6.0, 9.0))
 
             current = await page.evaluate(_DETAIL_READ_STATUS_JS)
-            if current in ("Contactado", "Finalizado"):
+            if current == "Contactado":
                 if attempt == 1:
                     logger.info("Lead {} already '{}' on portal — no change", lead_id, current)
                 else:
                     logger.info("Lead {} status -> Contactado via dropdown: OK on attempt {}",
                                 lead_id, attempt)
+                if evidence is not None:
+                    evidence["portal_status"] = current
                 return True
+            if current == "Finalizado":
+                if evidence is not None:
+                    evidence["error_code"] = "unexpected_terminal_status"
+                    evidence["portal_status"] = current
+                return False
             if current != "Pendiente":
+                if evidence is not None:
+                    evidence["error_code"] = "status_chip_not_found"
                 logger.warning("Lead {}: status chip not found ({}) — attempt {}/3",
                                lead_id, current, attempt)
                 continue
@@ -911,6 +947,8 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
             # popover).
             chip = await page.evaluate(_DETAIL_TAG_CHIP_JS)
             if not chip.get("found"):
+                if evidence is not None:
+                    evidence["error_code"] = "status_chip_not_found"
                 logger.warning("Lead {}: status chip not located ({}) — attempt {}/3",
                                lead_id, chip.get("reason"), attempt)
                 continue
@@ -920,12 +958,11 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
             # Click the "Contactado" option in the open popover (same tag trick).
             opt = await page.evaluate(_TAG_OPTION_JS, "Contactado")
             if not opt.get("found"):
+                if evidence is not None:
+                    evidence["error_code"] = "contactado_option_not_found"
+                    evidence["screenshot_path"] = await _capture_i24_status_evidence(page, lead_id)
                 logger.warning("Lead {}: 'Contactado' option not visible after opening dropdown"
                                " — attempt {}/3", lead_id, attempt)
-                try:
-                    await page.screenshot(path=f"logs/mark_fail_{lead_id}.png", full_page=True)
-                except Exception:
-                    pass
                 try:
                     await page.keyboard.press("Escape")
                 except Exception:
@@ -937,17 +974,21 @@ async def mark_lead_contacted(page: Page, lead: dict) -> bool:
             # Verify the detail-page chip now reads Contactado.
             after = await page.evaluate(_DETAIL_READ_STATUS_JS)
             if after == "Contactado":
+                if evidence is not None:
+                    evidence["portal_status"] = after
                 logger.info("Lead {} status -> Contactado via dropdown: OK (attempt {})",
                             lead_id, attempt)
                 return True
             logger.warning("Lead {} status -> Contactado via dropdown: UNVERIFIED"
                            " (now '{}', attempt {}/3)", lead_id, after, attempt)
             if attempt == 3:
-                try:
-                    await page.screenshot(path=f"logs/mark_unverified_{lead_id}.png", full_page=True)
-                except Exception:
-                    pass
+                if evidence is not None:
+                    evidence["error_code"] = "status_change_unverified"
+                    evidence["screenshot_path"] = await _capture_i24_status_evidence(page, lead_id)
         except Exception as e:
+            if evidence is not None:
+                evidence["error_code"] = "portal_interaction_failed"
+                evidence["screenshot_path"] = await _capture_i24_status_evidence(page, lead_id)
             logger.warning("Lead {}: failed to set Contactado via dropdown (attempt {}/3): {}",
                            lead_id, attempt, e)
     return False
