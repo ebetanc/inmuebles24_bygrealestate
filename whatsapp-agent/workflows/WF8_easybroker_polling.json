@@ -1,615 +1,903 @@
 {
-  "name": "WF8 - EasyBroker Contact Polling",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [{ "field": "minutes", "minutesInterval": 15 }]
-        }
-      },
-      "id": "eb8-0001-4000-8000-000000000001",
-      "name": "Every 15 Minutes",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [200, 300],
-      "notes": "Polls EasyBroker API every 15 minutes for new contact requests.\nUses workflow static data to track last processed contact ID."
-    },
-    {
-      "parameters": {
-        "jsCode": "// Get the last processed EasyBroker contact ID from static data.\nconst staticData = $getWorkflowStaticData('global');\nconst lastId = staticData.lastEbContactId || 0;\n\nreturn [{ json: { lastProcessedId: lastId } }];"
-      },
-      "id": "eb8-0002-4000-8000-000000000002",
-      "name": "Get Last Processed ID",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [420, 300]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "https://api.easybroker.com/v1/contact_requests",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "X-Authorization", "value": "={{ $env.EASYBROKER_API_KEY }}" }
-          ]
-        },
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "page", "value": "1" },
-            { "name": "limit", "value": "50" }
-          ]
-        },
-        "options": { "timeout": 15000 }
-      },
-      "id": "eb8-0003-4000-8000-000000000003",
-      "name": "Fetch EB Contact Requests",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [640, 300],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "jsCode": "// Filter only contacts newer than last processed ID.\n// EB returns contacts ordered by id DESC (newest first).\nconst response = $input.first().json;\nconst lastId = $('Get Last Processed ID').first().json.lastProcessedId;\n\nif (!response.content || !Array.isArray(response.content)) {\n  // API error or empty response\n  return [{ json: { newContacts: 0, error: 'No content in API response' } }];\n}\n\nconst newContacts = response.content.filter(c => c.id > lastId);\n\nif (newContacts.length === 0) {\n  return [{ json: { newContacts: 0 } }];\n}\n\n// Update static data with the highest ID\nconst staticData = $getWorkflowStaticData('global');\nstaticData.lastEbContactId = Math.max(...newContacts.map(c => c.id));\n\n// Return each new contact as a separate item (oldest first for processing order)\nreturn newContacts\n  .sort((a, b) => a.id - b.id)\n  .map(contact => ({\n    json: {\n      newContacts: newContacts.length,\n      eb_contact_id: contact.id,\n      name: contact.name || null,\n      phone: (contact.phone || '').replace(/[^\\d]/g, ''),\n      email: contact.email || null,\n      property_id: contact.property_id || null,\n      message: contact.message || '',\n      eb_source: contact.source || 'EasyBroker',\n      happened_at: contact.happened_at,\n      eb_contact_internal_id: contact.contact_id || null,\n      source: 'easybroker'\n    }\n  }));"
-      },
-      "id": "eb8-0004-4000-8000-000000000004",
-      "name": "Filter New Contacts",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [860, 300]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "strict", "leftValue": "" },
-          "conditions": [
-            {
-              "id": "has-new-contacts",
-              "leftValue": "={{ $json.newContacts }}",
-              "rightValue": 0,
-              "operator": { "type": "number", "operation": "gt" }
-            }
-          ],
-          "combinator": "and"
-        }
-      },
-      "id": "eb8-0005-4000-8000-000000000005",
-      "name": "Has New Contacts?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [1080, 300]
-    },
-    {
-      "parameters": {},
-      "id": "eb8-0006-4000-8000-000000000006",
-      "name": "No New Contacts",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [1300, 480]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "=https://api.easybroker.com/v1/properties/{{ $json.property_id }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "X-Authorization", "value": "={{ $env.EASYBROKER_API_KEY }}" }
-          ]
-        },
-        "options": { "timeout": 10000 }
-      },
-      "id": "eb8-0007-4000-8000-000000000007",
-      "name": "Fetch EB Property Details",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1300, 200],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "jsCode": "// Merge contact data with property details and normalize for downstream.\nconst contact = $('Filter New Contacts').item.json;\nconst prop = $input.first().json;\n\nconst hasProperty = !!(prop && prop.public_id);\n\nconst propertyTitle = hasProperty\n  ? prop.title\n  : 'Propiedad sin identificar';\n\nconst propertyPrice = hasProperty && prop.operations && prop.operations[0]\n  ? prop.operations[0].formatted_amount\n  : 'Precio por confirmar';\n\nconst propertyAddress = hasProperty && prop.location\n  ? (typeof prop.location === 'object' ? prop.location.name : prop.location)\n  : '';\n\nconst listingType = hasProperty && prop.operations && prop.operations[0]\n  ? prop.operations[0].type\n  : 'venta';\n\n// Build cache payload from EB property data\nconst cachePayload = hasProperty ? {\n  title: prop.title,\n  price: propertyPrice,\n  price_numeric: prop.operations?.[0]?.amount || null,\n  currency: prop.operations?.[0]?.currency || 'MXN',\n  location: propertyAddress,\n  property_type: prop.property_type || null,\n  operation_type: listingType,\n  bedrooms: prop.bedrooms || null,\n  bathrooms: prop.bathrooms || null,\n  area_m2: prop.construction_size || prop.lot_size || null,\n  description: (prop.description || '').substring(0, 500),\n  url: prop.public_url || null,\n  image_url: prop.title_image_full || null,\n  source: 'easybroker_api'\n} : null;\n\nreturn [{\n  json: {\n    phone: contact.phone,\n    email: contact.email,\n    name: contact.name,\n    message: contact.message,\n    listing_id: contact.property_id,\n    property_title: propertyTitle,\n    property_address: propertyAddress,\n    property_price: propertyPrice,\n    listing_type: listingType,\n    source: 'easybroker',\n    eb_contact_id: contact.eb_contact_id,\n    eb_source: contact.eb_source,\n    cache_property_id: contact.property_id || 'unknown',\n    cache_payload: cachePayload,\n    has_property: hasProperty\n  }\n}];"
-      },
-      "id": "eb8-0008-4000-8000-000000000008",
-      "name": "Normalize Lead Data",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1520, 200]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "WITH time_ctx AS (\n  SELECT is_daytime() AS is_day, current_shift() AS current_shift\n),\nreturning AS (\n  SELECT * FROM find_returning_lead($1, $2, $3) LIMIT 1\n)\nSELECT\n  r.conversation_id AS existing_conv_id,\n  r.assigned_agent_id,\n  r.current_property AS existing_property,\n  r.same_property,\n  r.mode AS existing_mode,\n  t.is_day,\n  t.current_shift\nFROM time_ctx t\nLEFT JOIN returning r ON TRUE;",
-        "options": {
-          "queryReplacement": "={{ $json.phone }},={{ $json.email }},={{ $json.listing_id }}"
-        }
-      },
-      "id": "eb8-0009-4000-8000-000000000009",
-      "name": "Check Returning Lead + Time",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1740, 200],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      },
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "jsCode": "// Route decision based on returning lead check and day/night.\nconst lead = $('Normalize Lead Data').item.json;\nconst db = $input.first().json;\n\nif (!lead.phone) {\n  return [{ json: { route: 'skip', reason: 'no_phone' } }];\n}\n\nconst isReturning = !!db.existing_conv_id;\nconst sameProperty = db.same_property === true;\nconst isDay = db.is_day !== false;\n\nif (isReturning && sameProperty) {\n  return [{\n    json: {\n      route: 'returning_same',\n      existing_conv_id: db.existing_conv_id,\n      assigned_agent_id: db.assigned_agent_id,\n      existing_mode: db.existing_mode,\n      ...lead\n    }\n  }];\n}\n\nif (isDay) {\n  return [{\n    json: {\n      route: 'day_auction',\n      is_returning_diff: isReturning && !sameProperty,\n      ...lead\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    route: 'night_queue',\n    is_returning_diff: isReturning && !sameProperty,\n    ...lead\n  }\n}];"
-      },
-      "id": "eb8-0010-4000-8000-000000000010",
-      "name": "Route Decision",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1960, 200]
-    },
-    {
-      "parameters": {
-        "rules": {
-          "values": [
-            {
-              "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict", "leftValue": "" },
-                "conditions": [
+    "name":  "WF8 - EasyBroker Contact Polling",
+    "nodes":  [
                   {
-                    "id": "route-returning",
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "returning_same",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "returning_same"
-            },
-            {
-              "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict", "leftValue": "" },
-                "conditions": [
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "field":  "minutes",
+                                                                           "minutesInterval":  15
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "id":  "eb8-0001-4000-8000-000000000001",
+                      "name":  "Every 15 Minutes",
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       200,
+                                       300
+                                   ],
+                      "notes":  "Polls EasyBroker API every 15 minutes for new contact requests.\nUses workflow static data to track last processed contact ID."
+                  },
                   {
-                    "id": "route-day",
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "day_auction",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "day_auction"
-            },
-            {
-              "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict", "leftValue": "" },
-                "conditions": [
+                      "parameters":  {
+                                         "jsCode":  "// Get the last processed EasyBroker contact ID from static data.\nconst staticData = $getWorkflowStaticData(\u0027global\u0027);\nconst lastId = staticData.lastEbContactId || 0;\n\nreturn [{ json: { lastProcessedId: lastId } }];"
+                                     },
+                      "id":  "eb8-0002-4000-8000-000000000002",
+                      "name":  "Get Last Processed ID",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       420,
+                                       300
+                                   ]
+                  },
                   {
-                    "id": "route-night",
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "night_queue",
-                    "operator": { "type": "string", "operation": "equals" }
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "https://api.easybroker.com/v1/contact_requests",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "X-Authorization",
+                                                                                         "value":  "={{ $env.EASYBROKER_API_KEY }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendQuery":  true,
+                                         "queryParameters":  {
+                                                                 "parameters":  [
+                                                                                    {
+                                                                                        "name":  "page",
+                                                                                        "value":  "1"
+                                                                                    },
+                                                                                    {
+                                                                                        "name":  "limit",
+                                                                                        "value":  "50"
+                                                                                    }
+                                                                                ]
+                                                             },
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "eb8-0003-4000-8000-000000000003",
+                      "name":  "Fetch EB Contact Requests",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       640,
+                                       300
+                                   ],
+                      "continueOnFail":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "// Filter only contacts newer than last processed ID.\n// EB returns contacts ordered by id DESC (newest first).\nconst response = $input.first().json;\nconst lastId = $(\u0027Get Last Processed ID\u0027).first().json.lastProcessedId;\n\nif (!response.content || !Array.isArray(response.content)) {\n  // API error or empty response\n  return [{ json: { newContacts: 0, error: \u0027No content in API response\u0027 } }];\n}\n\nconst newContacts = response.content.filter(c =\u003e c.id \u003e lastId);\n\nif (newContacts.length === 0) {\n  return [{ json: { newContacts: 0 } }];\n}\n\n// Update static data with the highest ID\nconst staticData = $getWorkflowStaticData(\u0027global\u0027);\nstaticData.lastEbContactId = Math.max(...newContacts.map(c =\u003e c.id));\n\n// Return each new contact as a separate item (oldest first for processing order)\nreturn newContacts\n  .sort((a, b) =\u003e a.id - b.id)\n  .map(contact =\u003e ({\n    json: {\n      newContacts: newContacts.length,\n      eb_contact_id: contact.id,\n      name: contact.name || null,\n      phone: (contact.phone || \u0027\u0027).replace(/[^\\d]/g, \u0027\u0027),\n      identity_phone: (() =\u003e { const raw = String(contact.phone || \u0027\u0027).trim(); const compact = raw.replace(/[ ()-]/g, \u0027\u0027); return /^\\+[1-9]\\d{7,14}$/.test(compact) ? compact : null; })(),\n      email: contact.email || null,\n      property_id: contact.property_id || null,\n      message: contact.message || \u0027\u0027,\n      eb_source: contact.source || \u0027EasyBroker\u0027,\n      happened_at: contact.happened_at,\n      eb_contact_internal_id: contact.contact_id || null,\n      source: \u0027easybroker\u0027\n    }\n  }));"
+                                     },
+                      "id":  "eb8-0004-4000-8000-000000000004",
+                      "name":  "Filter New Contacts",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       860,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict",
+                                                                            "leftValue":  ""
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "has-new-contacts",
+                                                                                   "leftValue":  "={{ $json.newContacts }}",
+                                                                                   "rightValue":  0,
+                                                                                   "operator":  {
+                                                                                                    "type":  "number",
+                                                                                                    "operation":  "gt"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        }
+                                     },
+                      "id":  "eb8-0005-4000-8000-000000000005",
+                      "name":  "Has New Contacts?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       1080,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "eb8-0006-4000-8000-000000000006",
+                      "name":  "No New Contacts",
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1300,
+                                       480
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "=https://api.easybroker.com/v1/properties/{{ $json.property_id }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "X-Authorization",
+                                                                                         "value":  "={{ $env.EASYBROKER_API_KEY }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "options":  {
+                                                         "timeout":  10000
+                                                     }
+                                     },
+                      "id":  "eb8-0007-4000-8000-000000000007",
+                      "name":  "Fetch EB Property Details",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1300,
+                                       200
+                                   ],
+                      "continueOnFail":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "// Merge contact data with property details and normalize for downstream.\nconst contact = $(\u0027Filter New Contacts\u0027).item.json;\nconst prop = $input.first().json;\n\nconst hasProperty = !!(prop \u0026\u0026 prop.public_id);\n\nconst propertyTitle = hasProperty\n  ? prop.title\n  : \u0027Propiedad sin identificar\u0027;\n\nconst propertyPrice = hasProperty \u0026\u0026 prop.operations \u0026\u0026 prop.operations[0]\n  ? prop.operations[0].formatted_amount\n  : \u0027Precio por confirmar\u0027;\n\nconst propertyAddress = hasProperty \u0026\u0026 prop.location\n  ? (typeof prop.location === \u0027object\u0027 ? prop.location.name : prop.location)\n  : \u0027\u0027;\n\nconst listingType = hasProperty \u0026\u0026 prop.operations \u0026\u0026 prop.operations[0]\n  ? prop.operations[0].type\n  : \u0027venta\u0027;\n\n// Build cache payload from EB property data\nconst cachePayload = hasProperty ? {\n  title: prop.title,\n  price: propertyPrice,\n  price_numeric: prop.operations?.[0]?.amount || null,\n  currency: prop.operations?.[0]?.currency || \u0027MXN\u0027,\n  location: propertyAddress,\n  property_type: prop.property_type || null,\n  operation_type: listingType,\n  bedrooms: prop.bedrooms || null,\n  bathrooms: prop.bathrooms || null,\n  area_m2: prop.construction_size || prop.lot_size || null,\n  description: (prop.description || \u0027\u0027).substring(0, 500),\n  url: prop.public_url || null,\n  image_url: prop.title_image_full || null,\n  source: \u0027easybroker_api\u0027\n} : null;\n\nreturn [{\n  json: {\n    phone: contact.phone,\n    identity_phone: contact.identity_phone,\n    email: contact.email,\n    name: contact.name,\n    message: contact.message,\n    listing_id: contact.property_id,\n    property_title: propertyTitle,\n    property_address: propertyAddress,\n    property_price: propertyPrice,\n    listing_type: listingType,\n    source: \u0027easybroker\u0027,\n    eb_contact_id: contact.eb_contact_id,\n    eb_source: contact.eb_source,\n    cache_property_id: contact.property_id || \u0027unknown\u0027,\n    cache_payload: cachePayload,\n    has_property: hasProperty\n  }\n}];"
+                                     },
+                      "id":  "eb8-0008-4000-8000-000000000008",
+                      "name":  "Normalize Lead Data",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1520,
+                                       200
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH time_ctx AS (\n  SELECT is_daytime() AS is_day, current_shift() AS current_shift\n),\nreturning AS (\n  SELECT * FROM find_returning_lead($1, $2, $3) LIMIT 1\n)\nSELECT\n  r.conversation_id AS existing_conv_id,\n  r.assigned_agent_id,\n  r.current_property AS existing_property,\n  r.same_property,\n  r.mode AS existing_mode,\n  t.is_day,\n  t.current_shift\nFROM time_ctx t\nLEFT JOIN returning r ON TRUE;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.phone }},={{ $json.email }},={{ $json.listing_id }}"
+                                                     }
+                                     },
+                      "id":  "eb8-0009-4000-8000-000000000009",
+                      "name":  "Check Returning Lead + Time",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1740,
+                                       200
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      },
+                      "alwaysOutputData":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "// Route decision based on returning lead check and day/night.\nconst lead = $(\u0027Normalize Lead Data\u0027).item.json;\nconst db = $input.first().json;\n\nif (!lead.phone) {\n  return [{ json: { route: \u0027skip\u0027, reason: \u0027no_phone\u0027 } }];\n}\n\nconst isReturning = !!db.existing_conv_id;\nconst sameProperty = db.same_property === true;\nconst isDay = db.is_day !== false;\n\nif (isReturning \u0026\u0026 sameProperty) {\n  return [{\n    json: {\n      route: \u0027returning_same\u0027,\n      existing_conv_id: db.existing_conv_id,\n      assigned_agent_id: db.assigned_agent_id,\n      existing_mode: db.existing_mode,\n      ...lead\n    }\n  }];\n}\n\nif (isDay) {\n  return [{\n    json: {\n      route: \u0027day_auction\u0027,\n      is_returning_diff: isReturning \u0026\u0026 !sameProperty,\n      ...lead\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    route: \u0027night_queue\u0027,\n    is_returning_diff: isReturning \u0026\u0026 !sameProperty,\n    ...lead\n  }\n}];"
+                                     },
+                      "id":  "eb8-0010-4000-8000-000000000010",
+                      "name":  "Route Decision",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1960,
+                                       200
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "rules":  {
+                                                       "values":  [
+                                                                      {
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "typeValidation":  "strict",
+                                                                                                             "leftValue":  ""
+                                                                                                         },
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "route-returning",
+                                                                                                                    "leftValue":  "={{ $json.route }}",
+                                                                                                                    "rightValue":  "returning_same",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals"
+                                                                                                                                 }
+                                                                                                                }
+                                                                                                            ],
+                                                                                             "combinator":  "and"
+                                                                                         },
+                                                                          "renameOutput":  true,
+                                                                          "outputKey":  "returning_same"
+                                                                      },
+                                                                      {
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "typeValidation":  "strict",
+                                                                                                             "leftValue":  ""
+                                                                                                         },
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "route-day",
+                                                                                                                    "leftValue":  "={{ $json.route }}",
+                                                                                                                    "rightValue":  "day_auction",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals"
+                                                                                                                                 }
+                                                                                                                }
+                                                                                                            ],
+                                                                                             "combinator":  "and"
+                                                                                         },
+                                                                          "renameOutput":  true,
+                                                                          "outputKey":  "day_auction"
+                                                                      },
+                                                                      {
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "typeValidation":  "strict",
+                                                                                                             "leftValue":  ""
+                                                                                                         },
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "route-night",
+                                                                                                                    "leftValue":  "={{ $json.route }}",
+                                                                                                                    "rightValue":  "night_queue",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals"
+                                                                                                                                 }
+                                                                                                                }
+                                                                                                            ],
+                                                                                             "combinator":  "and"
+                                                                                         },
+                                                                          "renameOutput":  true,
+                                                                          "outputKey":  "night_queue"
+                                                                      }
+                                                                  ],
+                                                       "fallbackOutput":  {
+                                                                              "active":  true
+                                                                          }
+                                                   },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "eb8-0011-4000-8000-000000000011",
+                      "name":  "Route",
+                      "type":  "n8n-nodes-base.switch",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       2180,
+                                       200
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE conversations\nSET last_message_at = NOW()\nWHERE conversation_id = $1::uuid\nRETURNING conversation_id, assigned_agent_id, lead_name;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.existing_conv_id }}"
+                                                     }
+                                     },
+                      "id":  "eb8-0012-4000-8000-000000000012",
+                      "name":  "Update Existing Conversation",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       2440,
+                                       -20
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const data = $(\u0027Route Decision\u0027).first().json;\n\nif (!data.assigned_agent_id) {\n  return [{ json: { skip: true, reason: \u0027no_assigned_agent\u0027 } }];\n}\n\nreturn [{\n  json: {\n    agent_id: data.assigned_agent_id,\n    conversation_id: data.existing_conv_id,\n    lead_name: data.name,\n    lead_phone: data.phone,\n    property_title: data.property_title,\n    message: `Lead recurrente (EasyBroker): ${data.name || data.phone} volvio a preguntar por ${data.property_title}. Ya lo tienes asignado.`\n  }\n}];"
+                                     },
+                      "id":  "eb8-0013-4000-8000-000000000013",
+                      "name":  "Prepare Agent Notification",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2660,
+                                       -20
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT whatsapp_number FROM agents WHERE agent_id = $1;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.agent_id }}"
+                                                     }
+                                     },
+                      "id":  "eb8-0014-4000-8000-000000000014",
+                      "name":  "Get Agent Phone",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       2880,
+                                       -20
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "apikey",
+                                                                                         "value":  "={{ $env.EVOLUTION_API_KEY }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($(\u0027Prepare Agent Notification\u0027).first().json.message) }}\n}",
+                                         "options":  {
+                                                         "timeout":  10000
+                                                     }
+                                     },
+                      "id":  "eb8-0015-4000-8000-000000000015",
+                      "name":  "Notify Agent (Returning)",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       3100,
+                                       -20
+                                   ],
+                      "continueOnFail":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, \u0027pending_assignment\u0027, $5, \u0027day\u0027)\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.phone }},={{ $json.name }},={{ $json.email }},={{ $json.listing_id }},={{ $json.source }}"
+                                                     }
+                                     },
+                      "id":  "eb8-0016-4000-8000-000000000016",
+                      "name":  "Create Day Conversation",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       2440,
+                                       200
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const lead = $(\u0027Route Decision\u0027).first().json;\nconst conv = $input.first().json;\n\nreturn [{\n  json: {\n    conversation_id: conv.conversation_id,\n    lead_phone: conv.lead_phone,\n    identity_phone: lead.identity_phone,\n    lead_name: conv.lead_name || lead.name,\n    property_id: lead.listing_id || \u0027unknown\u0027,\n    property_title: lead.property_title,\n    property_price: lead.property_price,\n    assigned_agent_id: null,\n    cache_property_id: lead.cache_property_id,\n    cache_payload: lead.cache_payload\n  }\n}];"
+                                     },
+                      "id":  "eb8-0017-4000-8000-000000000017",
+                      "name":  "Prepare Auction Data",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2660,
+                                       200
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT u.*, $5 AS lead_phone, $6 AS lead_name, $2 AS property_id, $7 AS property_title, $8 AS property_price, $9 AS cache_property_id, $10::jsonb AS cache_payload, NULL::text AS assigned_agent_id\nFROM upsert_lead_opportunity($1::uuid, $2, NULL, $4, $5, \u0027easybroker\u0027, $11, \u0027captured\u0027) u;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.conversation_id }},={{ $json.property_id }},={{ $(\u0027Route Decision\u0027).first().json.eb_contact_id }},={{ $(\u0027Route Decision\u0027).first().json.email }},={{ $json.identity_phone }},={{ $json.lead_name }},={{ $json.property_title }},={{ $json.property_price }},={{ $json.cache_property_id }},={{ JSON.stringify($json.cache_payload || {}) }},={{ $(\u0027Route Decision\u0027).first().json.eb_contact_id }}"
+                                                     }
+                                     },
+                      "id":  "lrv2-006-wf8-upsert-opportunity",
+                      "name":  "Upsert Canonical Opportunity",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       2770,
+                                       200
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO properties_cache (property_id, payload)\nVALUES ($1, $2::jsonb)\nON CONFLICT (property_id) DO UPDATE\n  SET payload = EXCLUDED.payload, fetched_at = NOW();",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.cache_property_id }},={{ JSON.stringify($json.cache_payload || {}) }}"
+                                                     }
+                                     },
+                      "id":  "eb8-0018-4000-8000-000000000018",
+                      "name":  "Cache Property",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       2880,
+                                       120
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      },
+                      "continueOnFail":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "source":  "database",
+                                         "workflowId":  "={{ $env.WF3A_WORKFLOW_ID }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "eb8-0019-4000-8000-000000000019",
+                      "name":  "Call WF3a: TOMO Auction",
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       2880,
+                                       280
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH c AS (\n  INSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\n  VALUES ($1, $2, $3, $4, \u0027night_queued\u0027, $5, \u0027night\u0027)\n  RETURNING conversation_id, lead_phone, lead_name, current_property\n)\nSELECT c.*, u.opportunity_id, u.should_route\nFROM c\nCROSS JOIN LATERAL upsert_lead_opportunity(c.conversation_id, $4, NULL, $3, $7, $5, $6, \u0027queued_night\u0027) u;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.phone }},={{ $json.name }},={{ $json.email }},={{ $json.listing_id }},={{ $json.source }},={{ $json.eb_contact_id }},={{ $json.identity_phone }}"
+                                                     }
+                                     },
+                      "id":  "eb8-0020-4000-8000-000000000020",
+                      "name":  "Create Night Conversation",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       2440,
+                                       440
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO night_queue (conversation_id, source, lead_phone, lead_name, property_id, lead_email, opportunity_id)\nSELECT $1::uuid, $2, $3, $4, $5, $6, $7::bigint\nWHERE $7::bigint IS NOT NULL\nON CONFLICT (opportunity_id) WHERE opportunity_id IS NOT NULL DO NOTHING;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.conversation_id }},={{ $(\u0027Route Decision\u0027).first().json.source }},={{ $json.lead_phone }},={{ $json.lead_name }},={{ $json.current_property }},={{ $(\u0027Route Decision\u0027).first().json.email }},={{ $json.opportunity_id }}"
+                                                     }
+                                     },
+                      "id":  "eb8-0021-4000-8000-000000000021",
+                      "name":  "Insert Night Queue",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       2660,
+                                       440
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "eb8-0022-4000-8000-000000000022",
+                      "name":  "End (Skip/Fallback)",
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  1,
+                      "position":  [
+                                       2440,
+                                       620
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict",
+                                                                            "leftValue":  ""
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "lrv2-006-gate-WF8_easybroker_polling-condition",
+                                                                                   "leftValue":  "={{ $json.should_route }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        }
+                                     },
+                      "id":  "lrv2-006-gate-WF8_easybroker_polling",
+                      "name":  "Should Route?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       1900,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "lrv2-006-stop-WF8_easybroker_polling",
+                      "name":  "Stop Duplicate Intake",
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  1,
+                      "position":  [
+                                       2100,
+                                       500
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict",
+                                                                            "leftValue":  ""
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "lrv2-006-night-gate-WF8_easybroker_polling-condition",
+                                                                                   "leftValue":  "={{ $json.should_route }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        }
+                                     },
+                      "id":  "lrv2-006-night-gate-WF8_easybroker_polling",
+                      "name":  "Should Route Night?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       3100,
+                                       600
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "lrv2-006-night-stop-WF8_easybroker_polling",
+                      "name":  "Stop Duplicate Night Intake",
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  1,
+                      "position":  [
+                                       3300,
+                                       760
+                                   ]
                   }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "night_queue"
-            }
-          ],
-          "fallbackOutput": { "active": true }
-        },
-        "options": {}
-      },
-      "id": "eb8-0011-4000-8000-000000000011",
-      "name": "Route",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3.2,
-      "position": [2180, 200]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE conversations\nSET last_message_at = NOW()\nWHERE conversation_id = $1::uuid\nRETURNING conversation_id, assigned_agent_id, lead_name;",
-        "options": {
-          "queryReplacement": "={{ $json.existing_conv_id }}"
-        }
-      },
-      "id": "eb8-0012-4000-8000-000000000012",
-      "name": "Update Existing Conversation",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [2440, -20],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $('Route Decision').first().json;\n\nif (!data.assigned_agent_id) {\n  return [{ json: { skip: true, reason: 'no_assigned_agent' } }];\n}\n\nreturn [{\n  json: {\n    agent_id: data.assigned_agent_id,\n    conversation_id: data.existing_conv_id,\n    lead_name: data.name,\n    lead_phone: data.phone,\n    property_title: data.property_title,\n    message: `Lead recurrente (EasyBroker): ${data.name || data.phone} volvio a preguntar por ${data.property_title}. Ya lo tienes asignado.`\n  }\n}];"
-      },
-      "id": "eb8-0013-4000-8000-000000000013",
-      "name": "Prepare Agent Notification",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2660, -20]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT whatsapp_number FROM agents WHERE agent_id = $1;",
-        "options": {
-          "queryReplacement": "={{ $json.agent_id }}"
-        }
-      },
-      "id": "eb8-0014-4000-8000-000000000014",
-      "name": "Get Agent Phone",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [2880, -20],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($('Prepare Agent Notification').first().json.message) }}\n}",
-        "options": { "timeout": 10000 }
-      },
-      "id": "eb8-0015-4000-8000-000000000015",
-      "name": "Notify Agent (Returning)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [3100, -20],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'pending_assignment', $5, 'day')\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
-        "options": {
-          "queryReplacement": "={{ $json.phone }},={{ $json.name }},={{ $json.email }},={{ $json.listing_id }},={{ $json.source }}"
-        }
-      },
-      "id": "eb8-0016-4000-8000-000000000016",
-      "name": "Create Day Conversation",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [2440, 200],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const lead = $('Route Decision').first().json;\nconst conv = $input.first().json;\n\nreturn [{\n  json: {\n    conversation_id: conv.conversation_id,\n    lead_phone: conv.lead_phone,\n    lead_name: conv.lead_name || lead.name,\n    property_id: lead.listing_id || 'unknown',\n    property_title: lead.property_title,\n    property_price: lead.property_price,\n    assigned_agent_id: null,\n    cache_property_id: lead.cache_property_id,\n    cache_payload: lead.cache_payload\n  }\n}];"
-      },
-      "id": "eb8-0017-4000-8000-000000000017",
-      "name": "Prepare Auction Data",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2660, 200]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO properties_cache (property_id, payload)\nVALUES ($1, $2::jsonb)\nON CONFLICT (property_id) DO UPDATE\n  SET payload = EXCLUDED.payload, fetched_at = NOW();",
-        "options": {
-          "queryReplacement": "={{ $json.cache_property_id }},={{ JSON.stringify($json.cache_payload || {}) }}"
-        }
-      },
-      "id": "eb8-0018-4000-8000-000000000018",
-      "name": "Cache Property",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [2880, 120],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      },
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "source": "database",
-        "workflowId": "={{ $env.WF3A_WORKFLOW_ID }}",
-        "options": {}
-      },
-      "id": "eb8-0019-4000-8000-000000000019",
-      "name": "Call WF3a: TOMO Auction",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [2880, 280]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'night_queued', $5, 'night')\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
-        "options": {
-          "queryReplacement": "={{ $json.phone }},={{ $json.name }},={{ $json.email }},={{ $json.listing_id }},={{ $json.source }}"
-        }
-      },
-      "id": "eb8-0020-4000-8000-000000000020",
-      "name": "Create Night Conversation",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [2440, 440],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO night_queue (conversation_id, source, lead_phone, lead_name, property_id, lead_email)\nVALUES ($1::uuid, $2, $3, $4, $5, $6);",
-        "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $('Route Decision').first().json.source }},={{ $json.lead_phone }},={{ $json.lead_name }},={{ $json.current_property }},={{ $('Route Decision').first().json.email }}"
-        }
-      },
-      "id": "eb8-0021-4000-8000-000000000021",
-      "name": "Insert Night Queue",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [2660, 440],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {},
-      "id": "eb8-0022-4000-8000-000000000022",
-      "name": "End (Skip/Fallback)",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [2440, 620]
-    }
-  ],
-  "connections": {
-    "Every 15 Minutes": {
-      "main": [
-        [
-          {
-            "node": "Get Last Processed ID",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Last Processed ID": {
-      "main": [
-        [
-          {
-            "node": "Fetch EB Contact Requests",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch EB Contact Requests": {
-      "main": [
-        [
-          {
-            "node": "Filter New Contacts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Filter New Contacts": {
-      "main": [
-        [
-          {
-            "node": "Has New Contacts?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Has New Contacts?": {
-      "main": [
-        [
-          {
-            "node": "Fetch EB Property Details",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "No New Contacts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch EB Property Details": {
-      "main": [
-        [
-          {
-            "node": "Normalize Lead Data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Normalize Lead Data": {
-      "main": [
-        [
-          {
-            "node": "Check Returning Lead + Time",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Returning Lead + Time": {
-      "main": [
-        [
-          {
-            "node": "Route Decision",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Route Decision": {
-      "main": [
-        [
-          {
-            "node": "Route",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Route": {
-      "main": [
-        [
-          {
-            "node": "Update Existing Conversation",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Create Day Conversation",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Create Night Conversation",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "End (Skip/Fallback)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Existing Conversation": {
-      "main": [
-        [
-          {
-            "node": "Prepare Agent Notification",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Agent Notification": {
-      "main": [
-        [
-          {
-            "node": "Get Agent Phone",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Agent Phone": {
-      "main": [
-        [
-          {
-            "node": "Notify Agent (Returning)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create Day Conversation": {
-      "main": [
-        [
-          {
-            "node": "Prepare Auction Data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Auction Data": {
-      "main": [
-        [
-          {
-            "node": "Cache Property",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Call WF3a: TOMO Auction",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create Night Conversation": {
-      "main": [
-        [
-          {
-            "node": "Insert Night Queue",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1",
-    "saveExecutionProgress": true,
-    "saveManualExecutions": true
-  }
+              ],
+    "connections":  {
+                        "Every 15 Minutes":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Get Last Processed ID",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Get Last Processed ID":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Fetch EB Contact Requests",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Fetch EB Contact Requests":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Filter New Contacts",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Filter New Contacts":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Has New Contacts?",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Has New Contacts?":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Fetch EB Property Details",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "No New Contacts",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Fetch EB Property Details":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Normalize Lead Data",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Normalize Lead Data":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Check Returning Lead + Time",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Check Returning Lead + Time":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Route Decision",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Route Decision":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Route",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "Route":  {
+                                      "main":  [
+                                                   [
+                                                       {
+                                                           "node":  "Update Existing Conversation",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ],
+                                                   [
+                                                       {
+                                                           "node":  "Create Day Conversation",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ],
+                                                   [
+                                                       {
+                                                           "node":  "Create Night Conversation",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ],
+                                                   [
+                                                       {
+                                                           "node":  "End (Skip/Fallback)",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ]
+                                               ]
+                                  },
+                        "Update Existing Conversation":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Prepare Agent Notification",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "Prepare Agent Notification":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Get Agent Phone",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "Get Agent Phone":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Notify Agent (Returning)",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Create Day Conversation":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Prepare Auction Data",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "Prepare Auction Data":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Upsert Canonical Opportunity",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Upsert Canonical Opportunity":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Should Route?",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "Create Night Conversation":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Should Route Night?",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Should Route?":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Cache Property",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               },
+                                                               {
+                                                                   "node":  "Call WF3a: TOMO Auction",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ],
+                                                           [
+                                                               {
+                                                                   "node":  "Stop Duplicate Intake",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Should Route Night?":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Insert Night Queue",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ],
+                                                                 [
+                                                                     {
+                                                                         "node":  "Stop Duplicate Night Intake",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "saveExecutionProgress":  true,
+                     "saveManualExecutions":  true
+                 }
 }

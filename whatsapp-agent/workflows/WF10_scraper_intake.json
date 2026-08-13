@@ -1,621 +1,1132 @@
 {
-  "name": "WF10 - Scraper Lead Intake",
-  "nodes": [
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "scraper-leads",
-        "responseMode": "onReceived",
-        "options": {}
-      },
-      "id": "b1b2c3d4-0001-4000-8000-000000000001",
-      "name": "Scraper Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [200, 300],
-      "webhookId": "scraper-leads-webhook-id",
-      "notes": "Receives POST from Python scraper.\nPayload: JSON array of lead objects.\nConfigure scraper env: WEBHOOK_URL=https://[your-n8n-domain]/webhook/scraper-leads"
-    },
-    {
-      "parameters": {
-        "jsCode": "// The scraper sends an array of leads. Split into individual items.\n// Normalize field names for downstream processing.\nconst body = $input.first().json.body || $input.first().json;\nconst leads = Array.isArray(body) ? body : [body];\n\nreturn leads.map(lead => ({\n  json: {\n    // Contact info\n    phone: (lead.phone || '').replace(/[^\\d]/g, ''),\n    email: lead.email || null,\n    name: lead.name || lead.pushName || null,\n    message: lead.message || '',\n    // Property info (already available from scraper)\n    listing_id: lead.listing_id || null,\n    property_public_id: lead.property_public_id || null,\n    property_title: lead.property || lead.address || 'Propiedad sin titulo',\n    property_address: lead.address || '',\n    property_price: lead.price || 'Precio por confirmar',\n    listing_type: lead.listing_type || 'venta',\n    // Scraper metadata\n    scraper_lead_id: lead.lead_id || null,\n    source_tab: lead.source_tab || 'mensajes',\n    source: 'inmuebles24'\n  }\n}));"
-      },
-      "id": "b1b2c3d4-0002-4000-8000-000000000002",
-      "name": "Split & Normalize Leads",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [440, 300]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Check if this is a returning lead and whether it's day or night.\n-- Uses LEFT JOIN to ensure is_daytime() always executes even if no returning lead.\nWITH time_ctx AS (\n  SELECT is_daytime() AS is_day, current_shift() AS current_shift\n),\nreturning AS (\n  SELECT * FROM find_returning_lead($1, $2, $3) LIMIT 1\n)\nSELECT\n  r.conversation_id AS existing_conv_id,\n  r.assigned_agent_id,\n  r.current_property AS existing_property,\n  r.same_property,\n  r.mode AS existing_mode,\n  t.is_day,\n  t.current_shift\nFROM time_ctx t\nLEFT JOIN returning r ON TRUE;",
-        "options": {
-          "queryReplacement": "={{ $json.phone }},={{ $json.email }},={{ $json.listing_id }}"
-        }
-      },
-      "id": "b1b2c3d4-0003-4000-8000-000000000003",
-      "name": "Check Returning Lead + Time",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [680, 300],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      },
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "jsCode": "// Route decision based on returning lead check and day/night.\nconst lead = $('Split & Normalize Leads').item.json;\nconst db = $input.first().json;\n\n// If no phone, skip this lead\nif (!lead.phone) {\n  return [{ json: { route: 'skip', reason: 'no_phone' } }];\n}\n\nconst isReturning = !!db.existing_conv_id;\nconst sameProperty = db.same_property === true;\nconst isDay = db.is_day !== false; // Default to day if query returns no rows\n\nif (isReturning && sameProperty) {\n  return [{\n    json: {\n      route: 'returning_same',\n      existing_conv_id: db.existing_conv_id,\n      assigned_agent_id: db.assigned_agent_id,\n      existing_mode: db.existing_mode,\n      ...lead\n    }\n  }];\n}\n\nif (isDay) {\n  return [{\n    json: {\n      route: 'day_auction',\n      is_returning_diff: isReturning && !sameProperty,\n      ...lead\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    route: 'night_queue',\n    is_returning_diff: isReturning && !sameProperty,\n    ...lead\n  }\n}];"
-      },
-      "id": "b1b2c3d4-0004-4000-8000-000000000004",
-      "name": "Route Decision",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [920, 300]
-    },
-    {
-      "parameters": {
-        "rules": {
-          "values": [
-            {
-              "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict", "leftValue": "" },
-                "conditions": [
+    "updatedAt":  "2026-07-04T15:16:14.933Z",
+    "createdAt":  "2026-06-14T14:46:10.909Z",
+    "id":  "Obr38705ZZYS3FB8",
+    "name":  "WF10 - Scraper Lead Intake",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
                   {
-                    "id": "route-returning",
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "returning_same",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "returning_same"
-            },
-            {
-              "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict", "leftValue": "" },
-                "conditions": [
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "scraper-leads",
+                                         "options":  {
+
+                                                     },
+                                         "authentication":  "headerAuth"
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2,
+                      "position":  [
+                                       0,
+                                       300
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000001",
+                      "name":  "Scraper Webhook",
+                      "webhookId":  "scraper-leads-webhook-id",
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "REPLACE_WITH_SCRAPER_HEADER_AUTH_CREDENTIAL_ID",
+                                                                 "name":  "Scraper Webhook Header Auth"
+                                                             }
+                                      },
+                      "notes":  "Authenticated scraper webhook. Configure n8n Header Auth credential; no shared secret is stored in this artifact."
+                  },
                   {
-                    "id": "route-day",
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "day_auction",
-                    "operator": { "type": "string", "operation": "equals" }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "day_auction"
-            },
-            {
-              "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict", "leftValue": "" },
-                "conditions": [
+                      "parameters":  {
+                                         "jsCode":  "// Normalize field names and preserve only literal E.164 phones for WhatsApp routing.\nconst body = $input.first().json.body || $input.first().json;\nconst leads = Array.isArray(body) ? body : [body];\nconst best = new Map();\nconst order = [];\n\nfor (const raw of leads) {\n  const rawPhone = String(raw.phone || raw.whatsapp || raw.mobile || \u0027\u0027).trim();\n  const digits = rawPhone.replace(/\\D/g, \u0027\u0027);\n  const candidate = rawPhone.startsWith(\u0027+\u0027) ? \u0027+\u0027 + digits : null;\n  const identity_phone = candidate \u0026\u0026 /^\\+[1-9]\\d{7,14}$/.test(candidate) ? candidate : null;\n  const lead = {\n    phone: identity_phone,\n    identity_phone,\n    email: raw.email ? String(raw.email).trim().toLowerCase() : null,\n    name: raw.name || raw.pushName || null,\n    message: raw.message || \u0027\u0027,\n    listing_id: raw.listing_id || raw.property_id || null,\n    property_public_id: raw.property_public_id || raw.eb_code || null,\n    property_title: raw.property || raw.title || raw.address || \u0027Propiedad sin titulo\u0027,\n    property_price: raw.price || \u0027Precio por confirmar\u0027,\n    scraper_lead_id: raw.lead_id || raw.id || null,\n    source_tab: raw.source_tab || \u0027mensajes\u0027,\n    source: \u0027inmuebles24\u0027,\n  };\n  const key = lead.scraper_lead_id\n    ? \u0027id:\u0027 + lead.scraper_lead_id\n    : \u0027contact:\u0027 + (lead.identity_phone || lead.email || \u0027unknown\u0027) + \u0027:\u0027 + (lead.listing_id || \u0027unknown\u0027);\n  const score = (item) =\u003e (item.identity_phone ? 2 : 0) + (item.email ? 1 : 0) + (item.listing_id ? 1 : 0);\n  if (!best.has(key)) {\n    best.set(key, lead);\n    order.push(key);\n  } else if (score(lead) \u003e score(best.get(key))) {\n    best.set(key, lead);\n  }\n}\n\nreturn order.map((key) =\u003e ({ json: best.get(key) }));"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       300
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000002",
+                      "name":  "Split \u0026 Normalize Leads"
+                  },
                   {
-                    "id": "route-night",
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "night_queue",
-                    "operator": { "type": "string", "operation": "equals" }
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH time_ctx AS (\n  SELECT public.is_daytime() AS is_day, public.current_shift() AS current_shift\n), returning_lead AS (\n  SELECT * FROM public.find_returning_lead($1, $2, $3) LIMIT 1\n)\nSELECT r.conversation_id AS existing_conv_id,\n       r.assigned_agent_id,\n       r.current_property AS existing_property,\n       r.same_property,\n       r.mode AS existing_mode,\n       t.is_day,\n       t.current_shift\nFROM time_ctx AS t\nLEFT JOIN returning_lead AS r ON TRUE;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.identity_phone, $json.email, $json.listing_id] }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       500,
+                                       300
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000003",
+                      "name":  "Check Returning Lead + Time",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      },
+                      "alwaysOutputData":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const dbRows = $input.all();\nconst leads = $(\u0027Split \u0026 Normalize Leads\u0027).all();\nconst out = [];\n\nfor (let index = 0; index \u003c dbRows.length; index += 1) {\n  const db = dbRows[index].json;\n  const lead = (leads[index] || leads[0]).json;\n  const isDay = db.is_day === true;\n  const isReturning = Boolean(db.existing_conv_id);\n  const sameProperty = db.same_property === true;\n\n  if (!lead.identity_phone) {\n    out.push({ json: { ...lead, route: \u0027non_routable\u0027, reason: \u0027invalid_or_missing_e164_phone\u0027 } });\n    continue;\n  }\n  // Silent capture applies before any returning-lead behavior.\n  if (!isDay) {\n    out.push({ json: { ...lead, route: \u0027night_queue\u0027, is_returning: isReturning } });\n    continue;\n  }\n  if (isReturning \u0026\u0026 sameProperty) {\n    out.push({ json: {\n      ...lead,\n      route: \u0027returning_same\u0027,\n      existing_conv_id: db.existing_conv_id,\n      assigned_agent_id: db.assigned_agent_id,\n      existing_mode: db.existing_mode,\n    } });\n    continue;\n  }\n  out.push({ json: { ...lead, route: \u0027day_auction\u0027, is_returning: isReturning } });\n}\n\nreturn out;"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       760,
+                                       300
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000004",
+                      "name":  "Route Decision"
+                  },
+                  {
+                      "parameters":  {
+                                         "rules":  {
+                                                       "values":  [
+                                                                      {
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "leftValue":  "",
+                                                                                                             "typeValidation":  "strict",
+                                                                                                             "version":  3
+                                                                                                         },
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "f1000000-0000-4000-8000-000000000501",
+                                                                                                                    "leftValue":  "={{ $json.route }}",
+                                                                                                                    "rightValue":  "returning_same",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals"
+                                                                                                                                 }
+                                                                                                                }
+                                                                                                            ],
+                                                                                             "combinator":  "and"
+                                                                                         },
+                                                                          "renameOutput":  true,
+                                                                          "outputKey":  "returning_same"
+                                                                      },
+                                                                      {
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "leftValue":  "",
+                                                                                                             "typeValidation":  "strict",
+                                                                                                             "version":  3
+                                                                                                         },
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "f1000000-0000-4000-8000-000000000502",
+                                                                                                                    "leftValue":  "={{ $json.route }}",
+                                                                                                                    "rightValue":  "day_auction",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals"
+                                                                                                                                 }
+                                                                                                                }
+                                                                                                            ],
+                                                                                             "combinator":  "and"
+                                                                                         },
+                                                                          "renameOutput":  true,
+                                                                          "outputKey":  "day_auction"
+                                                                      },
+                                                                      {
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "leftValue":  "",
+                                                                                                             "typeValidation":  "strict",
+                                                                                                             "version":  3
+                                                                                                         },
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "f1000000-0000-4000-8000-000000000503",
+                                                                                                                    "leftValue":  "={{ $json.route }}",
+                                                                                                                    "rightValue":  "night_queue",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals"
+                                                                                                                                 }
+                                                                                                                }
+                                                                                                            ],
+                                                                                             "combinator":  "and"
+                                                                                         },
+                                                                          "renameOutput":  true,
+                                                                          "outputKey":  "night_queue"
+                                                                      },
+                                                                      {
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "leftValue":  "",
+                                                                                                             "typeValidation":  "strict",
+                                                                                                             "version":  3
+                                                                                                         },
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "f1000000-0000-4000-8000-000000000504",
+                                                                                                                    "leftValue":  "={{ $json.route }}",
+                                                                                                                    "rightValue":  "non_routable",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals"
+                                                                                                                                 }
+                                                                                                                }
+                                                                                                            ],
+                                                                                             "combinator":  "and"
+                                                                                         },
+                                                                          "renameOutput":  true,
+                                                                          "outputKey":  "non_routable"
+                                                                      }
+                                                                  ]
+                                                   },
+                                         "options":  {
+                                                         "fallbackOutput":  "extra"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.switch",
+                      "typeVersion":  3.2,
+                      "position":  [
+                                       1010,
+                                       300
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000005",
+                      "name":  "Route"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE public.conversations\nSET last_message_at = NOW()\nWHERE conversation_id = $1::uuid\nRETURNING conversation_id, assigned_agent_id, lead_name;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.existing_conv_id }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1260,
+                                       30
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000006",
+                      "name":  "Update Existing Conversation",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const lead = $(\u0027Route Decision\u0027).item.json;\nconst conversation = $input.item.json;\nif (!lead.assigned_agent_id) return [{ json: { skip: true } }];\nreturn [{ json: {\n  agent_id: lead.assigned_agent_id,\n  conversation_id: conversation.conversation_id,\n  lead_name: lead.name,\n  lead_phone: lead.identity_phone,\n  property_title: lead.property_title,\n  message: `Lead recurrente: ${lead.name || lead.identity_phone} volvio a preguntar por ${lead.property_title}.`,\n} }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1510,
+                                       30
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000007",
+                      "name":  "Prepare Agent Notification"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT whatsapp_number FROM public.agents WHERE agent_id = $1;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.agent_id }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1760,
+                                       30
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000008",
+                      "name":  "Get Agent Phone",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Authorization",
+                                                                                         "value":  "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\"messaging_product\":\"whatsapp\",\"to\":\"{{ $json.whatsapp_number }}\",\"type\":\"text\",\"text\":{\"body\":{{ JSON.stringify($(\u0027Prepare Agent Notification\u0027).item.json.message) }}}}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       2010,
+                                       30
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000009",
+                      "name":  "Notify Agent (Returning)",
+                      "continueOnFail":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO public.conversations (\n  lead_phone, lead_name, lead_email, current_property, mode, source,\n  arrived_during, i24_lead_id, property_public_id\n) VALUES ($1, $2, $3, $4, \u0027pending_assignment\u0027, \u0027inmuebles24\u0027, \u0027day\u0027, $5, NULLIF($6, \u0027\u0027))\nON CONFLICT (i24_lead_id) WHERE i24_lead_id IS NOT NULL\nDO UPDATE SET last_message_at = NOW()\nRETURNING conversation_id, lead_phone, lead_name, lead_email, current_property,\n          i24_lead_id, property_public_id;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.identity_phone, $json.name, $json.email, $json.listing_id, $json.scraper_lead_id, $json.property_public_id] }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1260,
+                                       220
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000010",
+                      "name":  "Create Day Conversation",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const lead = $(\u0027Route Decision\u0027).item.json;\nconst conversation = $input.item.json;\nreturn [{ json: {\n  conversation_id: conversation.conversation_id,\n  identity_phone: lead.identity_phone,\n  lead_name: conversation.lead_name || lead.name,\n  lead_email: conversation.lead_email || lead.email,\n  property_id: conversation.current_property || lead.listing_id,\n  property_public_id: conversation.property_public_id || lead.property_public_id,\n  property_title: lead.property_title,\n  property_price: lead.property_price,\n  scraper_lead_id: lead.scraper_lead_id,\n  source: \u0027inmuebles24\u0027,\n} }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1510,
+                                       220
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000011",
+                      "name":  "Prepare Routing Data"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT u.*, $1::uuid AS conversation_id, $2 AS property_id,\n       $5 AS lead_phone, $6 AS lead_name, $4 AS lead_email,\n       $7 AS property_title, $8 AS property_price, $9 AS property_public_id,\n       $11 AS scraper_lead_id\nFROM public.upsert_lead_opportunity(\n  $1::uuid, $2, NULL, $4, $5, \u0027inmuebles24\u0027, $11, \u0027captured\u0027\n) AS u;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.conversation_id, $json.property_id, null, $json.lead_email, $json.identity_phone, $json.lead_name, $json.property_title, $json.property_price, $json.property_public_id, $json.source, $json.scraper_lead_id] }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1760,
+                                       220
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000012",
+                      "name":  "Upsert Canonical Opportunity",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict",
+                                                                            "leftValue":  ""
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "f1000000-0000-4000-8000-000000001301",
+                                                                                   "leftValue":  "={{ $json.should_route }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       2010,
+                                       220
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000013",
+                      "name":  "Should Route?"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT * FROM public.get_routing_safe_mode();",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       2260,
+                                       80
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000029",
+                      "name":  "Check Routing Safe Mode",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict",
+                                                                            "leftValue":  ""
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "f1000000-0000-4000-8000-00000000002901",
+                                                                                   "leftValue":  "={{ $json.status }}",
+                                                                                   "rightValue":  "safe_mode",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "equals"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       2380,
+                                       80
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-00000000002a",
+                      "name":  "Safe Mode Active?"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT * FROM public.route_missing_owner_data(\n  $1::bigint,\n  'routing_safe_mode',\n  $2\n);",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$('Upsert Canonical Opportunity').item.json.opportunity_id, \"wf10:safe-mode:\" + $('Upsert Canonical Opportunity').item.json.opportunity_id + \":\" + ($('Upsert Canonical Opportunity').item.json.property_public_id || \"unknown\")] }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       2510,
+                                       40
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-00000000002b",
+                      "name":  "Route Direct To Guard (Safe Mode)",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "w7yJr7naWoxPq6Pw",
+                                                            "mode":  "id"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+
+                                                                          }
+                                                            },
+                                         "options":  {
+
+                                                     },
+                                         "mode":  "each"
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       2260,
+                                       180
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000014",
+                      "name":  "Resolve Owner (WF12)"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict",
+                                                                            "leftValue":  ""
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "f1000000-0000-4000-8000-000000001501",
+                                                                                   "leftValue":  "={{ $json.resolved }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       2510,
+                                       180
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000015",
+                      "name":  "Owner Resolved?"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const owner = $input.item.json;\nconst lead = $(\u0027Upsert Canonical Opportunity\u0027).item.json;\nreturn [{ json: {\n  conversation_id: lead.conversation_id,\n  opportunity_id: lead.opportunity_id,\n  property_id: lead.property_id,\n  property_title: lead.property_title,\n  property_price: lead.property_price,\n  lead_name: lead.lead_name,\n  lead_phone: lead.lead_phone,\n  owner_agent_id: owner.owner_agent_id,\n  owner_name: owner.owner_name,\n  owner_number: owner.owner_number,\n} }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2760,
+                                       100
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000016",
+                      "name":  "Prepare Owner Notify"
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "Bo2YbbUpmBzRbhDa",
+                                                            "mode":  "id"
+                                                        },
+                                         "workflowInputs":  {
+                                                                "mappingMode":  "defineBelow",
+                                                                "value":  {
+
+                                                                          }
+                                                            },
+                                         "options":  {
+
+                                                     },
+                                         "mode":  "each"
+                                     },
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       3010,
+                                       100
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000017",
+                      "name":  "Notify Owner (WF13)"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT * FROM public.route_missing_owner_data(\n  $1::bigint,\n  \u0027missing_owner_data\u0027,\n  $2\n);",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.opportunity_id, \"wf10:missing-owner:\" + $json.opportunity_id + \":\" + ($json.property_public_id || \"unknown\")] }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       2760,
+                                       280
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000018",
+                      "name":  "Route Missing Owner Data",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "WITH conversation AS (\n  INSERT INTO public.conversations (\n    lead_phone, lead_name, lead_email, current_property, mode, source,\n    arrived_during, i24_lead_id, property_public_id\n  ) VALUES ($1, $2, $3, $4, \u0027night_queued\u0027, \u0027inmuebles24\u0027, \u0027night\u0027, $5, NULLIF($6, \u0027\u0027))\n  ON CONFLICT (i24_lead_id) WHERE i24_lead_id IS NOT NULL\n  DO UPDATE SET last_message_at = NOW()\n  RETURNING conversation_id, lead_phone, lead_name, lead_email, current_property\n)\nSELECT conversation.*, u.opportunity_id, u.should_route, $4 AS property_id\nFROM conversation\nCROSS JOIN LATERAL public.upsert_lead_opportunity(\n  conversation.conversation_id, $4, NULL, $3, $7, \u0027inmuebles24\u0027, $5, \u0027queued_night\u0027\n) AS u;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.identity_phone, $json.name, $json.email, $json.listing_id, $json.scraper_lead_id, $json.property_public_id, $json.identity_phone] }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1260,
+                                       470
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000019",
+                      "name":  "Create Night Conversation",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict",
+                                                                            "leftValue":  ""
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "f1000000-0000-4000-8000-000000002001",
+                                                                                   "leftValue":  "={{ $json.should_route }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       1510,
+                                       470
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000020",
+                      "name":  "Should Route Night?"
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO public.night_queue (\n  conversation_id, source, lead_phone, lead_name, property_id, lead_email, opportunity_id\n)\nSELECT $1::uuid, $2, $3, $4, $5, $6, $7::bigint\nWHERE $7::bigint IS NOT NULL\nON CONFLICT (opportunity_id) WHERE opportunity_id IS NOT NULL DO NOTHING;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.conversation_id, \"inmuebles24\", $json.lead_phone, $json.lead_name, $json.property_id, $json.lead_email, $json.opportunity_id] }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1760,
+                                       430
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000021",
+                      "name":  "Insert Night Queue",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT * FROM public.upsert_lead_opportunity(\n  NULL::uuid, $2, NULL, $3, NULL, \u0027inmuebles24\u0027, $1, \u0027captured\u0027\n);",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.scraper_lead_id, $json.listing_id, $json.email] }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1260,
+                                       660
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000022",
+                      "name":  "Persist Non-routable Opportunity",
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "dEHKygi1neTNvPtH",
+                                                           "name":  "Postgres account BYG project"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2260,
+                                       300
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000023",
+                      "name":  "Stop Duplicate Intake"
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1760,
+                                       520
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000024",
+                      "name":  "Stop Duplicate Night Intake"
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  2,
+                      "position":  [
+                                       3010,
+                                       280
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000025",
+                      "name":  "End (Owner Fallback)"
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1260,
+                                       800
+                                   ],
+                      "id":  "f1000000-0000-4000-8000-000000000026",
+                      "name":  "End (Skip/Fallback)"
                   }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "night_queue"
-            }
-          ],
-          "fallbackOutput": { "active": true }
-        },
-        "options": {}
-      },
-      "id": "b1b2c3d4-0005-4000-8000-000000000005",
-      "name": "Route",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3.2,
-      "position": [1160, 300]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Returning lead, same property: update last_message_at on existing conversation.\nUPDATE conversations\nSET last_message_at = NOW()\nWHERE conversation_id = $1::uuid\nRETURNING conversation_id, assigned_agent_id, lead_name;",
-        "options": {
-          "queryReplacement": "={{ $json.existing_conv_id }}"
-        }
-      },
-      "id": "b1b2c3d4-0006-4000-8000-000000000006",
-      "name": "Update Existing Conversation",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1420, 80],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Notify the assigned agent about a returning lead (same property).\nconst data = $('Route Decision').first().json;\nconst conv = $input.first().json;\n\nif (!data.assigned_agent_id) {\n  return [{ json: { skip: true, reason: 'no_assigned_agent' } }];\n}\n\nreturn [{\n  json: {\n    number: data.assigned_agent_id, // Will be resolved to phone below\n    conversation_id: data.existing_conv_id,\n    lead_name: data.name,\n    lead_phone: data.phone,\n    property_title: data.property_title,\n    message: `Lead recurrente: ${data.name || data.phone} volvio a preguntar por ${data.property_title}. Ya lo tienes asignado.`\n  }\n}];"
-      },
-      "id": "b1b2c3d4-0007-4000-8000-000000000007",
-      "name": "Prepare Agent Notification",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1640, 80]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Get the assigned agent's WhatsApp number.\nSELECT whatsapp_number FROM agents WHERE agent_id = $1;",
-        "options": {
-          "queryReplacement": "={{ $('Route Decision').first().json.assigned_agent_id }}"
-        }
-      },
-      "id": "b1b2c3d4-0008-4000-8000-000000000008",
-      "name": "Get Agent Phone",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1860, 80],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($('Prepare Agent Notification').first().json.message) }}\n}",
-        "options": { "timeout": 10000 }
-      },
-      "id": "b1b2c3d4-0009-4000-8000-000000000009",
-      "name": "Notify Agent (Returning)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2080, 80],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Create new conversation for scraper lead (day mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'pending_assignment', $5, 'day')\nRETURNING conversation_id, lead_phone, lead_name, current_property, mode;",
-        "options": {
-          "queryReplacement": "={{ $json.phone }},={{ $json.name }},={{ $json.email }},={{ $json.listing_id }},={{ $json.source }}"
-        }
-      },
-      "id": "b1b2c3d4-0010-4000-8000-000000000010",
-      "name": "Create Day Conversation",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1420, 300],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Owner-first routing: build cache payload + resolver input.\n// Carries property_public_id (EB code from scraper) so WF12 can resolve\n// the per-property owner agent. listing_id is the inmuebles24 id.\nconst lead = $('Route Decision').first().json;\nconst conv = $input.first().json;\n\nconst cachePayload = {\n  title: lead.property_title,\n  price: lead.property_price,\n  location: lead.property_address,\n  operation_type: lead.listing_type,\n  source: 'inmuebles24_scraper'\n};\n\nreturn [{\n  json: {\n    // Identity for resolver + downstream\n    conversation_id: conv.conversation_id,\n    property_public_id: lead.property_public_id || null,\n    // Lead + property context (passed to WF13)\n    lead_phone: conv.lead_phone,\n    lead_name: conv.lead_name || lead.name,\n    property_id: lead.listing_id || 'unknown',\n    property_title: lead.property_title,\n    property_price: lead.property_price,\n    // For caching\n    cache_property_id: lead.listing_id || 'unknown',\n    cache_payload: cachePayload\n  }\n}];"
-      },
-      "id": "b1b2c3d4-0011-4000-8000-000000000011",
-      "name": "Prepare Routing Data",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1640, 300]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO properties_cache (property_id, payload)\nVALUES ($1, $2::jsonb)\nON CONFLICT (property_id) DO UPDATE\n  SET payload = EXCLUDED.payload, fetched_at = NOW();",
-        "options": {
-          "queryReplacement": "={{ $json.cache_property_id }},={{ JSON.stringify($json.cache_payload) }}"
-        }
-      },
-      "id": "b1b2c3d4-0012-4000-8000-000000000012",
-      "name": "Cache Property",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1860, 200],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      },
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "source": "database",
-        "workflowId": "={{ $env.WF12_WORKFLOW_ID }}",
-        "options": {}
-      },
-      "id": "b1b2c3d4-0013-4000-8000-000000000013",
-      "name": "Call WF12: Owner Resolver",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [1860, 380],
-      "notes": "Resolves owner agent from EasyBroker tags.\nInput: { property_public_id, conversation_id } (passthrough).\nOutput: { owner_agent_id, owner_name, owner_number, resolved }.\nSet env WF12_WORKFLOW_ID to the imported WF12 id (w7yJr7naWoxPq6Pw)."
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
-          "conditions": [
-            {
-              "id": "owner-resolved",
-              "leftValue": "={{ $json.resolved }}",
-              "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "b1b2c3d4-0017-4000-8000-000000000017",
-      "name": "Owner Resolved?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [2080, 380]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Owner resolved -> build the WF13 directed-notify payload by merging\n// the resolver output (owner_*) with the lead/property context.\nconst r = $('Prepare Routing Data').first().json;\nconst o = $input.first().json;\n\nreturn [{\n  json: {\n    conversation_id: r.conversation_id,\n    lead_phone: r.lead_phone,\n    lead_name: r.lead_name,\n    property_id: r.property_public_id || r.property_id,\n    property_title: r.property_title,\n    property_price: r.property_price,\n    owner_agent_id: o.owner_agent_id,\n    owner_name: o.owner_name,\n    owner_number: o.owner_number\n  }\n}];"
-      },
-      "id": "b1b2c3d4-0018-4000-8000-000000000018",
-      "name": "Prepare WF13 Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2300, 280]
-    },
-    {
-      "parameters": {
-        "source": "database",
-        "workflowId": "={{ $env.WF13_WORKFLOW_ID }}",
-        "options": {}
-      },
-      "id": "b1b2c3d4-0019-4000-8000-000000000019",
-      "name": "Call WF13: Owner Notify",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [2520, 280],
-      "notes": "NIVEL owner. Creates a 2-min owner-scoped auction and DMs the owner a\nTOMO claim code (owner claims via WF3b). On no-claim, WF3c escalates to\nthe guard auction. Set env WF13_WORKFLOW_ID to the imported WF13 id."
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Owner unresolvable (no tag / lookup failed / agent w/o WhatsApp):\n-- route directly to the manager tier.\nUPDATE conversations\nSET routing_tier = 'manager', tier_notified_at = NOW()\nWHERE conversation_id = $1::uuid\nRETURNING conversation_id;",
-        "options": {
-          "queryReplacement": "={{ $('Prepare Routing Data').first().json.conversation_id }}"
-        }
-      },
-      "id": "b1b2c3d4-0020-4000-8000-000000000020",
-      "name": "Set Manager Tier",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [2300, 480],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Build the manager alert for an unresolved (ownerless) lead.\nconst r = $('Prepare Routing Data').first().json;\n\nconst text = [\n  `\\u26A0\\uFE0F Lead sin asesor asignado`,\n  `\\u{1F3E0} ${r.property_title || 'Propiedad'} \\u2014 ${r.property_price || 'Precio por confirmar'}`,\n  `\\u{1F464} ${r.lead_name || 'Sin nombre'} (${r.lead_phone || 's/n'})`,\n  ``,\n  `No se encontro owner en EasyBroker (sin tag o lookup fallido). Asignalo manualmente.`\n].join('\\n');\n\nreturn [{\n  json: {\n    text,\n    conversation_id: r.conversation_id\n  }\n}];"
-      },
-      "id": "b1b2c3d4-0021-4000-8000-000000000021",
-      "name": "Prepare Manager Alert",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2520, 480]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $env.MANAGER_PHONE }}\",\n  \"text\": {{ JSON.stringify($json.text) }}\n}",
-        "options": { "timeout": 10000 }
-      },
-      "id": "b1b2c3d4-0022-4000-8000-000000000022",
-      "name": "Notify Manager (Unresolved)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2740, 480],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Create new conversation for scraper lead (night mode).\nINSERT INTO conversations (lead_phone, lead_name, lead_email, current_property, mode, source, arrived_during)\nVALUES ($1, $2, $3, $4, 'night_queued', $5, 'night')\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
-        "options": {
-          "queryReplacement": "={{ $json.phone }},={{ $json.name }},={{ $json.email }},={{ $json.listing_id }},={{ $json.source }}"
-        }
-      },
-      "id": "b1b2c3d4-0014-4000-8000-000000000014",
-      "name": "Create Night Conversation",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1420, 600],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Insert into night queue for morning auto-TOMO at 8:05 AM.\nINSERT INTO night_queue (conversation_id, source, lead_phone, lead_name, property_id, lead_email)\nVALUES ($1::uuid, $2, $3, $4, $5, $6);",
-        "options": {
-          "queryReplacement": "={{ $json.conversation_id }},={{ $('Route Decision').first().json.source }},={{ $json.lead_phone }},={{ $json.lead_name }},={{ $json.current_property }},={{ $('Route Decision').first().json.email }}"
-        }
-      },
-      "id": "b1b2c3d4-0015-4000-8000-000000000015",
-      "name": "Insert Night Queue",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1640, 600],
-      "credentials": {
-        "postgres": {
-          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-          "name": "Postgres - Supabase"
-        }
-      }
-    },
-    {
-      "parameters": {},
-      "id": "b1b2c3d4-0016-4000-8000-000000000016",
-      "name": "End (Skip/Fallback)",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [1420, 760]
-    }
-  ],
-  "connections": {
-    "Scraper Webhook": {
-      "main": [
-        [
-          {
-            "node": "Split & Normalize Leads",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Split & Normalize Leads": {
-      "main": [
-        [
-          {
-            "node": "Check Returning Lead + Time",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Returning Lead + Time": {
-      "main": [
-        [
-          {
-            "node": "Route Decision",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Route Decision": {
-      "main": [
-        [
-          {
-            "node": "Route",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Route": {
-      "main": [
-        [
-          {
-            "node": "Update Existing Conversation",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Create Day Conversation",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Create Night Conversation",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "End (Skip/Fallback)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Existing Conversation": {
-      "main": [
-        [
-          {
-            "node": "Prepare Agent Notification",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Agent Notification": {
-      "main": [
-        [
-          {
-            "node": "Get Agent Phone",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Agent Phone": {
-      "main": [
-        [
-          {
-            "node": "Notify Agent (Returning)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create Day Conversation": {
-      "main": [
-        [
-          {
-            "node": "Prepare Routing Data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Routing Data": {
-      "main": [
-        [
-          {
-            "node": "Cache Property",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Call WF12: Owner Resolver",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call WF12: Owner Resolver": {
-      "main": [
-        [
-          {
-            "node": "Owner Resolved?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Owner Resolved?": {
-      "main": [
-        [
-          {
-            "node": "Prepare WF13 Payload",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Set Manager Tier",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare WF13 Payload": {
-      "main": [
-        [
-          {
-            "node": "Call WF13: Owner Notify",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set Manager Tier": {
-      "main": [
-        [
-          {
-            "node": "Prepare Manager Alert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Manager Alert": {
-      "main": [
-        [
-          {
-            "node": "Notify Manager (Unresolved)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create Night Conversation": {
-      "main": [
-        [
-          {
-            "node": "Insert Night Queue",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1",
-    "saveExecutionProgress": true,
-    "saveManualExecutions": true
-  }
+              ],
+    "connections":  {
+                        "Scraper Webhook":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Split \u0026 Normalize Leads",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Split \u0026 Normalize Leads":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Check Returning Lead + Time",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "Check Returning Lead + Time":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Route Decision",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Route Decision":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Route",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "Route":  {
+                                      "main":  [
+                                                   [
+                                                       {
+                                                           "node":  "Update Existing Conversation",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ],
+                                                   [
+                                                       {
+                                                           "node":  "Create Day Conversation",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ],
+                                                   [
+                                                       {
+                                                           "node":  "Create Night Conversation",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ],
+                                                   [
+                                                       {
+                                                           "node":  "Persist Non-routable Opportunity",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ],
+                                                   [
+                                                       {
+                                                           "node":  "End (Skip/Fallback)",
+                                                           "type":  "main",
+                                                           "index":  0
+                                                       }
+                                                   ]
+                                               ]
+                                  },
+                        "Update Existing Conversation":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Prepare Agent Notification",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "Prepare Agent Notification":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Get Agent Phone",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "Get Agent Phone":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Notify Agent (Returning)",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Create Day Conversation":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Prepare Routing Data",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "Prepare Routing Data":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Upsert Canonical Opportunity",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Upsert Canonical Opportunity":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Should Route?",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "Should Route?":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Check Routing Safe Mode",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ],
+                                                           [
+                                                               {
+                                                                   "node":  "Stop Duplicate Intake",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Check Routing Safe Mode":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Safe Mode Active?",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "Safe Mode Active?":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Route Direct To Guard (Safe Mode)",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "Resolve Owner (WF12)",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Route Direct To Guard (Safe Mode)":  {
+                                                                   "main":  [
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "End (Owner Fallback)",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ]
+                                                                            ]
+                                                               },
+                        "Resolve Owner (WF12)":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Owner Resolved?",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Owner Resolved?":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Prepare Owner Notify",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ],
+                                                             [
+                                                                 {
+                                                                     "node":  "Route Missing Owner Data",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Prepare Owner Notify":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Notify Owner (WF13)",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Route Missing Owner Data":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "End (Owner Fallback)",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Create Night Conversation":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Should Route Night?",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Should Route Night?":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Insert Night Queue",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ],
+                                                                 [
+                                                                     {
+                                                                         "node":  "Stop Duplicate Night Intake",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Persist Non-routable Opportunity":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "End (Skip/Fallback)",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "saveExecutionProgress":  true,
+                     "saveManualExecutions":  true,
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "versionId":  "ae0888b9-9068-4595-b350-3b0c84a9de83",
+    "activeVersionId":  "ae0888b9-9068-4595-b350-3b0c84a9de83",
+    "versionCounter":  103,
+    "triggerCount":  1,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-06-14T14:46:10.911Z",
+                       "createdAt":  "2026-06-14T14:46:10.911Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "Obr38705ZZYS3FB8",
+                       "projectId":  "q5HebGTNHrfaBGjx",
+                       "project":  {
+                                       "updatedAt":  "2025-06-06T10:18:49.745Z",
+                                       "createdAt":  "2025-06-06T10:17:16.319Z",
+                                       "id":  "q5HebGTNHrfaBGjx",
+                                       "name":  "Esteban Betancourt \u003cesteban.betanc@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2",
+                                       "projectRelations":  [
+                                                                {
+                                                                    "updatedAt":  "2025-06-06T10:17:16.319Z",
+                                                                    "createdAt":  "2025-06-06T10:17:16.319Z",
+                                                                    "userId":  "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2",
+                                                                    "projectId":  "q5HebGTNHrfaBGjx",
+                                                                    "user":  {
+                                                                                 "updatedAt":  "2026-07-04T14:59:25.000Z",
+                                                                                 "createdAt":  "2025-06-06T10:17:15.951Z",
+                                                                                 "id":  "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2",
+                                                                                 "email":  "esteban.betanc@gmail.com",
+                                                                                 "firstName":  "Esteban",
+                                                                                 "lastName":  "Betancourt",
+                                                                                 "personalizationAnswers":  {
+                                                                                                                "version":  "v4",
+                                                                                                                "personalization_survey_submitted_at":  "2025-06-06T10:20:33.254Z",
+                                                                                                                "personalization_survey_n8n_version":  "1.95.3",
+                                                                                                                "companyIndustryExtended":  [
+                                                                                                                                                "other"
+                                                                                                                                            ],
+                                                                                                                "otherCompanyIndustryExtended":  "Other",
+                                                                                                                "companySize":  "\u003c20",
+                                                                                                                "companyType":  "other",
+                                                                                                                "role":  "business-owner",
+                                                                                                                "reportedSource":  "linkedin"
+                                                                                                            },
+                                                                                 "settings":  {
+                                                                                                  "userActivated":  true,
+                                                                                                  "easyAIWorkflowOnboarded":  true,
+                                                                                                  "firstSuccessfulWorkflowId":  "XczLfW5gqdaJ9CVk",
+                                                                                                  "userActivatedAt":  1749228551144,
+                                                                                                  "npsSurvey":  {
+                                                                                                                    "responded":  true,
+                                                                                                                    "lastShownAt":  1769018173678
+                                                                                                                },
+                                                                                                  "dismissedCallouts":  {
+                                                                                                                            "aiAgentStarterCallout":  true,
+                                                                                                                            "ragStarterCallout":  true
+                                                                                                                        }
+                                                                                              },
+                                                                                 "disabled":  false,
+                                                                                 "mfaEnabled":  false,
+                                                                                 "lastActiveAt":  "2026-07-03",
+                                                                                 "isPending":  false
+                                                                             }
+                                                                }
+                                                            ]
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ]
 }

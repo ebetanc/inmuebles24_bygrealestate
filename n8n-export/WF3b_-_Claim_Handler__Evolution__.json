@@ -1,1 +1,1199 @@
-{"updatedAt":"2026-07-06T19:29:28.000Z","createdAt":"2026-05-08T10:26:56.633Z","id":"JM2HxJxl53k4zlki","name":"WF3b - Claim Handler (Evolution)","description":null,"active":true,"isArchived":false,"nodes":[{"parameters":{"inputSource":"passthrough"},"id":"0c1952e0-e484-458f-bde6-b65bf77cbbae","name":"When Called by WF1","type":"n8n-nodes-base.executeWorkflowTrigger","typeVersion":1,"position":[200,300],"notes":"Input from WF1 when an agent sends TOMO-XXXX:\n{\n  agent_id: 'agent_yolanda',\n  agent_name: 'Yolanda',\n  agent_phone: '5215500000001',\n  short_code: 'AB12',\n  raw_message: 'TOMO-AB12',\n  messageId: '3EB0A0...'\n}"},{"parameters":{"operation":"executeQuery","query":"-- ATOMIC CLAIM: WHERE status='open' ensures first-reply-wins.\nWITH claim AS (\n  UPDATE auctions\n  SET status='claimed', winner_agent_id=$1, claimed_at=NOW()\n  WHERE short_code=$2 AND status='open' AND expires_at > NOW()\n  RETURNING auction_id, conversation_id, property_id, winner_agent_id, notified_agents\n)\nSELECT c.*, conv.lead_phone, conv.lead_name, pc.payload AS property_payload\nFROM claim c\nJOIN conversations conv ON conv.conversation_id = c.conversation_id\nLEFT JOIN properties_cache pc ON pc.property_id = c.property_id;","options":{"queryReplacement":"={{ [$json.agent_id, $json.short_code] }}"}},"id":"86c01b28-9da5-4402-aeff-5ae13cf77363","name":"Atomic Claim (WHERE status=open)","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[420,300],"credentials":{"postgres":{"id":"dEHKygi1neTNvPtH","name":"Postgres account BYG project"}},"alwaysOutputData":true},{"parameters":{"conditions":{"options":{"caseSensitive":true,"typeValidation":"strict","version":2},"conditions":[{"id":"60c87d88-e8b4-4580-ba9a-c190d6ae6ee6","leftValue":"={{ $json.auction_id }}","rightValue":"","operator":{"type":"string","operation":"notEmpty","singleValue":true}}],"combinator":"and"},"options":{}},"id":"85cb99da-9e47-45f0-96d1-3c34d8286a33","name":"Did This Agent Win?","type":"n8n-nodes-base.if","typeVersion":2.2,"position":[640,300]},{"parameters":{"operation":"executeQuery","query":"UPDATE conversations\nSET assigned_agent_id=$1, mode='ai', assigned_at=NOW(), claimed_via='tomo_auction'\nWHERE conversation_id=$2::uuid\nRETURNING conversation_id, lead_phone, lead_name, current_property;","options":{"queryReplacement":"={{ [$('When Called by WF1').item.json.agent_id, $json.conversation_id] }}"}},"id":"03d4ff26-bb45-4baa-96d9-0031c56c877e","name":"Assign Conversation to Winner","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[860,180],"credentials":{"postgres":{"id":"dEHKygi1neTNvPtH","name":"Postgres account BYG project"}}},{"parameters":{"jsCode":"const trigger = $('When Called by WF1').first().json;\nconst claim   = $('Atomic Claim (WHERE status=open)').first().json;\n\nconst winner = {\n  purpose: 'winner_confirmation',\n  number: trigger.agent_phone,\n  text: [\n    `\\u2705 Asignado! Lead: ${claim.lead_name || 'Sin nombre'}`,\n    `\\u{1F4F1} Telefono del lead: ${claim.lead_phone}`,\n    `\\u{1F3E0} Propiedad: ${claim.property_id && claim.property_id !== 'unknown' ? claim.property_id : 'Sin propiedad especifica'}`,\n    ``,\n    `El asistente AI ya esta atendiendo sus preguntas. Te contactaremos si requiere tu intervencion (visita, negociacion, etc.).`\n  ].join('\\n')\n};\n\nconst leadGreeting = {\n  purpose: 'lead_greeting',\n  number: claim.lead_phone,\n  text: [\n    `Hola${claim.lead_name ? ' ' + claim.lead_name.split(' ')[0] : ''}! \\u{1F44B}`,\n    ``,\n    `Soy el asistente de la agencia. Estoy a tus ordenes para contarte sobre la propiedad. Que te gustaria saber? (precio, ubicacion, recamaras, amenidades, etc.)`,\n    ``,\n    `Hi${claim.lead_name ? ' ' + claim.lead_name.split(' ')[0] : ''}! I'm the agency assistant. I'm here to help you learn about this property. What would you like to know?`\n  ].join('\\n')\n};\n\nconst losers = (claim.notified_agents || [])\n  .filter(id => id !== trigger.agent_id)\n  .map(agent_id => ({\n    purpose: 'loser_notification',\n    agent_id,\n    text: `Este lead ya fue tomado por otro asesor. Suerte con el proximo! \\u{1F4AA}`\n  }));\n\nreturn [winner, leadGreeting, ...losers].map(m => ({ json: m }));"},"id":"9127e6ce-b2ef-4daf-8722-1e1c983af051","name":"Build Winner/Lead/Loser Messages","type":"n8n-nodes-base.code","typeVersion":2,"position":[1080,180]},{"parameters":{"conditions":{"options":{"caseSensitive":true,"typeValidation":"strict","version":2},"conditions":[{"id":"f7727c4a-1403-44a9-98be-73f62aa24b68","leftValue":"={{ $json.purpose }}","rightValue":"loser_notification","operator":{"type":"string","operation":"equals"}}],"combinator":"and"},"options":{}},"id":"686b0f7f-ae71-4353-9475-bee2a15daba2","name":"Needs Phone Lookup?","type":"n8n-nodes-base.if","typeVersion":2.2,"position":[1300,180]},{"parameters":{"operation":"executeQuery","query":"SELECT whatsapp_number FROM agents WHERE agent_id = $1;","options":{"queryReplacement":"={{ $json.agent_id }}"}},"id":"7757b98b-9c8b-4a58-a77b-199d8e651637","name":"Lookup Loser Agent Phone","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[1520,80],"credentials":{"postgres":{"id":"dEHKygi1neTNvPtH","name":"Postgres account BYG project"}}},{"parameters":{"assignments":{"assignments":[{"id":"number","name":"number","value":"={{ $json.whatsapp_number }}","type":"string"},{"id":"text","name":"text","value":"={{ $('Build Winner/Lead/Loser Messages').item.json.text }}","type":"string"},{"id":"purpose","name":"purpose","value":"loser_notification","type":"string"}]},"options":{}},"id":"2ef0db24-a3cf-42a7-83a0-0646f961ceeb","name":"Set Loser Payload","type":"n8n-nodes-base.set","typeVersion":3.4,"position":[1740,80]},{"parameters":{"mode":"append","options":{}},"id":"51b5a7db-e1b9-4b46-aee9-825e66f39b46","name":"Merge All Outbound","type":"n8n-nodes-base.merge","typeVersion":3.1,"position":[1960,180]},{"parameters":{"method":"POST","url":"={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Authorization","value":"=Bearer {{ $env.WA_ACCESS_TOKEN }}"},{"name":"Content-Type","value":"application/json"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": {{ JSON.stringify($json.text) }}\n  }\n}","options":{"timeout":15000}},"id":"3f795990-1c85-42e6-9b1c-0c3723437d80","name":"Send All via Evolution","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[2180,180],"continueOnFail":true},{"parameters":{"jsCode":"const trigger = $('When Called by WF1').first().json;\nreturn [{\n  json: {\n    number: trigger.agent_phone,\n    text: `\\u26A0\\uFE0F No pude asignarte el lead ${trigger.short_code}.\\n\\nPuede que otro asesor lo haya tomado primero, o que la subasta haya expirado. Cuando entre un nuevo lead te avisaremos.`\n  }\n}];"},"id":"fd34d5fe-6ba8-45ad-9bcb-520a3a4ade60","name":"Build 'Too Late' Message","type":"n8n-nodes-base.code","typeVersion":2,"position":[860,420]},{"parameters":{"method":"POST","url":"={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Authorization","value":"=Bearer {{ $env.WA_ACCESS_TOKEN }}"},{"name":"Content-Type","value":"application/json"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": {{ JSON.stringify($json.text) }}\n  }\n}","options":{"timeout":10000}},"id":"066de598-a9e9-4a0e-8165-b19a2446f049","name":"Send 'Too Late' via Evolution","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[1080,420],"continueOnFail":true},{"parameters":{"operation":"executeQuery","query":"SELECT c.eb_contact_id, ag.name AS agent_name, au.short_code\nFROM conversations c\nLEFT JOIN agents ag ON ag.agent_id = c.assigned_agent_id\nLEFT JOIN auctions au ON au.conversation_id = c.conversation_id\nWHERE c.conversation_id = $1::uuid AND c.eb_contact_id IS NOT NULL\nORDER BY au.created_at DESC LIMIT 1;","options":{"queryReplacement":"={{ [$json.conversation_id] }}"}},"id":"eb00note-0001-4000-8000-000000000001","name":"Get EB Note Data","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[860,400],"credentials":{"postgres":{"id":"dEHKygi1neTNvPtH","name":"Postgres account BYG project"}}},{"parameters":{"method":"GET","url":"=https://api.easybroker.com/v1/contacts/{{ $json.eb_contact_id }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"X-Authorization","value":"={{ $env.EASYBROKER_API_KEY }}"}]},"options":{"timeout":15000}},"id":"eb00note-0002-4000-8000-000000000002","name":"Fetch EB Contact","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[1080,400],"continueOnFail":true},{"parameters":{"jsCode":"const meta = $('Get EB Note Data').first().json;\nconst existing = ($json && $json.private_description) || '';\nconst d = new Date().toLocaleString('es-MX', {timeZone:'America/Mexico_City', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});\nconst line = d + ' - Asignado a ' + (meta.agent_name || 'agente') + ' via subasta (TOMO-' + (meta.short_code || '?') + '). [BYG bot]';\nconst updated = existing ? (existing + '\\n' + line) : line;\nconst existingTags = Array.isArray($json.tags) ? $json.tags : [];\nconst tags = existingTags.includes('Atendido') ? existingTags : existingTags.concat('Atendido');\nreturn [{ json: { eb_contact_id: meta.eb_contact_id, private_description: updated, tags: tags } }];"},"id":"eb00note-0003-4000-8000-000000000003","name":"Build EB Note","type":"n8n-nodes-base.code","typeVersion":2,"position":[1300,400]},{"parameters":{"method":"PATCH","url":"=https://api.easybroker.com/v1/contacts/{{ $json.eb_contact_id }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"X-Authorization","value":"={{ $env.EASYBROKER_API_KEY }}"},{"name":"Content-Type","value":"application/json"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"private_description\": {{ JSON.stringify($json.private_description) }},\n  \"tags\": {{ JSON.stringify($json.tags) }}\n}","options":{"timeout":15000}},"id":"eb00note-0004-4000-8000-000000000004","name":"Patch EB Contact","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[1520,400],"continueOnFail":true}],"connections":{"When Called by WF1":{"main":[[{"node":"Atomic Claim (WHERE status=open)","type":"main","index":0}]]},"Atomic Claim (WHERE status=open)":{"main":[[{"node":"Did This Agent Win?","type":"main","index":0}]]},"Did This Agent Win?":{"main":[[{"node":"Assign Conversation to Winner","type":"main","index":0}],[{"node":"Build 'Too Late' Message","type":"main","index":0}]]},"Assign Conversation to Winner":{"main":[[{"node":"Build Winner/Lead/Loser Messages","type":"main","index":0},{"node":"Get EB Note Data","type":"main","index":0}]]},"Build Winner/Lead/Loser Messages":{"main":[[{"node":"Needs Phone Lookup?","type":"main","index":0}]]},"Needs Phone Lookup?":{"main":[[{"node":"Lookup Loser Agent Phone","type":"main","index":0}],[{"node":"Merge All Outbound","type":"main","index":1}]]},"Lookup Loser Agent Phone":{"main":[[{"node":"Set Loser Payload","type":"main","index":0}]]},"Set Loser Payload":{"main":[[{"node":"Merge All Outbound","type":"main","index":0}]]},"Merge All Outbound":{"main":[[{"node":"Send All via Evolution","type":"main","index":0}]]},"Build 'Too Late' Message":{"main":[[{"node":"Send 'Too Late' via Evolution","type":"main","index":0}]]},"Get EB Note Data":{"main":[[{"node":"Fetch EB Contact","type":"main","index":0}]]},"Fetch EB Contact":{"main":[[{"node":"Build EB Note","type":"main","index":0}]]},"Build EB Note":{"main":[[{"node":"Patch EB Contact","type":"main","index":0}]]}},"settings":{"callerPolicy":"workflowsFromSameOwner","executionOrder":"v1","errorWorkflow":"He95yJflKVspGFyb"},"staticData":null,"meta":null,"pinData":null,"versionId":"6c7b28af-e718-442f-9554-208094ac6b5a","activeVersionId":"6c7b28af-e718-442f-9554-208094ac6b5a","versionCounter":57,"triggerCount":0,"tags":[],"shared":[{"updatedAt":"2026-05-08T10:26:56.635Z","createdAt":"2026-05-08T10:26:56.635Z","role":"workflow:owner","workflowId":"JM2HxJxl53k4zlki","projectId":"q5HebGTNHrfaBGjx","project":{"updatedAt":"2025-06-06T10:18:49.745Z","createdAt":"2025-06-06T10:17:16.319Z","id":"q5HebGTNHrfaBGjx","name":"Esteban Betancourt <esteban.betanc@gmail.com>","type":"personal","icon":null,"description":null,"creatorId":"df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"}}]}
+{
+    "updatedAt":  "2026-07-06T19:29:28.000Z",
+    "createdAt":  "2026-05-08T10:26:56.633Z",
+    "id":  "JM2HxJxl53k4zlki",
+    "name":  "WF3b - Claim Handler (Evolution)",
+    "description":  null,
+    "active":  false,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "inputSource":  "passthrough"
+                                     },
+                      "id":  "0c1952e0-e484-458f-bde6-b65bf77cbbae",
+                      "name":  "When Called by WF1",
+                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                      "typeVersion":  1,
+                      "position":  [
+                                       200,
+                                       300
+                                   ],
+                      "notes":  "Input from WF1 when an agent sends TOMO-XXXX:\n{\n  agent_id: \u0027agent_yolanda\u0027,\n  agent_name: \u0027Yolanda\u0027,\n  agent_phone: \u00275215500000001\u0027,\n  short_code: \u0027AB12\u0027,\n  raw_message: \u0027TOMO-AB12\u0027,\n  messageId: \u00273EB0A0...\u0027\n}"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict"
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "wf3b-routing-v2-id",
+                                                                                   "leftValue":  "={{ String($json.opportunity_id || \u0027\u0027) }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "notEmpty",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        }
+                                     },
+                      "id":  "wf3b-is-routing-v2",
+                      "name":  "Is Routing V2 Claim?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       420,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT * FROM public.claim_lead_opportunity($1::bigint,$2,$3,encode(digest($4,\u0027sha256\u0027),\u0027hex\u0027),$5);",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.opportunity_id, $json.routing_tier, $json.agent_id, $json.agent_phone, $json.messageId] }}"
+                                                     }
+                                     },
+                      "id":  "wf3b-claim-routing-v2",
+                      "name":  "Claim Routing V2 Opportunity",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       640,
+                                       120
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const trigger=$(\u0027When Called by WF1\u0027).first().json; const claim=$input.first().json;\nconst text={accepted:\u0027Prospecto asignado. Ya puedes atenderlo.\u0027,already_assigned:\u0027Este prospecto ya fue asignado.\u0027,expired:\u0027La oferta ya vencio o pertenece a un turno anterior.\u0027,not_authorized:\u0027Esta oferta no estaba dirigida a tu usuario.\u0027,delivery_pending:\u0027La oferta aun no tiene entrega confirmada.\u0027}[claim.claim_status]||\u0027No fue posible procesar la aceptacion.\u0027;\nreturn [{json:{number:trigger.agent_phone,text,claim_status:claim.claim_status,opportunity_id:claim.result_opportunity_id}}];"
+                                     },
+                      "id":  "wf3b-build-v2-result",
+                      "name":  "Build Routing V2 Claim Result",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       860,
+                                       120
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.WA_CLOUD_API_BASE_URL + \u0027/\u0027 + $env.WA_API_VERSION + \u0027/\u0027 + $env.WA_PHONE_NUMBER_ID + \u0027/messages\u0027 }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Authorization",
+                                                                                         "value":  "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify($json.text) }} }\n}",
+                                         "options":  {
+                                                         "timeout":  10000
+                                                     }
+                                     },
+                      "id":  "wf3b-send-v2-result",
+                      "name":  "Send Routing V2 Claim Result",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1080,
+                                       120
+                                   ],
+                      "continueOnFail":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "-- Legacy TOMO claim. Routing-v2 opportunities are claimed only through claim_lead_opportunity.\nWITH claim AS (\n  UPDATE auctions\n  SET status=\u0027claimed\u0027, winner_agent_id=$1, claimed_at=NOW()\n  WHERE short_code=$2 AND status=\u0027open\u0027 AND expires_at \u003e NOW()\n    AND NOT EXISTS (\n      SELECT 1 FROM public.lead_routing_opportunities o\n      WHERE o.conversation_id=auctions.conversation_id\n        AND o.state NOT IN (\u0027closed_won\u0027,\u0027closed_lost\u0027)\n    )\n  RETURNING auction_id, conversation_id, property_id, winner_agent_id, notified_agents\n)\nSELECT c.*, conv.lead_phone, conv.lead_name, pc.payload AS property_payload\nFROM claim c\nJOIN conversations conv ON conv.conversation_id = c.conversation_id\nLEFT JOIN properties_cache pc ON pc.property_id = c.property_id;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.agent_id }},={{ $json.short_code }}"
+                                                     }
+                                     },
+                      "id":  "86c01b28-9da5-4402-aeff-5ae13cf77363",
+                      "name":  "Atomic Claim (WHERE status=open)",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       420,
+                                       300
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      },
+                      "alwaysOutputData":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  2
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "60c87d88-e8b4-4580-ba9a-c190d6ae6ee6",
+                                                                                   "leftValue":  "={{ $json.auction_id }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "notEmpty",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "85cb99da-9e47-45f0-96d1-3c34d8286a33",
+                      "name":  "Did This Agent Win?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       640,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "UPDATE conversations\nSET assigned_agent_id=$1, mode=\u0027ai\u0027\nWHERE conversation_id=$2::uuid\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $(\u0027When Called by WF1\u0027).item.json.agent_id }},={{ $json.conversation_id }}"
+                                                     }
+                                     },
+                      "id":  "03d4ff26-bb45-4baa-96d9-0031c56c877e",
+                      "name":  "Assign Conversation to Winner",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       860,
+                                       180
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const trigger = $(\u0027When Called by WF1\u0027).first().json;\nconst claim   = $(\u0027Atomic Claim (WHERE status=open)\u0027).first().json;\n\nconst winner = {\n  purpose: \u0027winner_confirmation\u0027,\n  number: trigger.agent_phone,\n  text: [\n    `\\u2705 Asignado! Lead: ${claim.lead_name || \u0027Sin nombre\u0027}`,\n    `\\u{1F4F1} Telefono del lead: ${claim.lead_phone}`,\n    `\\u{1F3E0} Propiedad: ${claim.property_id}`,\n    ``,\n    `El asistente AI ya esta atendiendo sus preguntas. Te contactaremos si requiere tu intervencion (visita, negociacion, etc.).`\n  ].join(\u0027\\n\u0027)\n};\n\nconst leadGreeting = {\n  purpose: \u0027lead_greeting\u0027,\n  number: claim.lead_phone,\n  text: [\n    `Hola${claim.lead_name ? \u0027 \u0027 + claim.lead_name.split(\u0027 \u0027)[0] : \u0027\u0027}! \\u{1F44B}`,\n    ``,\n    `Soy el asistente de la agencia. Estoy a tus ordenes para contarte sobre la propiedad. Que te gustaria saber? (precio, ubicacion, recamaras, amenidades, etc.)`,\n    ``,\n    `Hi${claim.lead_name ? \u0027 \u0027 + claim.lead_name.split(\u0027 \u0027)[0] : \u0027\u0027}! I\u0027m the agency assistant. I\u0027m here to help you learn about this property. What would you like to know?`\n  ].join(\u0027\\n\u0027)\n};\n\nconst losers = (claim.notified_agents || [])\n  .filter(id =\u003e id !== trigger.agent_id)\n  .map(agent_id =\u003e ({\n    purpose: \u0027loser_notification\u0027,\n    agent_id,\n    text: `Este lead ya fue tomado por otro asesor. Suerte con el proximo! \\u{1F4AA}`\n  }));\n\nreturn [winner, leadGreeting, ...losers].map(m =\u003e ({ json: m }));"
+                                     },
+                      "id":  "9127e6ce-b2ef-4daf-8722-1e1c983af051",
+                      "name":  "Build Winner/Lead/Loser Messages",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1080,
+                                       180
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  2
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "f7727c4a-1403-44a9-98be-73f62aa24b68",
+                                                                                   "leftValue":  "={{ $json.purpose }}",
+                                                                                   "rightValue":  "loser_notification",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "equals"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "686b0f7f-ae71-4353-9475-bee2a15daba2",
+                      "name":  "Needs Phone Lookup?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       1300,
+                                       180
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT whatsapp_number FROM agents WHERE agent_id = $1;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ $json.agent_id }}"
+                                                     }
+                                     },
+                      "id":  "7757b98b-9c8b-4a58-a77b-199d8e651637",
+                      "name":  "Lookup Loser Agent Phone",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1520,
+                                       80
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "number",
+                                                                                     "name":  "number",
+                                                                                     "value":  "={{ $json.whatsapp_number }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "text",
+                                                                                     "name":  "text",
+                                                                                     "value":  "={{ $(\u0027Build Winner/Lead/Loser Messages\u0027).item.json.text }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "purpose",
+                                                                                     "name":  "purpose",
+                                                                                     "value":  "loser_notification",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "2ef0db24-a3cf-42a7-83a0-0646f961ceeb",
+                      "name":  "Set Loser Payload",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       1740,
+                                       80
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "append",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "51b5a7db-e1b9-4b46-aee9-825e66f39b46",
+                      "name":  "Merge All Outbound",
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.1,
+                      "position":  [
+                                       1960,
+                                       180
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "apikey",
+                                                                                         "value":  "={{ $env.EVOLUTION_API_KEY }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"number\": \"{{ $json.number }}\",\n  \"text\": {{ JSON.stringify($json.text) }},\n  \"delay\": 1200\n}",
+                                         "options":  {
+                                                         "timeout":  15000
+                                                     }
+                                     },
+                      "id":  "3f795990-1c85-42e6-9b1c-0c3723437d80",
+                      "name":  "Send All via Evolution",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       2180,
+                                       180
+                                   ],
+                      "continueOnFail":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const trigger = $(\u0027When Called by WF1\u0027).first().json;\nreturn [{\n  json: {\n    number: trigger.agent_phone,\n    text: `\\u26A0\\uFE0F No pude asignarte el lead ${trigger.short_code}.\\n\\nPuede que otro asesor lo haya tomado primero, o que la subasta haya expirado. Cuando entre un nuevo lead te avisaremos.`\n  }\n}];"
+                                     },
+                      "id":  "fd34d5fe-6ba8-45ad-9bcb-520a3a4ade60",
+                      "name":  "Build \u0027Too Late\u0027 Message",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       860,
+                                       420
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "apikey",
+                                                                                         "value":  "={{ $env.EVOLUTION_API_KEY }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"number\": \"{{ $json.number }}\",\n  \"text\": {{ JSON.stringify($json.text) }}\n}",
+                                         "options":  {
+                                                         "timeout":  10000
+                                                     }
+                                     },
+                      "id":  "066de598-a9e9-4a0e-8165-b19a2446f049",
+                      "name":  "Send \u0027Too Late\u0027 via Evolution",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1080,
+                                       420
+                                   ],
+                      "continueOnFail":  true
+                  }
+              ],
+    "connections":  {
+                        "When Called by WF1":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Is Routing V2 Claim?",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Is Routing V2 Claim?":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Claim Routing V2 Opportunity",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ],
+                                                                  [
+                                                                      {
+                                                                          "node":  "Atomic Claim (WHERE status=open)",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Claim Routing V2 Opportunity":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Build Routing V2 Claim Result",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "Build Routing V2 Claim Result":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "Send Routing V2 Claim Result",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "Atomic Claim (WHERE status=open)":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "Did This Agent Win?",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                        "Did This Agent Win?":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Assign Conversation to Winner",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ],
+                                                                 [
+                                                                     {
+                                                                         "node":  "Build \u0027Too Late\u0027 Message",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Assign Conversation to Winner":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "Build Winner/Lead/Loser Messages",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "Build Winner/Lead/Loser Messages":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "Needs Phone Lookup?",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                        "Needs Phone Lookup?":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Lookup Loser Agent Phone",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ],
+                                                                 [
+                                                                     {
+                                                                         "node":  "Merge All Outbound",
+                                                                         "type":  "main",
+                                                                         "index":  1
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Lookup Loser Agent Phone":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Set Loser Payload",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Set Loser Payload":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Merge All Outbound",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Merge All Outbound":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Send All via Evolution",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Build \u0027Too Late\u0027 Message":  {
+                                                                   "main":  [
+                                                                                [
+                                                                                    {
+                                                                                        "node":  "Send \u0027Too Late\u0027 via Evolution",
+                                                                                        "type":  "main",
+                                                                                        "index":  0
+                                                                                    }
+                                                                                ]
+                                                                            ]
+                                                               }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "saveExecutionProgress":  false,
+                     "saveManualExecutions":  false,
+                     "saveDataErrorExecution":  "none",
+                     "saveDataSuccessExecution":  "none"
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "nodeGroups":  [
+
+                   ],
+    "pinData":  null,
+    "versionId":  "6c7b28af-e718-442f-9554-208094ac6b5a",
+    "activeVersionId":  null,
+    "versionCounter":  58,
+    "triggerCount":  0,
+    "sourceWorkflowId":  null,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-08T10:26:56.635Z",
+                       "createdAt":  "2026-05-08T10:26:56.635Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "JM2HxJxl53k4zlki",
+                       "projectId":  "q5HebGTNHrfaBGjx",
+                       "project":  {
+                                       "updatedAt":  "2025-06-06T10:18:49.745Z",
+                                       "createdAt":  "2025-06-06T10:17:16.319Z",
+                                       "id":  "q5HebGTNHrfaBGjx",
+                                       "name":  "Esteban Betancourt \u003cesteban.betanc@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "customTelemetryTags":  [
+
+                                                               ],
+                                       "creatorId":  "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-07-06T19:29:28.000Z",
+                          "createdAt":  "2026-05-08T10:26:56.633Z",
+                          "versionId":  "6c7b28af-e718-442f-9554-208094ac6b5a",
+                          "workflowId":  "JM2HxJxl53k4zlki",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "inputSource":  "passthrough"
+                                                           },
+                                            "id":  "0c1952e0-e484-458f-bde6-b65bf77cbbae",
+                                            "name":  "When Called by WF1",
+                                            "type":  "n8n-nodes-base.executeWorkflowTrigger",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             200,
+                                                             300
+                                                         ],
+                                            "notes":  "Input from WF1 when an agent sends TOMO-XXXX:\n{\n  agent_id: \u0027agent_yolanda\u0027,\n  agent_name: \u0027Yolanda\u0027,\n  agent_phone: \u00275215500000001\u0027,\n  short_code: \u0027AB12\u0027,\n  raw_message: \u0027TOMO-AB12\u0027,\n  messageId: \u00273EB0A0...\u0027\n}"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "typeValidation":  "strict"
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "wf3b-routing-v2-id",
+                                                                                                         "leftValue":  "={{ String($json.opportunity_id || \u0027\u0027) }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "string",
+                                                                                                                          "operation":  "notEmpty",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              }
+                                                           },
+                                            "id":  "wf3b-is-routing-v2",
+                                            "name":  "Is Routing V2 Claim?",
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.2,
+                                            "position":  [
+                                                             420,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT * FROM public.claim_lead_opportunity($1::bigint,$2,$3,encode(digest($4,\u0027sha256\u0027),\u0027hex\u0027),$5);",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{ [$json.opportunity_id, $json.routing_tier, $json.agent_id, $json.agent_phone, $json.messageId] }}"
+                                                                           }
+                                                           },
+                                            "id":  "wf3b-claim-routing-v2",
+                                            "name":  "Claim Routing V2 Opportunity",
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.5,
+                                            "position":  [
+                                                             640,
+                                                             120
+                                                         ],
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                                                 "name":  "Postgres - Supabase"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const trigger=$(\u0027When Called by WF1\u0027).first().json; const claim=$input.first().json;\nconst text={accepted:\u0027Prospecto asignado. Ya puedes atenderlo.\u0027,already_assigned:\u0027Este prospecto ya fue asignado.\u0027,expired:\u0027La oferta ya vencio o pertenece a un turno anterior.\u0027,not_authorized:\u0027Esta oferta no estaba dirigida a tu usuario.\u0027,delivery_pending:\u0027La oferta aun no tiene entrega confirmada.\u0027}[claim.claim_status]||\u0027No fue posible procesar la aceptacion.\u0027;\nreturn [{json:{number:trigger.agent_phone,text,claim_status:claim.claim_status,opportunity_id:claim.result_opportunity_id}}];"
+                                                           },
+                                            "id":  "wf3b-build-v2-result",
+                                            "name":  "Build Routing V2 Claim Result",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             860,
+                                                             120
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.WA_CLOUD_API_BASE_URL + \u0027/\u0027 + $env.WA_API_VERSION + \u0027/\u0027 + $env.WA_PHONE_NUMBER_ID + \u0027/messages\u0027 }}",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "Authorization",
+                                                                                                               "value":  "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "name":  "Content-Type",
+                                                                                                               "value":  "application/json"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify($json.text) }} }\n}",
+                                                               "options":  {
+                                                                               "timeout":  10000
+                                                                           }
+                                                           },
+                                            "id":  "wf3b-send-v2-result",
+                                            "name":  "Send Routing V2 Claim Result",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             1080,
+                                                             120
+                                                         ],
+                                            "continueOnFail":  true
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "-- Legacy TOMO claim. Routing-v2 opportunities are claimed only through claim_lead_opportunity.\nWITH claim AS (\n  UPDATE auctions\n  SET status=\u0027claimed\u0027, winner_agent_id=$1, claimed_at=NOW()\n  WHERE short_code=$2 AND status=\u0027open\u0027 AND expires_at \u003e NOW()\n    AND NOT EXISTS (\n      SELECT 1 FROM public.lead_routing_opportunities o\n      WHERE o.conversation_id=auctions.conversation_id\n        AND o.state NOT IN (\u0027closed_won\u0027,\u0027closed_lost\u0027)\n    )\n  RETURNING auction_id, conversation_id, property_id, winner_agent_id, notified_agents\n)\nSELECT c.*, conv.lead_phone, conv.lead_name, pc.payload AS property_payload\nFROM claim c\nJOIN conversations conv ON conv.conversation_id = c.conversation_id\nLEFT JOIN properties_cache pc ON pc.property_id = c.property_id;",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{ $json.agent_id }},={{ $json.short_code }}"
+                                                                           }
+                                                           },
+                                            "id":  "86c01b28-9da5-4402-aeff-5ae13cf77363",
+                                            "name":  "Atomic Claim (WHERE status=open)",
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.5,
+                                            "position":  [
+                                                             420,
+                                                             300
+                                                         ],
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                                                 "name":  "Postgres - Supabase"
+                                                                             }
+                                                            },
+                                            "alwaysOutputData":  true
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  2
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "60c87d88-e8b4-4580-ba9a-c190d6ae6ee6",
+                                                                                                         "leftValue":  "={{ $json.auction_id }}",
+                                                                                                         "rightValue":  "",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "string",
+                                                                                                                          "operation":  "notEmpty",
+                                                                                                                          "singleValue":  true
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "id":  "85cb99da-9e47-45f0-96d1-3c34d8286a33",
+                                            "name":  "Did This Agent Win?",
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.2,
+                                            "position":  [
+                                                             640,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "UPDATE conversations\nSET assigned_agent_id=$1, mode=\u0027ai\u0027\nWHERE conversation_id=$2::uuid\nRETURNING conversation_id, lead_phone, lead_name, current_property;",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{ $(\u0027When Called by WF1\u0027).item.json.agent_id }},={{ $json.conversation_id }}"
+                                                                           }
+                                                           },
+                                            "id":  "03d4ff26-bb45-4baa-96d9-0031c56c877e",
+                                            "name":  "Assign Conversation to Winner",
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.5,
+                                            "position":  [
+                                                             860,
+                                                             180
+                                                         ],
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                                                 "name":  "Postgres - Supabase"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const trigger = $(\u0027When Called by WF1\u0027).first().json;\nconst claim   = $(\u0027Atomic Claim (WHERE status=open)\u0027).first().json;\n\nconst winner = {\n  purpose: \u0027winner_confirmation\u0027,\n  number: trigger.agent_phone,\n  text: [\n    `\\u2705 Asignado! Lead: ${claim.lead_name || \u0027Sin nombre\u0027}`,\n    `\\u{1F4F1} Telefono del lead: ${claim.lead_phone}`,\n    `\\u{1F3E0} Propiedad: ${claim.property_id}`,\n    ``,\n    `El asistente AI ya esta atendiendo sus preguntas. Te contactaremos si requiere tu intervencion (visita, negociacion, etc.).`\n  ].join(\u0027\\n\u0027)\n};\n\nconst leadGreeting = {\n  purpose: \u0027lead_greeting\u0027,\n  number: claim.lead_phone,\n  text: [\n    `Hola${claim.lead_name ? \u0027 \u0027 + claim.lead_name.split(\u0027 \u0027)[0] : \u0027\u0027}! \\u{1F44B}`,\n    ``,\n    `Soy el asistente de la agencia. Estoy a tus ordenes para contarte sobre la propiedad. Que te gustaria saber? (precio, ubicacion, recamaras, amenidades, etc.)`,\n    ``,\n    `Hi${claim.lead_name ? \u0027 \u0027 + claim.lead_name.split(\u0027 \u0027)[0] : \u0027\u0027}! I\u0027m the agency assistant. I\u0027m here to help you learn about this property. What would you like to know?`\n  ].join(\u0027\\n\u0027)\n};\n\nconst losers = (claim.notified_agents || [])\n  .filter(id =\u003e id !== trigger.agent_id)\n  .map(agent_id =\u003e ({\n    purpose: \u0027loser_notification\u0027,\n    agent_id,\n    text: `Este lead ya fue tomado por otro asesor. Suerte con el proximo! \\u{1F4AA}`\n  }));\n\nreturn [winner, leadGreeting, ...losers].map(m =\u003e ({ json: m }));"
+                                                           },
+                                            "id":  "9127e6ce-b2ef-4daf-8722-1e1c983af051",
+                                            "name":  "Build Winner/Lead/Loser Messages",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             1080,
+                                                             180
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "typeValidation":  "strict",
+                                                                                                  "version":  2
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "f7727c4a-1403-44a9-98be-73f62aa24b68",
+                                                                                                         "leftValue":  "={{ $json.purpose }}",
+                                                                                                         "rightValue":  "loser_notification",
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "string",
+                                                                                                                          "operation":  "equals"
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "id":  "686b0f7f-ae71-4353-9475-bee2a15daba2",
+                                            "name":  "Needs Phone Lookup?",
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.2,
+                                            "position":  [
+                                                             1300,
+                                                             180
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT whatsapp_number FROM agents WHERE agent_id = $1;",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{ $json.agent_id }}"
+                                                                           }
+                                                           },
+                                            "id":  "7757b98b-9c8b-4a58-a77b-199d8e651637",
+                                            "name":  "Lookup Loser Agent Phone",
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.5,
+                                            "position":  [
+                                                             1520,
+                                                             80
+                                                         ],
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                                                 "name":  "Postgres - Supabase"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "assignments":  {
+                                                                                   "assignments":  [
+                                                                                                       {
+                                                                                                           "id":  "number",
+                                                                                                           "name":  "number",
+                                                                                                           "value":  "={{ $json.whatsapp_number }}",
+                                                                                                           "type":  "string"
+                                                                                                       },
+                                                                                                       {
+                                                                                                           "id":  "text",
+                                                                                                           "name":  "text",
+                                                                                                           "value":  "={{ $(\u0027Build Winner/Lead/Loser Messages\u0027).item.json.text }}",
+                                                                                                           "type":  "string"
+                                                                                                       },
+                                                                                                       {
+                                                                                                           "id":  "purpose",
+                                                                                                           "name":  "purpose",
+                                                                                                           "value":  "loser_notification",
+                                                                                                           "type":  "string"
+                                                                                                       }
+                                                                                                   ]
+                                                                               },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "id":  "2ef0db24-a3cf-42a7-83a0-0646f961ceeb",
+                                            "name":  "Set Loser Payload",
+                                            "type":  "n8n-nodes-base.set",
+                                            "typeVersion":  3.4,
+                                            "position":  [
+                                                             1740,
+                                                             80
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "mode":  "append",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "id":  "51b5a7db-e1b9-4b46-aee9-825e66f39b46",
+                                            "name":  "Merge All Outbound",
+                                            "type":  "n8n-nodes-base.merge",
+                                            "typeVersion":  3.1,
+                                            "position":  [
+                                                             1960,
+                                                             180
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "apikey",
+                                                                                                               "value":  "={{ $env.EVOLUTION_API_KEY }}"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"number\": \"{{ $json.number }}\",\n  \"text\": {{ JSON.stringify($json.text) }},\n  \"delay\": 1200\n}",
+                                                               "options":  {
+                                                                               "timeout":  15000
+                                                                           }
+                                                           },
+                                            "id":  "3f795990-1c85-42e6-9b1c-0c3723437d80",
+                                            "name":  "Send All via Evolution",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             2180,
+                                                             180
+                                                         ],
+                                            "continueOnFail":  true
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const trigger = $(\u0027When Called by WF1\u0027).first().json;\nreturn [{\n  json: {\n    number: trigger.agent_phone,\n    text: `\\u26A0\\uFE0F No pude asignarte el lead ${trigger.short_code}.\\n\\nPuede que otro asesor lo haya tomado primero, o que la subasta haya expirado. Cuando entre un nuevo lead te avisaremos.`\n  }\n}];"
+                                                           },
+                                            "id":  "fd34d5fe-6ba8-45ad-9bcb-520a3a4ade60",
+                                            "name":  "Build \u0027Too Late\u0027 Message",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             860,
+                                                             420
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "method":  "POST",
+                                                               "url":  "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+                                                               "sendHeaders":  true,
+                                                               "headerParameters":  {
+                                                                                        "parameters":  [
+                                                                                                           {
+                                                                                                               "name":  "apikey",
+                                                                                                               "value":  "={{ $env.EVOLUTION_API_KEY }}"
+                                                                                                           }
+                                                                                                       ]
+                                                                                    },
+                                                               "sendBody":  true,
+                                                               "specifyBody":  "json",
+                                                               "jsonBody":  "={\n  \"number\": \"{{ $json.number }}\",\n  \"text\": {{ JSON.stringify($json.text) }}\n}",
+                                                               "options":  {
+                                                                               "timeout":  10000
+                                                                           }
+                                                           },
+                                            "id":  "066de598-a9e9-4a0e-8165-b19a2446f049",
+                                            "name":  "Send \u0027Too Late\u0027 via Evolution",
+                                            "type":  "n8n-nodes-base.httpRequest",
+                                            "typeVersion":  4.2,
+                                            "position":  [
+                                                             1080,
+                                                             420
+                                                         ],
+                                            "continueOnFail":  true
+                                        }
+                                    ],
+                          "connections":  {
+                                              "When Called by WF1":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Is Routing V2 Claim?",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "Is Routing V2 Claim?":  {
+                                                                           "main":  [
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "Claim Routing V2 Opportunity",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ],
+                                                                                        [
+                                                                                            {
+                                                                                                "node":  "Atomic Claim (WHERE status=open)",
+                                                                                                "type":  "main",
+                                                                                                "index":  0
+                                                                                            }
+                                                                                        ]
+                                                                                    ]
+                                                                       },
+                                              "Claim Routing V2 Opportunity":  {
+                                                                                   "main":  [
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "Build Routing V2 Claim Result",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    }
+                                                                                                ]
+                                                                                            ]
+                                                                               },
+                                              "Build Routing V2 Claim Result":  {
+                                                                                    "main":  [
+                                                                                                 [
+                                                                                                     {
+                                                                                                         "node":  "Send Routing V2 Claim Result",
+                                                                                                         "type":  "main",
+                                                                                                         "index":  0
+                                                                                                     }
+                                                                                                 ]
+                                                                                             ]
+                                                                                },
+                                              "Atomic Claim (WHERE status=open)":  {
+                                                                                       "main":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "Did This Agent Win?",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                   },
+                                              "Did This Agent Win?":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "Assign Conversation to Winner",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ],
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "Build \u0027Too Late\u0027 Message",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "Assign Conversation to Winner":  {
+                                                                                    "main":  [
+                                                                                                 [
+                                                                                                     {
+                                                                                                         "node":  "Build Winner/Lead/Loser Messages",
+                                                                                                         "type":  "main",
+                                                                                                         "index":  0
+                                                                                                     }
+                                                                                                 ]
+                                                                                             ]
+                                                                                },
+                                              "Build Winner/Lead/Loser Messages":  {
+                                                                                       "main":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "Needs Phone Lookup?",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                   },
+                                              "Needs Phone Lookup?":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "Lookup Loser Agent Phone",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ],
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "Merge All Outbound",
+                                                                                               "type":  "main",
+                                                                                               "index":  1
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                                              "Lookup Loser Agent Phone":  {
+                                                                               "main":  [
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "Set Loser Payload",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  0
+                                                                                                }
+                                                                                            ]
+                                                                                        ]
+                                                                           },
+                                              "Set Loser Payload":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "Merge All Outbound",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "Merge All Outbound":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Send All via Evolution",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "Build \u0027Too Late\u0027 Message":  {
+                                                                                         "main":  [
+                                                                                                      [
+                                                                                                          {
+                                                                                                              "node":  "Send \u0027Too Late\u0027 via Evolution",
+                                                                                                              "type":  "main",
+                                                                                                              "index":  0
+                                                                                                          }
+                                                                                                      ]
+                                                                                                  ]
+                                                                                     }
+                                          },
+                          "nodeGroups":  [
+
+                                         ],
+                          "authors":  [
+
+                                      ],
+                          "name":  "WF3b - Claim Handler (Evolution)",
+                          "description":  null,
+                          "autosaved":  false,
+                          "workflowPublishHistory":  [
+
+                                                     ],
+                          "settings":  {
+                                           "executionOrder":  "v1",
+                                           "saveExecutionProgress":  false,
+                                           "saveManualExecutions":  false,
+                                           "saveDataErrorExecution":  "none",
+                                           "saveDataSuccessExecution":  "none"
+                                       }
+                      }
+}

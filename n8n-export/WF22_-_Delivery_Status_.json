@@ -1,0 +1,629 @@
+{
+    "name":  "WF22 - Delivery Status",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "whatsapp-delivery-status",
+                                         "responseMode":  "onReceived",
+                                         "options":  {
+                                                         "rawBody":  true
+                                                     }
+                                     },
+                      "id":  "wf22-status-webhook",
+                      "name":  "WA Status Webhook",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const crypto=require(\u0027crypto\u0027);\nconst item=$input.first(); const headers=item.json.headers||{}; const signature=String(headers[\u0027x-hub-signature-256\u0027]||headers[\u0027X-Hub-Signature-256\u0027]||\u0027\u0027);\nconst encoded=item.binary?.data?.data; const secret=$env.WA_WEBHOOK_SECRET;\nif(typeof encoded!==\u0027string\u0027||!secret||!signature.startsWith(\u0027sha256=\u0027)) throw new Error(\u0027invalid webhook signature\u0027);\nconst raw=Buffer.from(encoded,\u0027base64\u0027); const expected=\u0027sha256=\u0027+crypto.createHmac(\u0027sha256\u0027,secret).update(raw).digest(\u0027hex\u0027); const a=Buffer.from(signature),b=Buffer.from(expected);\nif(a.length!==b.length||!crypto.timingSafeEqual(a,b)) throw new Error(\u0027invalid webhook signature\u0027);\nreturn [{json:{body:JSON.parse(raw.toString(\u0027utf8\u0027))}}];"
+                                     },
+                      "id":  "wf22-verify-signature",
+                      "name":  "Verify Meta Signature",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       460,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const body=$input.first().json.body; const value=body.entry?.[0]?.changes?.[0]?.value||{}; return [{json:{kind:value.statuses?.length?\u0027status\u0027:value.messages?.length?\u0027message\u0027:\u0027ignore\u0027,body}}];"
+                                     },
+                      "id":  "wf22-dispatch-meta",
+                      "name":  "Dispatch Meta Payload",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       650,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "rules":  {
+                                                       "values":  [
+                                                                      {
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "typeValidation":  "strict"
+                                                                                                         },
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "wf22-kind-status",
+                                                                                                                    "leftValue":  "={{ $json.kind }}",
+                                                                                                                    "rightValue":  "status",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals"
+                                                                                                                                 }
+                                                                                                                }
+                                                                                                            ],
+                                                                                             "combinator":  "and"
+                                                                                         },
+                                                                          "renameOutput":  true,
+                                                                          "outputKey":  "status"
+                                                                      },
+                                                                      {
+                                                                          "conditions":  {
+                                                                                             "options":  {
+                                                                                                             "caseSensitive":  true,
+                                                                                                             "typeValidation":  "strict"
+                                                                                                         },
+                                                                                             "conditions":  [
+                                                                                                                {
+                                                                                                                    "id":  "wf22-kind-message",
+                                                                                                                    "leftValue":  "={{ $json.kind }}",
+                                                                                                                    "rightValue":  "message",
+                                                                                                                    "operator":  {
+                                                                                                                                     "type":  "string",
+                                                                                                                                     "operation":  "equals"
+                                                                                                                                 }
+                                                                                                                }
+                                                                                                            ],
+                                                                                             "combinator":  "and"
+                                                                                         },
+                                                                          "renameOutput":  true,
+                                                                          "outputKey":  "message"
+                                                                      }
+                                                                  ]
+                                                   },
+                                         "options":  {
+                                                         "fallbackOutput":  "extra"
+                                                     }
+                                     },
+                      "id":  "wf22-route-kind",
+                      "name":  "Route Meta Payload",
+                      "type":  "n8n-nodes-base.switch",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       840,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "={{ $env.WF1_WORKFLOW_ID }}",
+                                                            "mode":  "id"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "wf22-call-wf1",
+                      "name":  "Call WF1 Inbound Router",
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       1040,
+                                       420
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const body=$input.first().json.body;\nconst value=body.entry?.[0]?.changes?.[0]?.value||{};\nconst s=value.statuses?.[0]||{};\nconst message_id=String(s.id||\u0027\u0027); const status=String(s.status||\u0027\u0027);\nif(!message_id||![\u0027sent\u0027,\u0027delivered\u0027,\u0027failed\u0027].includes(status)) return [{json:{valid:false}}];\nconst ts=Number(s.timestamp); const evidence={status};\nif(Array.isArray(s.errors)) evidence.error_codes=s.errors.map(e=\u003eString(e.code||\u0027\u0027)).filter(Boolean).slice(0,5);\nreturn [{json:{valid:true,message_id,status,provider_timestamp:Number.isFinite(ts)?new Date(ts*1000).toISOString():null,evidence}}];"
+                                     },
+                      "id":  "wf22-parse-status",
+                      "name":  "Parse Whitelisted Status",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       680,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "typeValidation":  "strict"
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "wf22-valid",
+                                                                                   "leftValue":  "={{ $json.valid }}",
+                                                                                   "rightValue":  true,
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true"
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        }
+                                     },
+                      "id":  "wf22-valid-status",
+                      "name":  "Valid Status?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.2,
+                      "position":  [
+                                       900,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT * FROM public.record_delivery_callback($1, $2, $3::timestamptz, $4::jsonb);",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.message_id, $json.status, $json.provider_timestamp, JSON.stringify($json.evidence)] }}"
+                                                     }
+                                     },
+                      "id":  "wf22-record-callback",
+                      "name":  "Record and Reconcile Callback",
+                      "type":  "n8n-nodes-base.postgres",
+                      "typeVersion":  2.5,
+                      "position":  [
+                                       1120,
+                                       220
+                                   ],
+                      "credentials":  {
+                                          "postgres":  {
+                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                           "name":  "Postgres - Supabase"
+                                                       }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "wf22-ignore-status",
+                      "name":  "Ignore Invalid Status",
+                      "type":  "n8n-nodes-base.noOp",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1120,
+                                       420
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "WA Status Webhook":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Verify Meta Signature",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Verify Meta Signature":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Dispatch Meta Payload",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Dispatch Meta Payload":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Route Meta Payload",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Route Meta Payload":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Parse Whitelisted Status",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ],
+                                                                [
+                                                                    {
+                                                                        "node":  "Call WF1 Inbound Router",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ],
+                                                                [
+                                                                    {
+                                                                        "node":  "Ignore Invalid Status",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Parse Whitelisted Status":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Valid Status?",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Valid Status?":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Record and Reconcile Callback",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ],
+                                                           [
+                                                               {
+                                                                   "node":  "Ignore Invalid Status",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "saveExecutionProgress":  false,
+                     "saveManualExecutions":  false,
+                     "saveDataErrorExecution":  "none",
+                     "saveDataSuccessExecution":  "none"
+                 },
+    "activeVersion":  {
+                          "updatedAt":  null,
+                          "createdAt":  null,
+                          "versionId":  null,
+                          "workflowId":  null,
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "httpMethod":  "POST",
+                                                               "path":  "whatsapp-delivery-status",
+                                                               "responseMode":  "onReceived",
+                                                               "options":  {
+                                                                               "rawBody":  true
+                                                                           }
+                                                           },
+                                            "id":  "wf22-status-webhook",
+                                            "name":  "WA Status Webhook",
+                                            "type":  "n8n-nodes-base.webhook",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             240,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const crypto=require(\u0027crypto\u0027);\nconst item=$input.first(); const headers=item.json.headers||{}; const signature=String(headers[\u0027x-hub-signature-256\u0027]||headers[\u0027X-Hub-Signature-256\u0027]||\u0027\u0027);\nconst encoded=item.binary?.data?.data; const secret=$env.WA_WEBHOOK_SECRET;\nif(typeof encoded!==\u0027string\u0027||!secret||!signature.startsWith(\u0027sha256=\u0027)) throw new Error(\u0027invalid webhook signature\u0027);\nconst raw=Buffer.from(encoded,\u0027base64\u0027); const expected=\u0027sha256=\u0027+crypto.createHmac(\u0027sha256\u0027,secret).update(raw).digest(\u0027hex\u0027); const a=Buffer.from(signature),b=Buffer.from(expected);\nif(a.length!==b.length||!crypto.timingSafeEqual(a,b)) throw new Error(\u0027invalid webhook signature\u0027);\nreturn [{json:{body:JSON.parse(raw.toString(\u0027utf8\u0027))}}];"
+                                                           },
+                                            "id":  "wf22-verify-signature",
+                                            "name":  "Verify Meta Signature",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             460,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const body=$input.first().json.body; const value=body.entry?.[0]?.changes?.[0]?.value||{}; return [{json:{kind:value.statuses?.length?\u0027status\u0027:value.messages?.length?\u0027message\u0027:\u0027ignore\u0027,body}}];"
+                                                           },
+                                            "id":  "wf22-dispatch-meta",
+                                            "name":  "Dispatch Meta Payload",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             650,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "rules":  {
+                                                                             "values":  [
+                                                                                            {
+                                                                                                "conditions":  {
+                                                                                                                   "options":  {
+                                                                                                                                   "caseSensitive":  true,
+                                                                                                                                   "typeValidation":  "strict"
+                                                                                                                               },
+                                                                                                                   "conditions":  [
+                                                                                                                                      {
+                                                                                                                                          "id":  "wf22-kind-status",
+                                                                                                                                          "leftValue":  "={{ $json.kind }}",
+                                                                                                                                          "rightValue":  "status",
+                                                                                                                                          "operator":  {
+                                                                                                                                                           "type":  "string",
+                                                                                                                                                           "operation":  "equals"
+                                                                                                                                                       }
+                                                                                                                                      }
+                                                                                                                                  ],
+                                                                                                                   "combinator":  "and"
+                                                                                                               },
+                                                                                                "renameOutput":  true,
+                                                                                                "outputKey":  "status"
+                                                                                            },
+                                                                                            {
+                                                                                                "conditions":  {
+                                                                                                                   "options":  {
+                                                                                                                                   "caseSensitive":  true,
+                                                                                                                                   "typeValidation":  "strict"
+                                                                                                                               },
+                                                                                                                   "conditions":  [
+                                                                                                                                      {
+                                                                                                                                          "id":  "wf22-kind-message",
+                                                                                                                                          "leftValue":  "={{ $json.kind }}",
+                                                                                                                                          "rightValue":  "message",
+                                                                                                                                          "operator":  {
+                                                                                                                                                           "type":  "string",
+                                                                                                                                                           "operation":  "equals"
+                                                                                                                                                       }
+                                                                                                                                      }
+                                                                                                                                  ],
+                                                                                                                   "combinator":  "and"
+                                                                                                               },
+                                                                                                "renameOutput":  true,
+                                                                                                "outputKey":  "message"
+                                                                                            }
+                                                                                        ]
+                                                                         },
+                                                               "options":  {
+                                                                               "fallbackOutput":  "extra"
+                                                                           }
+                                                           },
+                                            "id":  "wf22-route-kind",
+                                            "name":  "Route Meta Payload",
+                                            "type":  "n8n-nodes-base.switch",
+                                            "typeVersion":  3.4,
+                                            "position":  [
+                                                             840,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "workflowId":  {
+                                                                                  "__rl":  true,
+                                                                                  "value":  "={{ $env.WF1_WORKFLOW_ID }}",
+                                                                                  "mode":  "id"
+                                                                              },
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "id":  "wf22-call-wf1",
+                                            "name":  "Call WF1 Inbound Router",
+                                            "type":  "n8n-nodes-base.executeWorkflow",
+                                            "typeVersion":  1.2,
+                                            "position":  [
+                                                             1040,
+                                                             420
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "jsCode":  "const body=$input.first().json.body;\nconst value=body.entry?.[0]?.changes?.[0]?.value||{};\nconst s=value.statuses?.[0]||{};\nconst message_id=String(s.id||\u0027\u0027); const status=String(s.status||\u0027\u0027);\nif(!message_id||![\u0027sent\u0027,\u0027delivered\u0027,\u0027failed\u0027].includes(status)) return [{json:{valid:false}}];\nconst ts=Number(s.timestamp); const evidence={status};\nif(Array.isArray(s.errors)) evidence.error_codes=s.errors.map(e=\u003eString(e.code||\u0027\u0027)).filter(Boolean).slice(0,5);\nreturn [{json:{valid:true,message_id,status,provider_timestamp:Number.isFinite(ts)?new Date(ts*1000).toISOString():null,evidence}}];"
+                                                           },
+                                            "id":  "wf22-parse-status",
+                                            "name":  "Parse Whitelisted Status",
+                                            "type":  "n8n-nodes-base.code",
+                                            "typeVersion":  2,
+                                            "position":  [
+                                                             680,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "conditions":  {
+                                                                                  "options":  {
+                                                                                                  "caseSensitive":  true,
+                                                                                                  "typeValidation":  "strict"
+                                                                                              },
+                                                                                  "conditions":  [
+                                                                                                     {
+                                                                                                         "id":  "wf22-valid",
+                                                                                                         "leftValue":  "={{ $json.valid }}",
+                                                                                                         "rightValue":  true,
+                                                                                                         "operator":  {
+                                                                                                                          "type":  "boolean",
+                                                                                                                          "operation":  "true"
+                                                                                                                      }
+                                                                                                     }
+                                                                                                 ],
+                                                                                  "combinator":  "and"
+                                                                              }
+                                                           },
+                                            "id":  "wf22-valid-status",
+                                            "name":  "Valid Status?",
+                                            "type":  "n8n-nodes-base.if",
+                                            "typeVersion":  2.2,
+                                            "position":  [
+                                                             900,
+                                                             300
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "operation":  "executeQuery",
+                                                               "query":  "SELECT * FROM public.record_delivery_callback($1, $2, $3::timestamptz, $4::jsonb);",
+                                                               "options":  {
+                                                                               "queryReplacement":  "={{ [$json.message_id, $json.status, $json.provider_timestamp, JSON.stringify($json.evidence)] }}"
+                                                                           }
+                                                           },
+                                            "id":  "wf22-record-callback",
+                                            "name":  "Record and Reconcile Callback",
+                                            "type":  "n8n-nodes-base.postgres",
+                                            "typeVersion":  2.5,
+                                            "position":  [
+                                                             1120,
+                                                             220
+                                                         ],
+                                            "credentials":  {
+                                                                "postgres":  {
+                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+                                                                                 "name":  "Postgres - Supabase"
+                                                                             }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+
+                                                           },
+                                            "id":  "wf22-ignore-status",
+                                            "name":  "Ignore Invalid Status",
+                                            "type":  "n8n-nodes-base.noOp",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             1120,
+                                                             420
+                                                         ]
+                                        }
+                                    ],
+                          "connections":  {
+                                              "WA Status Webhook":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "Verify Meta Signature",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                              "Verify Meta Signature":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "Dispatch Meta Payload",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "Dispatch Meta Payload":  {
+                                                                            "main":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "Route Meta Payload",
+                                                                                                 "type":  "main",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                        },
+                                              "Route Meta Payload":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Parse Whitelisted Status",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ],
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Call WF1 Inbound Router",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ],
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Ignore Invalid Status",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "Parse Whitelisted Status":  {
+                                                                               "main":  [
+                                                                                            [
+                                                                                                {
+                                                                                                    "node":  "Valid Status?",
+                                                                                                    "type":  "main",
+                                                                                                    "index":  0
+                                                                                                }
+                                                                                            ]
+                                                                                        ]
+                                                                           },
+                                              "Valid Status?":  {
+                                                                    "main":  [
+                                                                                 [
+                                                                                     {
+                                                                                         "node":  "Record and Reconcile Callback",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ],
+                                                                                 [
+                                                                                     {
+                                                                                         "node":  "Ignore Invalid Status",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ]
+                                                                             ]
+                                                                }
+                                          },
+                          "nodeGroups":  [
+
+                                         ],
+                          "authors":  [
+
+                                      ],
+                          "name":  "WF22 - Delivery Status",
+                          "description":  null,
+                          "autosaved":  false,
+                          "workflowPublishHistory":  [
+
+                                                     ],
+                          "settings":  {
+                                           "executionOrder":  "v1",
+                                           "saveExecutionProgress":  false,
+                                           "saveManualExecutions":  false,
+                                           "saveDataErrorExecution":  "none",
+                                           "saveDataSuccessExecution":  "none"
+                                       }
+                      }
+}

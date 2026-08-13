@@ -1,0 +1,14 @@
+{
+  "name":"WF23 - Delivery Timeout Sweeper",
+  "nodes":[
+    {"parameters":{"rule":{"interval":[{"field":"minutes","minutesInterval":1}]}},"id":"wf23-every-minute","name":"Every Minute","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[240,300]},
+    {"parameters":{"operation":"executeQuery","query":"SELECT * FROM public.sweep_owner_delivery_no_callback(INTERVAL '2 minutes', 100);","options":{}},"id":"wf23-sweep-timeouts","name":"Sweep Delivery Timeouts","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[480,300],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}},
+    {"parameters":{"operation":"executeQuery","query":"SELECT * FROM public.claim_pending_guard_deliveries(100);","options":{}},"id":"wf23-claim-pending","name":"Claim Pending Guard Deliveries","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[700,300],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}},
+    {"parameters":{"jsCode":"return $input.all().map(({json:a})=>({json:{attempt_id:a.attempt_id,opportunity_id:a.opportunity_id,routing_tier:a.routing_tier,lease_token:a.lease_token}}));"},"id":"wf23-shape-claimed","name":"Shape Claimed Deliveries","type":"n8n-nodes-base.code","typeVersion":2,"position":[900,300]},
+    {"parameters":{"workflowId":{"__rl":true,"value":"={{ $env.WF13_WORKFLOW_ID }}","mode":"id"},"options":{}},"id":"wf23-call-sender","name":"Call Durable Offer Sender","type":"n8n-nodes-base.executeWorkflow","typeVersion":1.2,"position":[1120,300]},
+    {"parameters":{"rule":{"interval":[{"field":"days","daysInterval":1,"triggerAtHour":3}]}},"id":"wf23-daily-purge","name":"Daily Purge","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[240,500]},
+    {"parameters":{"operation":"executeQuery","query":"SELECT public.purge_delivery_callback_evidence(NOW()-INTERVAL '30 days');","options":{}},"id":"wf23-purge-callbacks","name":"Purge Callback Evidence","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[480,500],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}}
+  ],
+  "connections":{"Every Minute":{"main":[[{"node":"Sweep Delivery Timeouts","type":"main","index":0}]]},"Sweep Delivery Timeouts":{"main":[[{"node":"Claim Pending Guard Deliveries","type":"main","index":0}]]},"Claim Pending Guard Deliveries":{"main":[[{"node":"Shape Claimed Deliveries","type":"main","index":0}]]},"Shape Claimed Deliveries":{"main":[[{"node":"Call Durable Offer Sender","type":"main","index":0}]]},"Daily Purge":{"main":[[{"node":"Purge Callback Evidence","type":"main","index":0}]]}},
+  "settings":{"executionOrder":"v1","saveExecutionProgress":false,"saveManualExecutions":false,"saveDataErrorExecution":"none","saveDataSuccessExecution":"none"}
+}
