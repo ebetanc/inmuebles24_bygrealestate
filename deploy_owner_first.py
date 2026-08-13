@@ -18,8 +18,11 @@ import sys
 
 import requests
 
-BASE = "https://n8n.srv856940.hstgr.cloud/api/v1"
-KEY = open(os.path.join(os.environ["TEMP"], "n8nkey.txt")).read().strip()
+BASE = os.environ.get("N8N_BASE_URL", "https://n8n.srv856940.hstgr.cloud/api/v1")
+KEY = os.environ.get("N8N_API_KEY", "").strip()
+if not KEY:
+    print("FATAL: N8N_API_KEY environment variable is not set", file=sys.stderr)
+    sys.exit(1)
 H = {"X-N8N-API-KEY": KEY, "Content-Type": "application/json"}
 SCRATCH = os.path.dirname(os.path.abspath(__file__))
 
