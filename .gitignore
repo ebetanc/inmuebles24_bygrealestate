@@ -30,3 +30,13 @@ graphify-out/
 # n8n live-workflow backups (rollback copies, keep local only)
 wf_*_backup_*.json
 wf10_live_backup_*.json
+
+# LRV2 closure 2026-08-13: scratch/output/media, never version
+tmp/
+tmp_*.ps1
+output/
+scratchpad/
+videos/
+**/.cdp-profile/
+n8n-export/*_SMOKE_TEST__temp__*.json
+/flujo-leads.html
