@@ -27,7 +27,22 @@
 - Cambiar cualquier flag operativo productivo (`EB_MARK_ATTENDED`, `MARK_CONTACTED`, credenciales, etc.).
 - Iniciar shadow mode, canary, o cualquier ventana de observacion sobre trafico real.
 
-## 2. Prerrequisitos
+### E2E real en produccion: PASS (2026-08-13, ventana controlada autorizada)
+
+Circuito completo validado con 1 oportunidad sintetica (opp 235, `LRV2_E2E`):
+
+- **Exactamente 1 WhatsApp autorizado**: WF13 envio 1 oferta dirigida (attempt 13, tier owner, 20:07:40Z) a 1 numero autorizado (`agent_test_fr`); 0 fan-out, 0 mensajes a terceros.
+- **Callback real firmado**: 2 callbacks Meta autenticados (sent + delivered) via WF22 con verificacion HMAC; `delivered` a 20:07:43Z; SLA = `delivered_at` + 5:00.000 exacto.
+- **Late claim rechazado**: claim fuera de ventana rechazado sin reasignacion (0 mutaciones de `assigned_agent_id`).
+- **Claim aceptado e idempotente**: claim valido 20:19:26Z → `state=assigned` a `agent_test_fr`; wamid duplicado → dedupe (0 eventos); re-claim del ganador → `accepted` sin re-UPDATE; siempre exactamente 1 ganador.
+- **Cleanup/restauracion**: mensajes sinteticos eliminados; opp 235 neutralizada como `closed_lost` (los eventos son append-only por trigger de auditoria — no se borran, y no debe intentarse); `agent_test_fr` desactivado; workflows n8n restaurados hash-exacto al estado pre-ventana (229 activos / 542 totales, identico); invoker efimero eliminado; sin PII real; `routing_safe_mode_state=normal` durante toda la ventana.
+- **Incidencia no funcional**: WF21 emitio emails de error durante la ventana (fallos provocados por los propios defectos pre-fix del test); sin impacto operativo.
+
+**Tres defectos reales encontrados** (parchados en vivo durante la ventana, luego revertidos con la restauracion; portados al repo en la serie `fix/lrv2-e2e-fixes`):
+
+1. **Credenciales placeholder importadas**: los 9 nodos Postgres de la cadena llegaron a n8n con `REPLACE_WITH_POSTGRES_CREDENTIAL_ID` literal. Fix repo: `import_inactive()` acepta `credential_map` (o `N8N_CREDENTIAL_MAP` en entorno via `credential_map_from_env()`), y **falla cerrado** si cualquier `REPLACE_WITH_*` sobrevive en el body a importar; nunca imprime IDs.
+2. **executeWorkflow typeVersion 1.2 con string plano**: `Call WF3b: Claim Handler` (y 3 nodos hermanos en WF1) fallaban con "No information about the workflow to execute found". Fix repo: forma `{"__rl":true,"value":"={{ $env.WF3B_WORKFLOW_ID }}","mode":"id"}` en fuente, export y activeVersion; regresion en `tests/test_lrv2_e2e_regression.py` impide volver al string plano; mismo defecto corregido en WF2/WF3c/WF4/WF7/WF8(8b).
+3. **pgcrypto fuera del search_path del claim**: ver Nota 0034 en §3.
 
 ### Credenciales (referenciar, nunca pegar el valor)
 
@@ -63,7 +78,10 @@ Migraciones nuevas de la serie v2: **`0021` a `0033`** (produccion ya tiene `000
 0031_easybroker_step_evidence.sql   -- evidencia de pasos EasyBroker
 0032_i24_contact_effect_lease.sql   -- lease Inmuebles24 Contactado
 0033_easybroker_attend_effect_lease.sql -- lease EasyBroker Atendida
+0034_claim_pgcrypto_search_path.sql     -- fix E2E: digest() (pgcrypto en schema extensions) visible para claim_lead_opportunity
 ```
+
+**Nota 0034 (fix del E2E 2026-08-13):** en Supabase pgcrypto vive en `extensions`; el `SET search_path=pg_catalog,public` de 0026 dejaba el `digest()` interno de `claim_lead_opportunity` sin resolver ("function digest(text, unknown) does not exist"). 0034 es forward-only y reaplicable (`ALTER FUNCTION ... SET search_path = pg_catalog, public, extensions`), verifica la firma exacta con `pg_get_function_identity_arguments` antes de alterar, y su rollback es forward-fix (nueva migración que restaura `pg_catalog, public`). El gate PG17 ahora instala pgcrypto en `extensions` (layout Supabase) — el layout anterior con pgcrypto en `public` producía un falso verde; `tests/fixtures/routing_v2/test_claim_pgcrypto.sql` falla si el gate repite ese layout. Verificación post-aplicación: columna `claim_search_path_includes_extensions` en `whatsapp-agent/scripts/02_verify_production.sql`. **Dependencia adicional:** el SQL de los nodos de WF3b/WF22 llama `digest()` sin calificar a nivel de sesión — eso funciona porque el search_path por defecto de la base en Supabase (`"$user", public, extensions`) incluye `extensions` (verificado en el E2E real); la columna `session_search_path_includes_extensions` del mismo script lo comprueba. 0034 solo corrige el search_path fijado *dentro* de `claim_lead_opportunity`.
 
 ### Nota del stub `agent_manager_2`
 
@@ -213,6 +231,8 @@ Solo con las 5 casillas marcadas y aprobacion explicita del supervisor/cliente s
 - `0028_routing_safe_mode.sql`: DROPs de RPCs/estado de modo seguro documentados en el header del archivo.
 - `0029_routing_v2_metrics.sql`: DROPs de vista/RPCs de metricas documentados en el header del archivo.
 - `0033_easybroker_attend_effect_lease.sql`: DROPs del lease de evidencia EasyBroker documentados en el header del archivo.
+
+- `0034_claim_pgcrypto_search_path.sql`: rollback forward-fix documentado en el header (nueva migracion con `ALTER FUNCTION ... SET search_path = pg_catalog, public`).
 
 El rollback de migraciones es **forward-fix**: aplicar un nuevo archivo `.sql` que ejecuta los `DROP`/reversion documentados, nunca editar ni volver a ejecutar una migracion ya aplicada. Tomar un backup de base de datos completo (pg_dump o snapshot del proveedor) inmediatamente antes de cualquier forward-fix.
 
