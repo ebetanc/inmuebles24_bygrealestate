@@ -268,6 +268,18 @@ SELECT
     'authenticated','public.claim_lead_opportunity(bigint,text,text,text,text)','EXECUTE'
   ) AS clients_cannot_claim_routing_opportunity;
 
+-- 0034: el digest() interno de claim_lead_opportunity requiere pgcrypto (schema extensions
+-- en Supabase) visible en el search_path fijado de la funcion.
+SELECT EXISTS (
+  SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public' AND p.proname = 'claim_lead_opportunity'
+    AND p.proconfig @> ARRAY['search_path=pg_catalog, public, extensions']
+) AS claim_search_path_includes_extensions;
+
+-- WF3b/WF22 llaman digest() sin calificar a nivel de sesion: depende de que el search_path
+-- por defecto de la base (Supabase: "$user", public, extensions) incluya `extensions`.
+SELECT 'extensions' = ANY(current_schemas(false)) AS session_search_path_includes_extensions;
+
 SELECT
   has_table_privilege('service_role','public.conversations','SELECT,UPDATE')
     AND NOT has_table_privilege('service_role','public.conversations','INSERT,DELETE,TRUNCATE,REFERENCES,TRIGGER')
