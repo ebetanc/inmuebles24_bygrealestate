@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -13,6 +14,10 @@ import httpx
 
 Issue = dict[str, str]
 ENV_REF = re.compile(r"^=\{\{\s*\$env\.([A-Z][A-Z0-9_]*)_WORKFLOW_ID\s*\}\}$")
+# Repo workflow JSONs never carry real credential IDs — only these placeholders, mapped at
+# deploy time (env/argument). Anything matching this that survives into an import body is a bug.
+CREDENTIAL_PLACEHOLDER = re.compile(r"REPLACE_WITH_[A-Z0-9_]+")
+CREDENTIAL_MAP_ENV = "N8N_CREDENTIAL_MAP"
 SENSITIVE = re.compile(r"(?:password|passphrase|secret|token|api[_-]?key|authorization|apikey)", re.I)
 SMOKE_TEST = re.compile(r"smoke[\s_-]*test", re.I)
 WORKFLOW_FIELDS = {"id": str, "name": str, "active": bool, "isArchived": bool, "nodes": list, "connections": dict, "settings": dict}
@@ -237,6 +242,46 @@ ALLOWED_SETTINGS = {
 }
 
 
+def credential_map_from_env(environ: dict[str, str]) -> dict[str, str]:
+    """Parse the deploy-time placeholder->credential-id mapping from N8N_CREDENTIAL_MAP
+    (a JSON object). Returns {} when unset. Raises ValueError on malformed input without
+    echoing any value from the variable (it may contain credential IDs)."""
+    raw = environ.get(CREDENTIAL_MAP_ENV)
+    if raw is None or not raw.strip():
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{CREDENTIAL_MAP_ENV} must be a JSON object") from exc
+    if not isinstance(data, dict) or not all(
+        isinstance(key, str) and CREDENTIAL_PLACEHOLDER.fullmatch(key) and isinstance(value, str) and value
+        for key, value in data.items()
+    ):
+        raise ValueError(f"{CREDENTIAL_MAP_ENV} must map REPLACE_WITH_* placeholders to non-empty credential ids")
+    return data
+
+
+def resolve_credentials(workflow: dict[str, Any], credential_map: dict[str, str] | None) -> dict[str, Any]:
+    """Return a copy of `workflow` with placeholder credential ids replaced via `credential_map`.
+    Fail closed: any REPLACE_WITH_* placeholder left anywhere in the result raises ValueError.
+    Error messages name only the placeholders — never mapped credential ids or secrets."""
+    resolved = json.loads(json.dumps(workflow))
+    mapping = credential_map or {}
+    for node in resolved.get("nodes", []):
+        credentials = node.get("credentials") if isinstance(node, dict) else None
+        if not isinstance(credentials, dict):
+            continue
+        for credential in credentials.values():
+            if isinstance(credential, dict) and isinstance(credential.get("id"), str):
+                replacement = mapping.get(credential["id"])
+                if replacement is not None and CREDENTIAL_PLACEHOLDER.fullmatch(credential["id"]):
+                    credential["id"] = replacement
+    leftover = sorted(set(CREDENTIAL_PLACEHOLDER.findall(json.dumps(resolved))))
+    if leftover:
+        raise ValueError("unresolved credential placeholders: " + ", ".join(leftover))
+    return resolved
+
+
 def _client(base_url: str, api_key: str) -> httpx.Client:
     base = base_url if base_url.endswith("/") else base_url + "/"
     return httpx.Client(base_url=base, headers={"X-N8N-API-KEY": api_key, "Content-Type": "application/json"}, timeout=30)
@@ -265,10 +310,16 @@ def diff_local_vs_live(local: Path, base_url: str, api_key: str, workflow_id: st
     return {"differs": differs, "detail": drift_detail(live_wf, local_wf) if differs else ""}
 
 
-def import_inactive(workflow: dict[str, Any], base_url: str, api_key: str, workflow_id: str | None = None, client: httpx.Client | None = None) -> dict[str, Any]:
+def import_inactive(workflow: dict[str, Any], base_url: str, api_key: str, workflow_id: str | None = None, client: httpx.Client | None = None, credential_map: dict[str, str] | None = None) -> dict[str, Any]:
     """Create (no workflow_id) or update (PUT by workflow_id) a workflow. The request body never
-    includes `active` or `id`, so the result is inactive by construction, not by a flag."""
+    includes `active` or `id`, so the result is inactive by construction, not by a flag.
+    Placeholder credential ids are resolved through `credential_map` (defaults to the
+    N8N_CREDENTIAL_MAP env var via credential_map_from_env); any REPLACE_WITH_* left in the
+    outgoing body raises before any request is made."""
+    if credential_map is None:
+        credential_map = credential_map_from_env(dict(os.environ))
     body = {key: workflow[key] for key in IMPORT_FIELDS if key in workflow}
+    body = resolve_credentials(body, credential_map)
     if "settings" in body:
         body["settings"] = {k: v for k, v in (body["settings"] or {}).items() if k in ALLOWED_SETTINGS}
     owns, c = client is None, client or _client(base_url, api_key)
@@ -293,13 +344,15 @@ def activate(workflow_id: str, base_url: str, api_key: str, client: httpx.Client
             c.close()
 
 
-def rollback_from_backup(backup: Path, base_url: str, api_key: str, workflow_id: str, client: httpx.Client | None = None) -> dict[str, Any]:
-    """Re-import a wf_*_backup snapshot as inactive. Call activate() separately to reactivate."""
+def rollback_from_backup(backup: Path, base_url: str, api_key: str, workflow_id: str, client: httpx.Client | None = None, credential_map: dict[str, str] | None = None) -> dict[str, Any]:
+    """Re-import a wf_*_backup snapshot as inactive. Call activate() separately to reactivate.
+    Snapshots normally carry real credential ids (passed through untouched); credential_map
+    covers the incident case of a snapshot taken with placeholders still in it."""
     try:
         snapshot = json.loads(backup.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return {"fatal": f"invalid backup: {exc}"}
-    return import_inactive(snapshot, base_url, api_key, workflow_id=workflow_id, client=client)
+    return import_inactive(snapshot, base_url, api_key, workflow_id=workflow_id, client=client, credential_map=credential_map)
 
 
 def inventory_directory(directory: Path) -> tuple[dict[str, Any] | None, str | None]:

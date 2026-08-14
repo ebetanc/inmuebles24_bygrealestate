@@ -13,8 +13,8 @@
 # convention ever gets inconsistent.
 set -euo pipefail
 
-VPS_HOST="root@69.62.108.2"
-VPS_PASS_FILE="/root/.vps_pass"
+VPS_HOST="${VPS_HOST:-root@69.62.108.2}"
+VPS_SSH_KEY="${VPS_SSH_KEY:-$HOME/.ssh/id_rsa}"
 CONTAINER="root-n8n-1"
 REPO_DIR="/opt/inmobiliaria24"
 EXPORT_DIR="$REPO_DIR/n8n-export"
@@ -22,14 +22,18 @@ REMOTE_TMP="/tmp/wf-export-$$"
 # Matches: "WF1 - ...", "WF3a - ...", "BYG WF20 ..."
 NAME_FILTER='^(BYG )?WF[0-9]'
 
-if [ ! -f "$VPS_PASS_FILE" ]; then
-    echo "Missing $VPS_PASS_FILE (VPS root password, chmod 600 root:root)" >&2
+# One options array for both ssh and scp; quoted expansion keeps key paths with spaces intact.
+SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o BatchMode=yes -i "$VPS_SSH_KEY")
+
+if [ ! -f "$VPS_SSH_KEY" ]; then
+    echo "FATAL: SSH key not found at $VPS_SSH_KEY. Set VPS_SSH_KEY env var or place your key at the default path." >&2
+    echo "Generate one with: ssh-keygen -t ed25519 -C 'export-n8n' -f ~/.ssh/id_ed25519_n8n" >&2
+    echo "Then copy to the VPS: ssh-copy-id -i ~/.ssh/id_ed25519_n8n $VPS_HOST" >&2
     exit 1
 fi
-VPS_PASS=$(cat "$VPS_PASS_FILE")
 
 echo "==> Exporting + filtering workflows on the VPS (read-only)"
-sshpass -p "$VPS_PASS" ssh -o StrictHostKeyChecking=no "$VPS_HOST" bash -s <<REMOTE_SCRIPT
+ssh "${SSH_OPTS[@]}" "$VPS_HOST" bash -s <<REMOTE_SCRIPT
 set -euo pipefail
 rm -rf "$REMOTE_TMP" "$REMOTE_TMP-filtered"
 mkdir -p "$REMOTE_TMP" "$REMOTE_TMP-filtered"
@@ -50,8 +54,37 @@ REMOTE_SCRIPT
 echo "==> Pulling filtered workflows to $EXPORT_DIR"
 mkdir -p "$EXPORT_DIR"
 find "$EXPORT_DIR" -maxdepth 1 -name '*.json' -delete
-sshpass -p "$VPS_PASS" scp -o StrictHostKeyChecking=no "$VPS_HOST:$REMOTE_TMP-filtered/*.json" "$EXPORT_DIR/"
-sshpass -p "$VPS_PASS" ssh -o StrictHostKeyChecking=no "$VPS_HOST" "rm -rf $REMOTE_TMP-filtered"
+scp "${SSH_OPTS[@]}" "$VPS_HOST:$REMOTE_TMP-filtered/*.json" "$EXPORT_DIR/"
+ssh "${SSH_OPTS[@]}" "$VPS_HOST" "rm -rf $REMOTE_TMP-filtered"
+
+echo "==> Scrubbing real credential ids to REPLACE_WITH_* placeholders"
+# Live exports embed real n8n credential ids. The repo invariant (enforced by
+# tests/test_lrv2_e2e_regression.py) is placeholders-only: scrub before committing.
+python3 - "$EXPORT_DIR" <<'SCRUB'
+import json, sys
+from pathlib import Path
+
+def scrub_nodes(nodes):
+    changed = False
+    for node in nodes or []:
+        for ctype, cred in (node.get("credentials") or {}).items():
+            if isinstance(cred, dict) and "id" in cred:
+                placeholder = "REPLACE_WITH_%s_CREDENTIAL_ID" % "".join(
+                    c if c.isalnum() else "_" for c in ctype).upper()
+                if cred["id"] != placeholder:
+                    cred["id"] = placeholder
+                    changed = True
+    return changed
+
+for path in sorted(Path(sys.argv[1]).glob("*.json")):
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
+    changed = scrub_nodes(data.get("nodes"))
+    if isinstance(data.get("activeVersion"), dict):
+        changed |= scrub_nodes(data["activeVersion"].get("nodes"))
+    if changed:
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print("scrubbed %s" % path.name)
+SCRUB
 
 echo "==> Committing snapshot"
 cd "$REPO_DIR"

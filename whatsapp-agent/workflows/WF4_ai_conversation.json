@@ -233,7 +233,11 @@
     {
       "parameters": {
         "source": "database",
-        "workflowId": "={{ $env.WF5_WORKFLOW_ID }}",
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $env.WF5_WORKFLOW_ID }}",
+          "mode": "id"
+        },
         "options": {}
       },
       "id": "7ad65aeb-48a1-4aa6-9ccc-8f678a31afec",

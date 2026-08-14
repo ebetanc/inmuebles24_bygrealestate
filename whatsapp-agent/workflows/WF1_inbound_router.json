@@ -255,7 +255,11 @@
     {
       "parameters": {
         "source": "database",
-        "workflowId": "={{ $env.WF2_WORKFLOW_ID }}",
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $env.WF2_WORKFLOW_ID }}",
+          "mode": "id"
+        },
         "options": {}
       },
       "id": "9061b24c-06a4-4b07-83ea-ba5205fabd3a",
@@ -270,7 +274,11 @@
     {
       "parameters": {
         "source": "database",
-        "workflowId": "={{ $env.WF3B_WORKFLOW_ID }}",
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $env.WF3B_WORKFLOW_ID }}",
+          "mode": "id"
+        },
         "options": {}
       },
       "id": "21b110d6-03da-4117-ae8f-abc8f820012b",
@@ -285,7 +293,11 @@
     {
       "parameters": {
         "source": "database",
-        "workflowId": "={{ $env.WF4_WORKFLOW_ID }}",
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $env.WF4_WORKFLOW_ID }}",
+          "mode": "id"
+        },
         "options": {}
       },
       "id": "0050259f-8c07-4fd5-a411-d2fc9e26d06c",
@@ -384,7 +396,11 @@
     {
       "parameters": {
         "source": "database",
-        "workflowId": "={{ $env.WF15_WORKFLOW_ID }}",
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $env.WF15_WORKFLOW_ID }}",
+          "mode": "id"
+        },
         "options": {}
       },
       "id": "c0ffee00-0002-4000-8000-000000000002",

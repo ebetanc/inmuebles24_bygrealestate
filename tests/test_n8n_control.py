@@ -2,6 +2,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import httpx
@@ -171,6 +172,93 @@ class N8nControlTests(unittest.TestCase):
         source = workflow("a", "A", nodes=[{}])
         mirror = workflow("b", "A", nodes=[{"id":"x"}])
         self.assertIn("nodes[", n8n.drift_detail(source, mirror))
+
+
+class CredentialResolutionTests(unittest.TestCase):
+    """E2E fix A: placeholder credential ids resolve through an explicit deploy-time mapping;
+    any surviving REPLACE_WITH_* fails closed before any request; no secret ever reaches logs."""
+
+    def node_with_credential(self, credential_id):
+        return {"id": "n1", "name": "DB", "type": "n8n-nodes-base.postgres",
+                "credentials": {"postgres": {"id": credential_id, "name": "Postgres - Supabase"}}}
+
+    def test_resolve_credentials_replaces_placeholder_via_mapping(self):
+        wf = workflow("x", "X", nodes=[self.node_with_credential("REPLACE_WITH_POSTGRES_CREDENTIAL_ID")])
+        resolved = n8n.resolve_credentials(wf, {"REPLACE_WITH_POSTGRES_CREDENTIAL_ID": "cred-123"})
+        self.assertEqual(resolved["nodes"][0]["credentials"]["postgres"]["id"], "cred-123")
+        # input untouched (pure function)
+        self.assertEqual(wf["nodes"][0]["credentials"]["postgres"]["id"], "REPLACE_WITH_POSTGRES_CREDENTIAL_ID")
+
+    def test_resolve_credentials_fails_closed_on_unmapped_placeholder(self):
+        wf = workflow("x", "X", nodes=[self.node_with_credential("REPLACE_WITH_POSTGRES_CREDENTIAL_ID")])
+        with self.assertRaises(ValueError) as ctx:
+            n8n.resolve_credentials(wf, {"REPLACE_WITH_TWILIO_CREDENTIAL_ID": "cred-999"})
+        self.assertIn("REPLACE_WITH_POSTGRES_CREDENTIAL_ID", str(ctx.exception))
+        self.assertNotIn("cred-999", str(ctx.exception))  # never echo mapped ids
+
+    def test_resolve_credentials_fails_closed_on_placeholder_outside_credentials(self):
+        node = {"id": "n1", "name": "Set", "type": "n8n-nodes-base.set",
+                "parameters": {"value": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID"}}
+        with self.assertRaises(ValueError):
+            n8n.resolve_credentials(workflow("x", "X", nodes=[node]), {"REPLACE_WITH_POSTGRES_CREDENTIAL_ID": "cred-123"})
+
+    def test_resolve_credentials_never_touches_real_ids(self):
+        wf = workflow("x", "X", nodes=[self.node_with_credential("realCredId123")])
+        resolved = n8n.resolve_credentials(wf, {"REPLACE_WITH_POSTGRES_CREDENTIAL_ID": "cred-123"})
+        self.assertEqual(resolved["nodes"][0]["credentials"]["postgres"]["id"], "realCredId123")
+
+    def test_import_inactive_resolves_credentials_and_sends_no_placeholder(self):
+        captured = {}
+        def handler(request):
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(200, json={"id": "new", "active": False})
+        wf = workflow("x", "X", nodes=[self.node_with_credential("REPLACE_WITH_POSTGRES_CREDENTIAL_ID")])
+        n8n.import_inactive(wf, BASE_URL, "secret", client=mock_client(handler),
+                            credential_map={"REPLACE_WITH_POSTGRES_CREDENTIAL_ID": "cred-123"})
+        self.assertNotIn("REPLACE_WITH_", json.dumps(captured["body"]))
+        self.assertEqual(captured["body"]["nodes"][0]["credentials"]["postgres"]["id"], "cred-123")
+
+    def test_import_inactive_fails_closed_before_any_request_on_leftover_placeholder(self):
+        calls = []
+        def handler(request):
+            calls.append(request.method)
+            return httpx.Response(200, json={})
+        wf = workflow("x", "X", nodes=[self.node_with_credential("REPLACE_WITH_POSTGRES_CREDENTIAL_ID")])
+        with self.assertRaises(ValueError):
+            n8n.import_inactive(wf, BASE_URL, "secret", client=mock_client(handler))
+        self.assertEqual(calls, [])  # rejected before dialing out
+
+    def test_import_inactive_falls_back_to_env_mapping(self):
+        captured = {}
+        def handler(request):
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(200, json={"id": "new", "active": False})
+        wf = workflow("x", "X", nodes=[self.node_with_credential("REPLACE_WITH_POSTGRES_CREDENTIAL_ID")])
+        env = {"N8N_CREDENTIAL_MAP": json.dumps({"REPLACE_WITH_POSTGRES_CREDENTIAL_ID": "cred-env"})}
+        with unittest.mock.patch.dict("os.environ", env, clear=False):
+            n8n.import_inactive(wf, BASE_URL, "secret", client=mock_client(handler))
+        self.assertEqual(captured["body"]["nodes"][0]["credentials"]["postgres"]["id"], "cred-env")
+
+    def test_rollback_from_backup_passes_credential_map_through(self):
+        captured = {}
+        def handler(request):
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(200, json={"id": "abc", "active": False})
+        with tempfile.TemporaryDirectory() as temp:
+            backup = Path(temp) / "wf_abc_backup.json"
+            backup.write_text(json.dumps(workflow("abc", "A", nodes=[self.node_with_credential("REPLACE_WITH_POSTGRES_CREDENTIAL_ID")])), encoding="utf-8")
+            n8n.rollback_from_backup(backup, BASE_URL, "secret", "abc", client=mock_client(handler),
+                                     credential_map={"REPLACE_WITH_POSTGRES_CREDENTIAL_ID": "cred-rb"})
+        self.assertEqual(captured["body"]["nodes"][0]["credentials"]["postgres"]["id"], "cred-rb")
+
+    def test_credential_map_from_env_parses_and_rejects(self):
+        self.assertEqual(n8n.credential_map_from_env({}), {})
+        env = {"N8N_CREDENTIAL_MAP": json.dumps({"REPLACE_WITH_POSTGRES_CREDENTIAL_ID": "cred-123"})}
+        self.assertEqual(n8n.credential_map_from_env(env), {"REPLACE_WITH_POSTGRES_CREDENTIAL_ID": "cred-123"})
+        for bad in ("not json", json.dumps(["x"]), json.dumps({"NOT_A_PLACEHOLDER": "id"}), json.dumps({"REPLACE_WITH_X": ""})):
+            with self.assertRaises(ValueError) as ctx:
+                n8n.credential_map_from_env({"N8N_CREDENTIAL_MAP": bad})
+            self.assertNotIn("cred-", str(ctx.exception))  # malformed input is never echoed
 
 
 class N8nApiTests(unittest.TestCase):
