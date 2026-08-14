@@ -265,7 +265,11 @@
                   {
                       "parameters":  {
                                          "source":  "database",
-                                         "workflowId":  "={{ $env.WF2_WORKFLOW_ID }}",
+                                         "workflowId":  {
+                                             "__rl":  true,
+                                             "value":  "={{ $env.WF2_WORKFLOW_ID }}",
+                                             "mode":  "id"
+                                         },
                                          "options":  {
 
                                                      }
@@ -282,7 +286,11 @@
                   {
                       "parameters":  {
                                          "source":  "database",
-                                         "workflowId":  "={{ $env.WF3B_WORKFLOW_ID }}",
+                                         "workflowId":  {
+                                             "__rl":  true,
+                                             "value":  "={{ $env.WF3B_WORKFLOW_ID }}",
+                                             "mode":  "id"
+                                         },
                                          "options":  {
 
                                                      }
@@ -299,7 +307,11 @@
                   {
                       "parameters":  {
                                          "source":  "database",
-                                         "workflowId":  "={{ $env.WF4_WORKFLOW_ID }}",
+                                         "workflowId":  {
+                                             "__rl":  true,
+                                             "value":  "={{ $env.WF4_WORKFLOW_ID }}",
+                                             "mode":  "id"
+                                         },
                                          "options":  {
 
                                                      }
@@ -402,7 +414,11 @@
                   {
                       "parameters":  {
                                          "source":  "database",
-                                         "workflowId":  "={{ $env.WF15_WORKFLOW_ID }}",
+                                         "workflowId":  {
+                                             "__rl":  true,
+                                             "value":  "={{ $env.WF15_WORKFLOW_ID }}",
+                                             "mode":  "id"
+                                         },
                                          "options":  {
 
                                                      }
@@ -867,7 +883,11 @@
                                         {
                                             "parameters":  {
                                                                "source":  "database",
-                                                               "workflowId":  "={{ $env.WF2_WORKFLOW_ID }}",
+                                                               "workflowId":  {
+                                                                   "__rl":  true,
+                                                                   "value":  "={{ $env.WF2_WORKFLOW_ID }}",
+                                                                   "mode":  "id"
+                                                               },
                                                                "options":  {
 
                                                                            }
@@ -884,7 +904,11 @@
                                         {
                                             "parameters":  {
                                                                "source":  "database",
-                                                               "workflowId":  "={{ $env.WF3B_WORKFLOW_ID }}",
+                                                               "workflowId":  {
+                                                                   "__rl":  true,
+                                                                   "value":  "={{ $env.WF3B_WORKFLOW_ID }}",
+                                                                   "mode":  "id"
+                                                               },
                                                                "options":  {
 
                                                                            }
@@ -901,7 +925,11 @@
                                         {
                                             "parameters":  {
                                                                "source":  "database",
-                                                               "workflowId":  "={{ $env.WF4_WORKFLOW_ID }}",
+                                                               "workflowId":  {
+                                                                   "__rl":  true,
+                                                                   "value":  "={{ $env.WF4_WORKFLOW_ID }}",
+                                                                   "mode":  "id"
+                                                               },
                                                                "options":  {
 
                                                                            }
@@ -1004,7 +1032,11 @@
                                         {
                                             "parameters":  {
                                                                "source":  "database",
-                                                               "workflowId":  "={{ $env.WF15_WORKFLOW_ID }}",
+                                                               "workflowId":  {
+                                                                   "__rl":  true,
+                                                                   "value":  "={{ $env.WF15_WORKFLOW_ID }}",
+                                                                   "mode":  "id"
+                                                               },
                                                                "options":  {
 
                                                                            }

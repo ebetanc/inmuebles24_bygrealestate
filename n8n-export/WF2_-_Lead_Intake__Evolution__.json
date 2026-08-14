@@ -322,7 +322,11 @@
     {
       "parameters": {
         "source": "database",
-        "workflowId": "={{ $env.WF4_WORKFLOW_ID }}",
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $env.WF4_WORKFLOW_ID }}",
+          "mode": "id"
+        },
         "options": {}
       },
       "id": "c1d2e3f4-0005-4000-8000-000000000005",
@@ -891,7 +895,11 @@
       {
         "parameters": {
           "source": "database",
-          "workflowId": "={{ $env.WF4_WORKFLOW_ID }}",
+          "workflowId": {
+            "__rl": true,
+            "value": "={{ $env.WF4_WORKFLOW_ID }}",
+            "mode": "id"
+          },
           "options": {}
         },
         "id": "c1d2e3f4-0005-4000-8000-000000000005",

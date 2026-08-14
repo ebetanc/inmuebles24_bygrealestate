@@ -47,7 +47,7 @@
       "position": [1120, 180]
     },
     {
-      "parameters": {"source": "database", "workflowId": "={{ $env.WF13_WORKFLOW_ID }}", "options": {}},
+      "parameters": {"source": "database", "workflowId": {"__rl": true, "value": "={{ $env.WF13_WORKFLOW_ID }}", "mode": "id"}, "options": {}},
       "id": "a1a2a3a4-0006-4000-8000-000000000006",
       "name": "Call Directed Guard Offer",
       "type": "n8n-nodes-base.executeWorkflow",

@@ -211,7 +211,11 @@
     {
       "parameters": {
         "source": "database",
-        "workflowId": "={{ $env.WF3A_WORKFLOW_ID }}",
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $env.WF3A_WORKFLOW_ID }}",
+          "mode": "id"
+        },
         "options": {}
       },
       "id": "wf7-0013-4000-8000-000000000013",
