@@ -18,6 +18,9 @@ class EBSettings:
     email: str
     password: str = field(repr=False)  # never printed in logs or tracebacks
 
+    # Read-only API key used to correlate I24 leads with exact Buzón requests.
+    api_key: str = field(default="", repr=False)
+
     # Supabase (poll for assigned EB leads needing the Atendida + note actions)
     supabase_url: str = ""
     supabase_service_key: str = field(default="", repr=False)
@@ -43,6 +46,7 @@ class EBSettings:
         return cls(
             email=email,
             password=password,
+            api_key=os.environ.get("EASYBROKER_API_KEY", "").strip(),
             supabase_url=os.environ.get("SUPABASE_URL", "").strip(),
             supabase_service_key=os.environ.get("SUPABASE_SERVICE_KEY", "").strip(),
         )

@@ -1,5 +1,5 @@
 [Unit]
-Description=EasyBroker Buzon attend bot (set Atendida + agent note)
+Description=EasyBroker Buzon finalizer (one responsible note + Atendida)
 After=network-online.target
 Wants=network-online.target
 

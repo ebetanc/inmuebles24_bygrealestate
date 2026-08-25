@@ -2,9 +2,9 @@
   "name": "WF3c - Tiered Escalation Sweeper (Evolution)",
   "nodes": [
     {
-      "parameters": {"rule": {"interval": [{"field": "minutes", "minutesInterval": 1}]}},
+      "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "15 * * * * *"}]}},
       "id": "38f75920-a753-410b-a9b3-c2f04daefb9a",
-      "name": "Every Minute",
+      "name": "Advance Schedule",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [240, 300]
@@ -19,10 +19,26 @@
       "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
     },
     {
+      "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "30 * * * * *"}]}},
+      "id": "a1a2a3a4-0012-4000-8000-000000000012",
+      "name": "Unassigned Alert Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 520]
+    },
+    {
+      "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "45 * * * * *"}]}},
+      "id": "a1a2a3a4-0013-4000-8000-000000000013",
+      "name": "Guard Delivery Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 180]
+    },
+    {
       "parameters": {"rules": {"values": [
         {"conditions": {"options": {"caseSensitive": true, "typeValidation": "strict", "version": 2}, "conditions": [{"id": "route-guard", "leftValue": "={{ $json.state }}", "rightValue": "guard_delivery_pending", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "guard_pending"},
         {"conditions": {"options": {"caseSensitive": true, "typeValidation": "strict", "version": 2}, "conditions": [{"id": "route-unassigned", "leftValue": "={{ $json.state }}", "rightValue": "unassigned_alerted", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "unassigned"}
-      ], "fallbackOutput": "none"}, "options": {}},
+      ]}, "options": {"fallbackOutput": "extra", "renameFallbackOutput": "unexpected_state"}},
       "id": "a1a2a3a4-0003-4000-8000-000000000003",
       "name": "Route Transition",
       "type": "n8n-nodes-base.switch",
@@ -30,7 +46,16 @@
       "position": [680, 300]
     },
     {
-      "parameters": {"operation": "executeQuery", "query": "SELECT * FROM public.claim_pending_guard_deliveries(100);", "options": {}},
+      "parameters": {"mode": "runOnceForEachItem", "jsCode": "const state = String($json.state || 'missing');\nconst opportunityId = $json.opportunity_id == null ? 'missing' : String($json.opportunity_id);\nif (!['guard_delivery_pending', 'unassigned_alerted'].includes(state)) {\n  throw new Error(`unexpected_routing_transition_state state=${state} opportunity_id=${opportunityId}`);\n}\nreturn [{ json: $json }];"},
+      "id": "a1a2a3a4-0014-4000-8000-000000000014",
+      "name": "Reject Unexpected Transition State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 520],
+      "notes": "Fails loudly on an unknown SQL transition state so WF21 records the workflow error instead of silently dropping it."
+    },
+    {
+      "parameters": {"operation": "executeQuery", "query": "SELECT * FROM public.claim_pending_guard_deliveries(1);", "options": {}},
       "id": "a1a2a3a4-0004-4000-8000-000000000004",
       "name": "Claim Pending Guard Deliveries",
       "type": "n8n-nodes-base.postgres",
@@ -47,7 +72,7 @@
       "position": [1120, 180]
     },
     {
-      "parameters": {"source": "database", "workflowId": {"__rl": true, "value": "={{ $env.WF13_WORKFLOW_ID }}", "mode": "id"}, "options": {}},
+      "parameters": {"source": "database", "workflowId": {"__rl": true, "value": "Bo2YbbUpmBzRbhDa", "mode": "id"}, "options": {}},
       "id": "a1a2a3a4-0006-4000-8000-000000000006",
       "name": "Call Directed Guard Offer",
       "type": "n8n-nodes-base.executeWorkflow",
@@ -55,21 +80,54 @@
       "position": [1340, 180]
     },
     {
-      "parameters": {"method": "POST", "url": "={{ $env.WA_CLOUD_API_BASE_URL + '/' + $env.WA_API_VERSION + '/' + $env.WA_PHONE_NUMBER_ID + '/messages' }}", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"}, {"name": "Content-Type", "value": "application/json"}]}, "sendBody": true, "specifyBody": "json", "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $env.MANAGER_PHONE }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify('Lead sin asignar. Oportunidad ' + $json.opportunity_id + ', propiedad ' + ($json.property_id || 'sin referencia') + '. Revision manual requerida.') }} }\n}", "options": {"timeout": 10000}},
+      "parameters": {"operation": "executeQuery", "query": "SELECT * FROM public.record_unassigned_alert($1::bigint, $2);", "options": {"queryReplacement": "={{ [$json.opportunity_id, 'wf3c:unassigned:' + $json.opportunity_id] }}"}},
+      "id": "a1a2a3a4-0009-4000-8000-000000000009",
+      "name": "Record Retryable Unassigned Alert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [900, 420],
+      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}},
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {"operation": "executeQuery", "query": "WITH claimed AS (\n  SELECT * FROM public.claim_unassigned_alerts(100, NOW(), INTERVAL '2 minutes')\n)\nSELECT claimed.*,\n       (SELECT a.whatsapp_number FROM public.agents a WHERE a.agent_id = 'agent_manager') AS manager_phone,\n       COALESCE(c.lead_name, 'Sin nombre') AS lead_name,\n       COALESCE(c.lead_phone, o.e164_phone, 'N/D') AS lead_phone\nFROM claimed\nJOIN public.lead_routing_opportunities o USING (opportunity_id)\nLEFT JOIN public.conversations c ON c.conversation_id = o.conversation_id;", "options": {}},
+      "id": "a1a2a3a4-0008-4000-8000-000000000008",
+      "name": "Claim Unassigned Alert Lease",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [900, 520],
+      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
+    },
+    {
+      "parameters": {"method": "POST", "url": "={{ $env.WA_CLOUD_API_BASE_URL + '/' + $env.WA_API_VERSION + '/' + $env.WA_PHONE_NUMBER_ID + '/messages' }}", "sendHeaders": true, "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"}, {"name": "Content-Type", "value": "application/json"}]}, "sendBody": true, "specifyBody": "json", "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.manager_phone }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"nuevo_lead_i24\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [{\n      \"type\": \"body\",\n      \"parameters\": [\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_name || 'Sin nombre')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_phone || 'N/D')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.property_id || 'Sin referencia')) }} }\n      ]\n    }]\n  }\n}", "options": {"timeout": 10000}},
       "id": "a1a2a3a4-0007-4000-8000-000000000007",
-      "name": "Alert Unassigned (No Assignment)",
+      "name": "WhatsApp Sandy Unassigned Alert",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 420],
-      "continueOnFail": true
+      "position": [1120, 420]
+    },
+    {
+      "parameters": {"operation": "executeQuery", "query": "SELECT * FROM public.complete_unassigned_alert_notification($1::bigint, $2::uuid, $3, $4);", "options": {"queryReplacement": "={{ [$('Claim Unassigned Alert Lease').item.json.opportunity_id, $('Claim Unassigned Alert Lease').item.json.lease_token, 'whatsapp', $json.messages?.[0]?.id || ''] }}"}},
+      "id": "a1a2a3a4-0011-4000-8000-000000000011",
+      "name": "Acknowledge Unassigned Alert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1560, 380],
+      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
     }
   ],
   "connections": {
-    "Every Minute": {"main": [[{"node": "Advance Expired Tiers", "type": "main", "index": 0}]]},
+    "Advance Schedule": {"main": [[{"node": "Advance Expired Tiers", "type": "main", "index": 0}]]},
+    "Unassigned Alert Schedule": {"main": [[{"node": "Claim Unassigned Alert Lease", "type": "main", "index": 0}]]},
+    "Guard Delivery Schedule": {"main": [[{"node": "Claim Pending Guard Deliveries", "type": "main", "index": 0}]]},
     "Advance Expired Tiers": {"main": [[{"node": "Route Transition", "type": "main", "index": 0}]]},
-    "Route Transition": {"main": [[{"node": "Claim Pending Guard Deliveries", "type": "main", "index": 0}], [{"node": "Alert Unassigned (No Assignment)", "type": "main", "index": 0}]]},
+    "Route Transition": {"main": [[], [{"node": "Record Retryable Unassigned Alert", "type": "main", "index": 0}], [{"node": "Reject Unexpected Transition State", "type": "main", "index": 0}]]},
     "Claim Pending Guard Deliveries": {"main": [[{"node": "Shape Guard Delivery", "type": "main", "index": 0}]]},
-    "Shape Guard Delivery": {"main": [[{"node": "Call Directed Guard Offer", "type": "main", "index": 0}]]}
+    "Shape Guard Delivery": {"main": [[{"node": "Call Directed Guard Offer", "type": "main", "index": 0}]]},
+    "Claim Unassigned Alert Lease": {"main": [[{"node": "WhatsApp Sandy Unassigned Alert", "type": "main", "index": 0}]]},
+    "WhatsApp Sandy Unassigned Alert": {"main": [[{"node": "Acknowledge Unassigned Alert", "type": "main", "index": 0}]]}
   },
-  "settings": {"executionOrder": "v1", "saveExecutionProgress": false, "saveManualExecutions": false, "saveDataErrorExecution": "none", "saveDataSuccessExecution": "none"}
+  "settings": {"executionOrder": "v1", "saveExecutionProgress": false, "saveManualExecutions": false, "timezone": "America/Mexico_City", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "none", "errorWorkflow": "He95yJflKVspGFyb"}
 }

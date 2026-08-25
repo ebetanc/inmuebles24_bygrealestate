@@ -4,7 +4,8 @@ Usage:
     python -m easybroker [options]   # headful by default (EB blocks headless)
 
 Modes:
-    (default)            Poll Supabase for assigned EB leads and, for each,
+    (default)            Correlate assigned I24 leads, then poll Supabase and
+                         for each exact EasyBroker request,
                          set the Buzón request to Atendida + add the agent note,
                          then flip eb_marked_attended. No-op until EB_MARK_ATTENDED=1.
     --inspect-login      Dump the EB login form controls (read-only). Then exit.
@@ -30,7 +31,12 @@ from easybroker.auth import AuthenticationError, dump_login_form, load_or_login
 from easybroker.browser import launch_chrome
 from easybroker.config import EBSettings
 from easybroker.inbox import attend_lead, dump_buzon
-from easybroker.supa import fetch_pending_attend, finish_attend_attempt, list_pending_attend
+from easybroker.supa import (
+    fetch_pending_attend,
+    finish_attend_attempt,
+    list_pending_attend,
+    reconcile_i24_easybroker_requests,
+)
 
 logger.remove()
 logger.add(sys.stderr, level="INFO", format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
@@ -98,15 +104,21 @@ async def async_main(args: argparse.Namespace) -> int:
 
             # Default: poll + attend each pending EB lead.
             gate = os.environ.get("EB_MARK_ATTENDED", "").strip() == "1"
+            reconcile_failed = False
+            if gate:
+                reconcile_failed = await reconcile_i24_easybroker_requests(settings) is None
             leads = (await fetch_pending_attend(settings) if gate
                      else await list_pending_attend(settings))
             if not leads:
                 print("No EB leads pending Atendida + note.")
-                return 0
+                return 1 if reconcile_failed else 0
             if not gate:
                 print(f"{len(leads)} EB lead(s) pending, but EB_MARK_ATTENDED!=1 — dry listing only:")
                 for l in leads:
-                    print(f"  {l.get('lead_name','?')} {l.get('lead_phone')} -> {l.get('agent_name')}")
+                    print(
+                        f"  conversation={l.get('conversation_id')} "
+                        f"request={l.get('eb_contact_id')} -> {l.get('agent_name')}"
+                    )
                 return 0
 
             attended = 0
@@ -115,7 +127,7 @@ async def async_main(args: argparse.Namespace) -> int:
                     page, request_id=l["eb_contact_id"], phone=l["lead_phone"],
                     agent_name=l["agent_name"], note_done=l["eb_note_added"],
                     status_done=l["eb_marked_attended"],
-                    note_text=f"Atendido por {l['agent_name']}",
+                    note_text=f"RESPONSABLE: {l['agent_name']}",
                 )
                 error_code = None
                 if not res["found"]:
@@ -142,9 +154,12 @@ async def async_main(args: argparse.Namespace) -> int:
                         l.get("eb_contact_id"),
                     )
                 else:
-                    logger.warning("Lead {} not fully attended: {}", l.get("lead_phone"), res)
+                    logger.warning(
+                        "Conversation {} not fully attended: found={} note_ok={} status_ok={}",
+                        l.get("conversation_id"), res["found"], res["note_ok"], res["status_ok"],
+                    )
             print(f"Attended {attended}/{len(leads)} EB lead(s)")
-            return 0
+            return 1 if reconcile_failed else 0
 
         except AuthenticationError as e:
             print(f"AUTH FAILED: {e}", file=sys.stderr)

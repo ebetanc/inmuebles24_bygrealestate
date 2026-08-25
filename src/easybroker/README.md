@@ -7,18 +7,23 @@ is GET/POST only, no status mutation, no notes endpoint):
 1. Set a contact_request status to **Atendida** (`Cambiar estatus`).
 2. Add a **timeline note** naming the assigned agent (`Agregar nota`).
 
-For each EB-sourced lead that has been assigned to an agent, the bot opens the
-conversation in the Buzón, sets it to Atendida, and writes `Atendido por <agente>`.
+For each lead with a final responsible agent, the bot opens the exact Buzón
+request, writes one `RESPONSABLE: <agente>` note, and sets it to Atendida.
 
 ## How it picks work
 
 Polls Supabase `conversations` for rows where:
 
 ```
-eb_contact_id IS NOT NULL          -- came from EasyBroker (WF8b)
-AND assigned_agent_id IS NOT NULL  -- an agent claimed it
+eb_contact_id IS NOT NULL          -- exact EasyBroker request is known
+AND assigned_agent_id IS NOT NULL  -- final responsible agent is known
 AND (eb_note_added = false OR eb_marked_attended = false)
 ```
+
+Before polling, assigned Inmuebles24 leads are correlated with the read-only
+EasyBroker `contact_requests` API. A link is written only when property ID,
+email or normalized phone, and event time produce exactly one request. Zero or
+multiple matches are left untouched for Sandy to review; the bot never guesses.
 
 `attend_lead` navigates by exact `eb_contact_id` (URL `/agent/conversations/{id}`);
 phone lookup only runs when `allow_phone_fallback=True` is passed explicitly (never
@@ -63,6 +68,7 @@ port `9222`). The persistent profile keeps the EB session logged in between runs
 
 ## Env
 
-`EASYBROKER_EMAIL`, `EASYBROKER_PASSWORD` (UI login, NOT the API key),
+`EASYBROKER_EMAIL`, `EASYBROKER_PASSWORD` (UI login), `EASYBROKER_API_KEY`
+(read-only request correlation),
 `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `EB_MARK_ATTENDED=1`,
 optional `CHROME_PATH` (e.g. Edge on Windows), `CHROME_PROXY`.

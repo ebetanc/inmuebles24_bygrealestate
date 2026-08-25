@@ -2,6 +2,17 @@
 
 24/7 lead management system for BYG Real Estate. Captures leads from 3 sources, runs daytime TOMO auctions to assign agents, and handles after-hours leads with an AI bot + morning queue.
 
+## Estado operativo actual (2026-08-25)
+
+Esta sección reemplaza la descripción histórica v5 para el flujo de leads de propiedades:
+
+- **Captura activa:** Inmuebles24 consulta pendientes cada 15 minutos y envía los leads a WF10.
+- **Consulta EasyBroker activa:** el scraper relaciona el ID numérico de Inmuebles24 con el código público `EB-...`; WF12 consulta la propiedad y usa literalmente `tags[0]` para identificar al responsable.
+- **Entrega dirigida:** WF10 llama WF12 y, si `tags[0]` coincide con un alias exacto, WF13 notifica únicamente a esa persona. El cargo no veta la propiedad: Sandy recibe directamente cuando su alias coincide aunque tenga rol `manager`. Disponibilidad y WhatsApp válido siguen siendo obligatorios; si faltan datos, aplica guardia primaria, respaldo y alerta.
+- **Captación directa EasyBroker pausada:** WF8/WF8b siguen inactivos. No deben activarse para resolver al propietario de un lead de Inmuebles24; son una fuente distinta y conservan lógica heredada.
+
+Flujo vigente: `Inmuebles24 → ID del anuncio → código EB → EasyBroker → tags[0] → responsable → WhatsApp dirigido`.
+
 ## Architecture (v5)
 
 ```

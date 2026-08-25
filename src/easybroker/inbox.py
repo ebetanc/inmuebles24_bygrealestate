@@ -302,9 +302,10 @@ async def attend_lead(
     Exact request ID is primary. Phone fallback must be explicitly enabled.
     Completed steps are skipped so retries only repeat missing side effects.
     """
-    note = note_text or f"Atendido por {agent_name}"
+    note = note_text or f"RESPONSABLE: {agent_name}"
+    legacy_note = f"Atendido por {agent_name}"
     if request_id is not None:
-        note = f"{note} [BYG-EB:{str(request_id).strip()}]"
+        legacy_note = f"{legacy_note} [BYG-EB:{str(request_id).strip()}]"
     result = {
         "found": False,
         "match_method": None,
@@ -334,10 +335,13 @@ async def attend_lead(
         return result
 
     if not note_done:
-        # The deterministic request marker is the external idempotency key.  If
-        # the process died after Guardar but before Supabase evidence, reconcile
-        # that evidence without writing a duplicate note.
+        # The exact request page scopes idempotency. If the process died after
+        # Guardar but before Supabase evidence, reconcile the visible note
+        # without writing a duplicate.
         result["note_ok"] = await note_exists(page, note)
+        if not result["note_ok"]:
+            # Reconcile any pre-migration note without adding a second one.
+            result["note_ok"] = await note_exists(page, legacy_note)
         if not result["note_ok"]:
             result["note_ok"] = await add_note(page, note)
         result["note_changed"] = result["note_ok"]

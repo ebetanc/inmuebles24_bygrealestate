@@ -7,7 +7,12 @@ from pathlib import Path
 from easybroker import inbox
 from easybroker import main as eb_main
 from easybroker.main import async_main as easybroker_main
-from easybroker.supa import fetch_pending_attend, finish_attend_attempt
+from easybroker.supa import (
+    _normalize_contact_request,
+    fetch_pending_attend,
+    finish_attend_attempt,
+    reconcile_i24_easybroker_requests,
+)
 from inmobiliaria24.main import async_main
 from inmobiliaria24.scraper import _capture_i24_status_evidence, mark_lead_contacted
 from inmobiliaria24.supa import (
@@ -23,6 +28,8 @@ def test_portal_side_effect_queries_require_a_genuine_claim():
     assert gate in inspect.getsource(fetch_pending_i24_notes)
     sql = (Path(__file__).parents[1] / "whatsapp-agent/migrations/0033_easybroker_attend_effect_lease.sql").read_text()
     assert "c.claimed_via IS NULL OR c.claimed_via <> 'escalation' OR c.first_response_at IS NOT NULL" in sql
+    final_sql = (Path(__file__).parents[1] / "whatsapp-agent/migrations/0045_finalize_easybroker_manager_assignment.sql").read_text()
+    assert "OR c.assignment_method = 'manager_escalation'" in final_sql
 
 
 def test_i24_contact_queue_uses_atomic_durable_lease():
@@ -99,6 +106,70 @@ def test_easybroker_pending_rows_include_exact_request_and_step_flags():
     source = inspect.getsource(fetch_pending_attend)
     assert "rpc/claim_easybroker_attend_effects" in source
     assert 'json={"p_limit": 20}' in source
+
+
+def test_final_sandy_alert_assigns_only_still_unassigned_conversation():
+    sql = (Path(__file__).parents[1] / "whatsapp-agent/migrations/0045_finalize_easybroker_manager_assignment.sql").read_text()
+    compact = " ".join(sql.lower().split())
+    workflow = (Path(__file__).parents[1] / "whatsapp-agent/workflows/WF3c_expiry_sweeper.json").read_text()
+    assert "complete_unassigned_alert_notification" in compact
+    assert "complete_unassigned_alert_notification" in workflow
+    assert "acknowledged_by = 'wf3c:' || v_channel || ':' || v_external_id" in compact
+    assert "assigned_agent_id = 'agent_manager'" in compact
+    assert "assignment_method = 'manager_escalation'" in compact
+    assert "claimed_via = 'escalation'" in compact
+    assert "event_type, actor_id, idempotency_key" in compact
+    assert "'manager_assigned'" in compact
+    assert "o.state = 'unassigned_alerted'" in compact
+    assert "c.assigned_agent_id is null" in compact
+    assert "c.conversation_id = v_conversation_id" in compact
+
+
+def test_i24_easybroker_link_requires_one_property_identity_time_match():
+    source = inspect.getsource(reconcile_i24_easybroker_requests)
+    main_source = inspect.getsource(easybroker_main)
+    sql = (Path(__file__).parents[1] / "whatsapp-agent/migrations/0045_finalize_easybroker_manager_assignment.sql").read_text()
+    compact = " ".join(sql.lower().split())
+
+    assert "https://api.easybroker.com/v1/contact_requests" in inspect.getsource(
+        sys.modules[reconcile_i24_easybroker_requests.__module__]
+    )
+    assert "reconcile_easybroker_contact_requests" in source
+    assert main_source.index("reconcile_i24_easybroker_requests(settings)") < main_source.index(
+        "fetch_pending_attend(settings)"
+    )
+    assert "upper(nullif(btrim(c.property_public_id), '')) = r.property_id" in compact
+    assert "where possible_matches.email_matches or possible_matches.phone_matches" in compact
+    assert "r.happened_at between o.detected_at - interval '24 hours'" in compact
+    assert "m.conversation_matches = 1" in compact
+    assert "m.request_matches = 1" in compact
+    assert "create unique index if not exists conversations_eb_contact_id_uniq" in compact
+    assert "pg_advisory_xact_lock(v_request_id)" in compact
+
+
+def test_easybroker_contact_request_normalization_rejects_bad_time_and_keeps_no_pii_extras():
+    valid = _normalize_contact_request({
+        "id": 123,
+        "property_id": " eb-wr4713 ",
+        "email": " Lead@Example.com ",
+        "phone": "+52 55 1111 2222",
+        "happened_at": "2026-08-25T12:34:56Z",
+        "message": "must not be forwarded",
+        "name": "must not be forwarded",
+    })
+    assert valid == {
+        "id": 123,
+        "property_id": "EB-WR4713",
+        "email": "lead@example.com",
+        "phone": "525511112222",
+        "happened_at": "2026-08-25T12:34:56+00:00",
+    }
+    assert _normalize_contact_request({
+        "id": 124,
+        "property_id": "EB-WR4713",
+        "email": "lead@example.com",
+        "happened_at": "2026-02-31T12:34:56Z",
+    }) is None
 
 
 def test_easybroker_effect_uses_atomic_lease_before_ui_and_token_bound_finish():
@@ -244,11 +315,39 @@ def test_easybroker_note_retry_reconciles_after_crash_without_duplicate(monkeypa
         object(), request_id=222, agent_name="Ana", note_done=False, status_done=True,
     ))
 
-    marker = "Atendido por Ana [BYG-EB:222]"
+    marker = "RESPONSABLE: Ana"
     assert calls.count(("add", marker)) == 1
     assert first["note_ok"] is True
     assert second["note_ok"] is True
     assert second["note_changed"] is True  # asks main to reconcile durable evidence
+
+
+def test_easybroker_legacy_responsible_note_is_not_duplicated(monkeypatch):
+    calls = []
+
+    async def yes(*args, **kwargs):
+        return True
+
+    async def existing(page, text):
+        calls.append(("check", text))
+        return text == "Atendido por Ana [BYG-EB:222]"
+
+    async def add(page, text):
+        calls.append(("add", text))
+        return True
+
+    monkeypatch.setattr(inbox, "goto_buzon", yes)
+    monkeypatch.setattr(inbox, "find_request_by_id", yes)
+    monkeypatch.setattr(inbox, "note_exists", existing)
+    monkeypatch.setattr(inbox, "add_note", add)
+    monkeypatch.setattr(inbox, "set_status_atendida", yes)
+
+    result = asyncio.run(inbox.attend_lead(
+        object(), request_id=222, agent_name="Ana", note_done=False, status_done=False,
+    ))
+
+    assert result["note_ok"] is True
+    assert not any(call[0] == "add" for call in calls)
 
 
 class _FakeChromeContext:
@@ -351,8 +450,12 @@ def test_default_poll_and_once_paths_never_enable_phone_fallback(monkeypatch):
     async def fake_finish_attend_attempt(settings, conversation_id, lease_token, **kwargs):
         return True
 
+    async def fake_reconcile(settings):
+        return 0
+
     monkeypatch.setattr(eb_main, "fetch_pending_attend", fake_fetch_pending_attend)
     monkeypatch.setattr(eb_main, "finish_attend_attempt", fake_finish_attend_attempt)
+    monkeypatch.setattr(eb_main, "reconcile_i24_easybroker_requests", fake_reconcile)
     monkeypatch.setattr(sys, "argv", ["easybroker"])
     default_args = eb_main._parse_args()
     assert asyncio.run(eb_main.async_main(default_args)) == 0
