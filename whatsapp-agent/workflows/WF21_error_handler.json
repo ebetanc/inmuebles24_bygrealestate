@@ -7,17 +7,23 @@
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const e = $input.first().json;\nconst wf = e.workflow || {};\nconst exec = e.execution || {};\nconst nodeErr = e.trigger && e.trigger.error ? e.trigger.error : (exec.error || {});\nconst message = (nodeErr && nodeErr.message) || e.message || 'Sin mensaje de error';\nconst nodeName = (nodeErr && nodeErr.node && nodeErr.node.name) || 'desconocido';\nconst subject = `\\uD83D\\uDD34 BYG: fall\\u00f3 el workflow \"${wf.name || 'desconocido'}\"`;\nconst body = `<b>Workflow:</b> ${wf.name || 'desconocido'} (${wf.id || '?'})<br>` +\n  `<b>Nodo:</b> ${nodeName}<br>` +\n  `<b>Execution ID:</b> ${exec.id || '?'}<br>` +\n  `<b>Mensaje:</b> ${message}<br>` +\n  `<b>URL:</b> ${exec.url || ''}`;\nreturn [{ json: { subject, body } }];"
+        "jsCode": "const crypto=require('crypto');\nconst e=$input.first()?.json||{};\nconst wf=e.workflow||e.data?.workflow||{};\nconst exec=e.execution||e.data?.execution||{};\nconst nodeErr=e.trigger?.error||e.error||exec.error||{};\nconst message=nodeErr.message||e.message||'Sin mensaje de error';\nconst nodeName=nodeErr.node?.name||e.node?.name||exec.lastNodeExecuted||'desconocido';\nconst workflowName=wf.name||e.workflowName||'desconocido';\nconst workflowId=wf.id||e.workflowId||'?';\nconst executionId=exec.id||e.executionId||'?';\nconst executionUrl=exec.url||e.executionUrl||'';\nconst now=Date.now();\nconst throttleMs=15*60*1000;\nconst globalLimit=3;\nconst signature=crypto.createHash('sha256').update(`${workflowId}|${nodeName}|${message}`).digest('hex');\nconst state=$getWorkflowStaticData('global');\nstate.errorThrottle=state.errorThrottle||{};\nstate.errorGlobalWindow=Array.isArray(state.errorGlobalWindow)?state.errorGlobalWindow.filter(timestamp=>now-Number(timestamp)<throttleMs):[];\nfor(const [key,timestamp] of Object.entries(state.errorThrottle)){if(now-Number(timestamp)>24*60*60*1000)delete state.errorThrottle[key];}\nif(state.errorThrottle[signature]&&now-Number(state.errorThrottle[signature])<throttleMs)return [];\nif(state.errorGlobalWindow.length>=globalLimit)return [];\nstate.errorThrottle[signature]=now;\nstate.errorGlobalWindow.push(now);\nconst subject=`🔴 BYG: falló el workflow \"${workflowName}\"`;\nconst body=`<b>Workflow:</b> ${workflowName} (${workflowId})<br>`+`<b>Nodo:</b> ${nodeName}<br>`+`<b>Execution ID:</b> ${executionId}<br>`+`<b>Mensaje:</b> ${message}<br>`+`<b>URL:</b> ${executionUrl}`;\nreturn [{json:{subject,body,throttle_signature:signature}}];"
       },
       "id": "9b2c1d2f-2222-4b2b-8000-000000000002",
       "name": "Armar mensaje",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [224, 0]
+      "position": [
+        224,
+        0
+      ]
     },
     {
       "parameters": {
@@ -30,7 +36,10 @@
       "name": "Enviar alerta (Gmail)",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [448, 0],
+      "position": [
+        448,
+        0
+      ],
       "credentials": {
         "gmailOAuth2": {
           "id": "Hx7tXWjVzyLEwMnJ",
@@ -41,10 +50,26 @@
   ],
   "connections": {
     "Error Trigger": {
-      "main": [[{ "node": "Armar mensaje", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Armar mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Armar mensaje": {
-      "main": [[{ "node": "Enviar alerta (Gmail)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Enviar alerta (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {

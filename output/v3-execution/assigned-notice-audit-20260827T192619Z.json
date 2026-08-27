@@ -1,0 +1,29 @@
+{
+  "checked_at_utc": "2026-08-27T19:26:19.655257+00:00",
+  "attempts": [
+    {
+      "attempt_id": 179,
+      "capture_event_id": 6,
+      "opportunity_id": 489,
+      "delivery_kind": "assigned_notice",
+      "status": "sent",
+      "provider_accepted_at": "2026-08-27T18:06:01.916893+00:00",
+      "delivered_at": null,
+      "callback_statuses": []
+    },
+    {
+      "attempt_id": 180,
+      "capture_event_id": 7,
+      "opportunity_id": 490,
+      "delivery_kind": "assigned_notice",
+      "status": "sent",
+      "provider_accepted_at": "2026-08-27T18:06:01.916893+00:00",
+      "delivered_at": null,
+      "callback_statuses": []
+    }
+  ],
+  "assigned_notice_delivery_events": [],
+  "provider_message_ids_printed": false,
+  "read_only": true,
+  "secrets_printed": false
+}

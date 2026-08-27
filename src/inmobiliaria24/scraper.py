@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import re
 
 import httpx
 from loguru import logger
@@ -27,6 +28,7 @@ class SessionStaleError(Exception):
 # Must be set via WEBHOOK_URL env var in config.
 _DEFAULT_WEBHOOK_URL = ""
 INTERESADOS_URL = "https://www.inmuebles24.com/panel/interesados"
+AVISOS_URL = "https://www.inmuebles24.com/panel/avisos"
 
 # Retry settings
 MAX_RETRIES = 3
@@ -130,6 +132,78 @@ async def _navigate_spa(
                     retries, url, e,
                 )
     raise last_err  # type: ignore[misc]
+
+
+_EXTRACT_PROPERTY_PUBLIC_ID_MAP_JS = r"""
+() => {
+    const root = document.getElementById('root');
+    if (!root) return [];
+    const pairs = [];
+    for (const el of root.querySelectorAll('div')) {
+        const text = el.innerText || '';
+        if (text.length < 10 || text.length > 2500) continue;
+        const ids = [...new Set(text.match(/\b\d{8,10}\b/g) || [])];
+        const codes = [...new Set(
+            (text.match(/EB-[A-Z0-9]{4,}/gi) || []).map(value => value.toUpperCase())
+        )];
+        if (ids.length === 1 && codes.length === 1) {
+            pairs.push({listing_id: ids[0], property_public_id: codes[0]});
+        }
+    }
+    return pairs;
+}
+"""
+
+
+async def extract_property_public_id_map(
+    page: Page, *, conflicts_out: set[str] | None = None
+) -> dict[str, str]:
+    """Read the live Mis avisos listing-id -> EasyBroker-code mapping."""
+    await _navigate_spa(page, AVISOS_URL)
+    try:
+        await page.wait_for_function(
+            """() => /EB-[A-Z0-9]{4,}/i.test(
+                document.getElementById('root')?.innerText || ''
+            )""",
+            timeout=20_000,
+        )
+    except Exception:
+        logger.warning("Mis avisos rendered without any EB property codes")
+
+    rows: list[dict] = await page.evaluate(_EXTRACT_PROPERTY_PUBLIC_ID_MAP_JS)
+    mapping: dict[str, str] = {}
+    conflicts: set[str] = set()
+    for row in rows:
+        listing_id = str(row.get("listing_id") or "").strip()
+        public_id = str(row.get("property_public_id") or "").strip().upper()
+        if not listing_id.isdigit() or not re.fullmatch(r"EB-[A-Z0-9]{4,}", public_id):
+            continue
+        if listing_id in mapping and mapping[listing_id] != public_id:
+            conflicts.add(listing_id)
+            continue
+        mapping[listing_id] = public_id
+    for listing_id in conflicts:
+        mapping.pop(listing_id, None)
+    if conflicts_out is not None:
+        conflicts_out.update(conflicts)
+    if conflicts:
+        logger.warning("Discarded {} conflicting property mappings", len(conflicts))
+    logger.info("Loaded {} Inmuebles24 -> EasyBroker property mappings", len(mapping))
+    return mapping
+
+
+def enrich_property_public_ids(
+    leads: list[dict], property_map: dict[str, str]
+) -> list[dict]:
+    """Fill missing EB codes without overriding a code extracted from the lead."""
+    for lead in leads:
+        if str(lead.get("property_public_id") or "").strip():
+            continue
+        listing_id = str(lead.get("listing_id") or "").strip()
+        public_id = str(property_map.get(listing_id) or "").strip().upper()
+        if re.fullmatch(r"EB-[A-Z0-9]{4,}", public_id):
+            lead["property_public_id"] = public_id
+    return leads
 
 
 # ---------------------------------------------------------------------------
@@ -1066,17 +1140,32 @@ async def _extract_lead_by_click(
 # ---------------------------------------------------------------------------
 
 
-async def send_to_webhook(leads: list[dict], webhook_url: str = "") -> None:
+async def send_to_webhook(
+    leads: list[dict], webhook_url: str = "", webhook_token: str = "",
+    *, idempotency_key: str = "",
+) -> None:
     """POST lead data to webhook with exponential backoff retry."""
     url = webhook_url or _DEFAULT_WEBHOOK_URL
     if not url:
         raise ValueError("WEBHOOK_URL not configured — set it in .env")
+    if not url.startswith("https://"):
+        raise ValueError("WEBHOOK_URL must use HTTPS")
+    if not webhook_token:
+        raise ValueError("I24_WEBHOOK_TOKEN not configured")
     last_err: Exception | None = None
+    headers = {"X-I24-Webhook-Token": webhook_token}
+    if idempotency_key:
+        headers["X-I24-Idempotency-Key"] = idempotency_key
+    payload = []
+    for lead in leads:
+        raw_phone = str(lead.get("phone") or "").strip()
+        phone = f"+{raw_phone}" if raw_phone.isdigit() and 8 <= len(raw_phone) <= 15 and raw_phone[0] != "0" else raw_phone
+        payload.append({**lead, "phone": phone})
 
     async with httpx.AsyncClient(timeout=30) as client:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                resp = await client.post(url, json=leads)
+                resp = await client.post(url, json=payload, headers=headers)
                 resp.raise_for_status()
                 logger.info(
                     "Webhook response: {} {} (attempt {})",
@@ -1100,6 +1189,14 @@ async def send_to_webhook(leads: list[dict], webhook_url: str = "") -> None:
 # ---------------------------------------------------------------------------
 # 5. Orchestrator
 # ---------------------------------------------------------------------------
+
+
+def _merge_lead_detail(lead: dict, detail: dict) -> dict:
+    """Merge detail data without erasing the listing ID found in the inbox row."""
+    merged = {**lead, **detail}
+    if not str(detail.get("listing_id") or "").strip() and lead.get("listing_id"):
+        merged["listing_id"] = lead["listing_id"]
+    return merged
 
 
 async def scrape_pendiente_leads(page: Page, *, limit: int = 0) -> list[dict]:
@@ -1171,7 +1268,7 @@ async def scrape_pendiente_leads(page: Page, *, limit: int = 0) -> list[dict]:
             try:
                 detail = await extract_lead_detail(page, lead_id)
                 if detail:
-                    merged = {**lead, **detail}
+                    merged = _merge_lead_detail(lead, detail)
                     results.append(merged)
             except Exception as e:
                 await _screenshot_on_error(page, f"lead_{lead_id}")
@@ -1191,7 +1288,7 @@ async def scrape_pendiente_leads(page: Page, *, limit: int = 0) -> list[dict]:
             try:
                 detail = await _extract_lead_by_click(page, click_idx)
                 if detail:
-                    merged = {**lead, **detail}
+                    merged = _merge_lead_detail(lead, detail)
                     merged.pop("_click_index", None)
                     results.append(merged)
             except Exception as e:

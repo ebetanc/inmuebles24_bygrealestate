@@ -12,6 +12,8 @@ def clear_env_vars(monkeypatch):
     """Ensure credentials are cleared before each test to prevent .env file bleed-through."""
     monkeypatch.delenv("INMUEBLES24_EMAIL", raising=False)
     monkeypatch.delenv("INMUEBLES24_PASSWORD", raising=False)
+    monkeypatch.delenv("WEBHOOK_URL", raising=False)
+    monkeypatch.delenv("I24_WEBHOOK_TOKEN", raising=False)
 
 
 def test_load_with_both_vars_set(monkeypatch):
@@ -66,3 +68,24 @@ def test_password_not_in_repr(monkeypatch):
 
     assert "s3cr3tpass" not in repr_output
     assert "s3cr3tpass" not in str_output
+
+
+def test_webhook_requires_https_and_token_is_secret(monkeypatch):
+    monkeypatch.setenv("INMUEBLES24_EMAIL", "agent@example.com")
+    monkeypatch.setenv("INMUEBLES24_PASSWORD", "password")
+    monkeypatch.setenv("WEBHOOK_URL", "https://n8n.example/webhook/scraper-leads")
+    monkeypatch.setenv("I24_WEBHOOK_TOKEN", "shared-secret")
+
+    settings = Settings.load(env_file="/dev/null")
+
+    assert settings.webhook_token == "shared-secret"
+    assert "shared-secret" not in repr(settings)
+
+
+def test_webhook_url_fails_closed_without_token(monkeypatch):
+    monkeypatch.setenv("INMUEBLES24_EMAIL", "agent@example.com")
+    monkeypatch.setenv("INMUEBLES24_PASSWORD", "password")
+    monkeypatch.setenv("WEBHOOK_URL", "https://n8n.example/webhook/scraper-leads")
+
+    with pytest.raises(ValueError, match="I24_WEBHOOK_TOKEN"):
+        Settings.load(env_file="/dev/null")

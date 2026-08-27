@@ -1,37 +1,13 @@
 {
-  "updatedAt": "2026-07-07T11:06:14.014Z",
-  "createdAt": "2026-05-08T10:26:56.908Z",
-  "id": "UNIKqyAvIUAZkNIs",
   "name": "WF3c - Tiered Escalation Sweeper (Evolution)",
-  "description": null,
-  "active": false,
-  "isArchived": false,
   "nodes": [
     {
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 1
-            }
-          ]
-        }
-      },
-      "id": "38f75920-a753-410b-a9b3-c2f04daefb9a",
-      "name": "Every Minute",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        240,
-        300
-      ]
-    },
-    {
-      "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM public.sweep_expired_routing_tiers(100);",
-        "options": {}
+        "query": "SELECT r.result, (r.result->>'state') AS state, (r.result->>'opportunity_id')::bigint AS opportunity_id FROM (SELECT public.v3_advance_routing_tier($1::bigint,$2,NOW()) AS result) r;",
+        "options": {
+          "queryReplacement": "={{ [$json.opportunity_id, $json.expected_tier || $json.routing_tier] }}"
+        }
       },
       "id": "4907bdf7-6514-4c5e-b147-3cecbfee7398",
       "name": "Advance Expired Tiers",
@@ -63,7 +39,7 @@
                   {
                     "id": "route-guard",
                     "leftValue": "={{ $json.state }}",
-                    "rightValue": "guard_delivery_pending",
+                    "rightValue": "guard_delivery_requested",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -86,7 +62,7 @@
                   {
                     "id": "route-unassigned",
                     "leftValue": "={{ $json.state }}",
-                    "rightValue": "unassigned_alerted",
+                    "rightValue": "assigned",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -98,10 +74,12 @@
               "renameOutput": true,
               "outputKey": "unassigned"
             }
-          ],
-          "fallbackOutput": "none"
+          ]
         },
-        "options": {}
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unexpected_state"
+        }
       },
       "id": "a1a2a3a4-0003-4000-8000-000000000003",
       "name": "Route Transition",
@@ -114,8 +92,23 @@
     },
     {
       "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const state = String($json.state || 'missing');\nconst opportunityId = $json.opportunity_id == null ? 'missing' : String($json.opportunity_id);\nif (!['guard_delivery_pending', 'unassigned_alerted'].includes(state)) {\n  throw new Error(`unexpected_routing_transition_state state=${state} opportunity_id=${opportunityId}`);\n}\nreturn [{ json: $json }];"
+      },
+      "id": "a1a2a3a4-0014-4000-8000-000000000014",
+      "name": "Reject Unexpected Transition State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        520
+      ],
+      "notes": "Fails loudly on an unknown SQL transition state so WF21 records the workflow error instead of silently dropping it."
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM public.claim_pending_guard_deliveries(100);",
+        "query": "SELECT * FROM public.claim_pending_guard_deliveries(1);",
         "options": {}
       },
       "id": "a1a2a3a4-0004-4000-8000-000000000004",
@@ -151,7 +144,7 @@
         "source": "database",
         "workflowId": {
           "__rl": true,
-          "value": "={{ $env.WF13_WORKFLOW_ID }}",
+          "value": "Bo2YbbUpmBzRbhDa",
           "mode": "id"
         },
         "options": {}
@@ -164,6 +157,53 @@
         1340,
         180
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM public.record_unassigned_alert($1::bigint, $2);",
+        "options": {
+          "queryReplacement": "={{ [$json.opportunity_id, 'wf3c:unassigned:' + $json.opportunity_id] }}"
+        }
+      },
+      "id": "a1a2a3a4-0009-4000-8000-000000000009",
+      "name": "Record Retryable Unassigned Alert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        900,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH claimed AS (\n  SELECT * FROM public.claim_unassigned_alerts(100, NOW(), INTERVAL '2 minutes')\n)\nSELECT claimed.*,\n       (SELECT a.whatsapp_number FROM public.agents a WHERE a.agent_id = 'agent_manager') AS manager_phone,\n       COALESCE(c.lead_name, 'Sin nombre') AS lead_name,\n       COALESCE(c.lead_phone, o.e164_phone, 'N/D') AS lead_phone\nFROM claimed\nJOIN public.lead_routing_opportunities o USING (opportunity_id)\nLEFT JOIN public.conversations c ON c.conversation_id = o.conversation_id;",
+        "options": {}
+      },
+      "id": "a1a2a3a4-0008-4000-8000-000000000008",
+      "name": "Claim Unassigned Alert Lease",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        900,
+        520
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
     },
     {
       "parameters": {
@@ -184,34 +224,70 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $env.MANAGER_PHONE }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify('Lead sin asignar. Oportunidad ' + $json.opportunity_id + ', propiedad ' + ($json.property_id || 'sin referencia') + '. Revision manual requerida.') }} }\n}",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.manager_phone }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"alerta_routing_v3\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [{\n      \"type\": \"body\",\n      \"parameters\": [\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.alert_kind || $json.reason || 'sin_responsable')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.opportunity_id || 'No disponible')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.property_id || 'No disponible')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.state || 'unassigned_alerted')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.required_action || 'Revisar asignacion y cierre EasyBroker')) }} }\n      ]\n    }]\n  }\n}",
         "options": {
           "timeout": 10000
         }
       },
       "id": "a1a2a3a4-0007-4000-8000-000000000007",
-      "name": "Alert Unassigned (No Assignment)",
+      "name": "WhatsApp Sandy Unassigned Alert",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        900,
+        1120,
         420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM public.complete_unassigned_alert_notification($1::bigint, $2::uuid, $3, $4);",
+        "options": {
+          "queryReplacement": "={{ [$('Claim Unassigned Alert Lease').item.json.opportunity_id, $('Claim Unassigned Alert Lease').item.json.lease_token, 'whatsapp', $json.messages?.[0]?.id || ''] }}"
+        }
+      },
+      "id": "a1a2a3a4-0011-4000-8000-000000000011",
+      "name": "Acknowledge Unassigned Alert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        380
       ],
-      "continueOnFail": true
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "wf3c-sandy-alert-ack",
+      "name": "V3 Sandy Assignment Durable",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "wf3c-execute-trigger",
+      "name": "When Called by WF23",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -80,
+        120
+      ],
+      "notes": "Scheduler removed; WF23 invokes this typed sub-workflow."
     }
   ],
   "connections": {
-    "Every Minute": {
-      "main": [
-        [
-          {
-            "node": "Advance Expired Tiers",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Advance Expired Tiers": {
       "main": [
         [
@@ -227,14 +303,32 @@
       "main": [
         [
           {
-            "node": "Claim Pending Guard Deliveries",
+            "node": "Call Directed Guard Offer",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Alert Unassigned (No Assignment)",
+            "node": "V3 Sandy Assignment Durable",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Unexpected Transition State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Sandy Unassigned Alert": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Unassigned Alert",
             "type": "main",
             "index": 0
           }
@@ -262,69 +356,37 @@
           }
         ]
       ]
+    },
+    "Claim Unassigned Alert Lease": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Sandy Unassigned Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Called by WF23": {
+      "main": [
+        [
+          {
+            "node": "Advance Expired Tiers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
     "saveExecutionProgress": false,
     "saveManualExecutions": false,
-    "saveDataErrorExecution": "none",
-    "saveDataSuccessExecution": "none"
-  },
-  "staticData": {
-    "node:Every Minute": {
-      "recurrenceRules": []
-    }
-  },
-  "meta": null,
-  "nodeGroups": [],
-  "pinData": {
-    "Every Minute": [
-      {
-        "json": {
-          "timestamp": "2026-07-07T09:05:17.008+02:00",
-          "Readable date": "July 7th 2026, 9:05:17 am",
-          "Readable time": "9:05:17 am",
-          "Day of week": "Tuesday",
-          "Year": "2026",
-          "Month": "July",
-          "Day of month": "07",
-          "Hour": "09",
-          "Minute": "05",
-          "Second": "17",
-          "Timezone": "Europe/Berlin (UTC+02:00)"
-        },
-        "pairedItem": {
-          "item": 0
-        }
-      }
-    ]
-  },
-  "versionId": "eba7651d-7aa2-4dc3-902c-c1bd76d5261b",
-  "activeVersionId": null,
-  "versionCounter": 80,
-  "triggerCount": 1,
-  "sourceWorkflowId": null,
-  "shared": [
-    {
-      "updatedAt": "2026-05-08T10:26:56.909Z",
-      "createdAt": "2026-05-08T10:26:56.909Z",
-      "role": "workflow:owner",
-      "workflowId": "UNIKqyAvIUAZkNIs",
-      "projectId": "q5HebGTNHrfaBGjx",
-      "project": {
-        "updatedAt": "2025-06-06T10:18:49.745Z",
-        "createdAt": "2025-06-06T10:17:16.319Z",
-        "id": "q5HebGTNHrfaBGjx",
-        "name": "Esteban Betancourt <esteban.betanc@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "customTelemetryTags": [],
-        "creatorId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
-      }
-    }
-  ],
-  "tags": [],
-  "activeVersion": null
+    "timezone": "America/Mexico_City",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "errorWorkflow": "He95yJflKVspGFyb"
+  }
 }

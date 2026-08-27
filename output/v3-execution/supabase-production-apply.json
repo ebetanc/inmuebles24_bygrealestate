@@ -1,0 +1,37 @@
+{
+  "applied_at": "2026-08-27T15:52:33.654955+00:00",
+  "project_ref": "wkaeutndwawkdhswisqe",
+  "applied": [
+    {
+      "version": "20260827154900",
+      "name": "lead_routing_v3_intake_routing",
+      "sha256": "21969b0cefbb7184387a68555d5b326000adebe62c92720027e08d2d80132d9a"
+    },
+    {
+      "version": "20260827154901",
+      "name": "lead_routing_v3_claim_webhook",
+      "sha256": "2b5d5c36edb3c6e501a5643e6428bddabe6cf8e678c433147f860a6afa34de5a"
+    },
+    {
+      "version": "20260827154902",
+      "name": "lead_routing_v3_easybroker_effects",
+      "sha256": "6df8ea15112449872c0526e2fc84ce3f951cbdff22c79fb5a9bfd3123ac15527"
+    },
+    {
+      "version": "20260827154903",
+      "name": "lead_routing_v3_auto_correlation",
+      "sha256": "cf26cdb1f80a78fa65fdfa9b8b085db7fafb20722ef480ab2d9d8be39d5928ef"
+    }
+  ],
+  "verification": {
+    "primary_rows": 144,
+    "preserved_inactive_rows": 62,
+    "invalid_rows": 0,
+    "duplicate_operational_slots": 0,
+    "capture_rows": 0,
+    "effect_rows": 0,
+    "webhook_rows": 0,
+    "function_count": 14
+  },
+  "committed": true
+}

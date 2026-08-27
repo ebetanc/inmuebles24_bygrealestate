@@ -28,7 +28,9 @@ from inmobiliaria24.monitor import check_stale_runs, send_error_alert, send_hear
 from inmobiliaria24.scraper import (
     SessionStaleError,
     dump_lead_controls,
+    enrich_property_public_ids,
     extract_leads_list,
+    extract_property_public_id_map,
     mark_lead_contacted,
     scrape_pendiente_leads,
     send_to_webhook,
@@ -130,6 +132,102 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+async def _run_v3_contactado(page, leads: list[dict]) -> set[str]:
+    """Mark Contactado per durable capture, returning verified lead IDs."""
+    from inmobiliaria24.supa import (
+        claim_v3_i24_contact_effects,
+        finish_v3_i24_contact_effect,
+    )
+
+    by_lead_id = {
+        str(lead.get("lead_id") or "").strip(): lead
+        for lead in leads
+        if str(lead.get("lead_id") or "").strip()
+    }
+    verified: set[str] = set()
+    for contact in await claim_v3_i24_contact_effects():
+        lead_id = str(contact.get("i24_lead_id") or "").strip()
+        if not lead_id:
+            await finish_v3_i24_contact_effect(
+                int(contact["capture_event_id"]), str(contact["lease_token"]),
+                success=False, error_code="missing_i24_lead_id",
+            )
+            continue
+        # The detail URL is keyed only by lead_id and can reconcile an already
+        # Contactado lead after a crash, even when it no longer appears in the
+        # Pendiente scrape. The durable route payload lives in Supabase.
+        lead_payload = by_lead_id.get(lead_id, {"lead_id": lead_id})
+        evidence: dict = {}
+        contacted = False
+        try:
+            contacted = await mark_lead_contacted(
+                page, lead_payload, evidence=evidence
+            )
+        except Exception as exc:
+            evidence["error_code"] = "portal_interaction_failed"
+            logger.warning("V3 Contactado failed for lead {}: {}", lead_id, exc)
+        finished = await finish_v3_i24_contact_effect(
+            int(contact["capture_event_id"]), str(contact["lease_token"]),
+            success=contacted,
+            error_code=evidence.get("error_code"),
+        )
+        if contacted and finished:
+            verified.add(lead_id)
+    return verified
+
+
+async def _run_v3_route_dispatch(settings, store: StateStore) -> list[dict]:
+    """Deliver durable post-Contactado captures, even after portal removal."""
+    from inmobiliaria24.supa import (
+        claim_v3_route_dispatches,
+        finish_v3_route_dispatch,
+    )
+
+    dispatched: list[dict] = []
+    for claim in await claim_v3_route_dispatches():
+        capture_event_id = int(claim["capture_event_id"])
+        lease_token = str(claim["lease_token"])
+        context = claim.get("offer_context")
+        payload = dict(context) if isinstance(context, dict) else {}
+        payload.update({
+            "lead_id": str(claim.get("i24_lead_id") or payload.get("lead_id") or ""),
+            "capture_event_id": capture_event_id,
+            "opportunity_id": claim.get("opportunity_id"),
+            "disposition": claim.get("disposition"),
+            "property_public_id": claim.get("property_public_id") or payload.get("property_public_id"),
+            "contactado_status": "verified",
+            "source": "inmuebles24",
+        })
+        if not payload["lead_id"]:
+            await finish_v3_route_dispatch(
+                capture_event_id, lease_token, success=False,
+                error_code="missing_i24_lead_id",
+            )
+            continue
+        try:
+            await send_to_webhook(
+                [payload],
+                webhook_url=settings.webhook_url,
+                webhook_token=settings.webhook_token,
+                idempotency_key=f"v3-route:{capture_event_id}",
+            )
+        except Exception as exc:
+            await finish_v3_route_dispatch(
+                capture_event_id, lease_token, success=False,
+                error_code="webhook_dispatch_failed",
+            )
+            logger.warning("V3 route dispatch failed for capture {}: {}", capture_event_id, exc)
+            continue
+        if await finish_v3_route_dispatch(
+            capture_event_id, lease_token, success=True
+        ):
+            store.mark_seen([payload])
+            dispatched.append(payload)
+        else:
+            logger.warning("V3 route dispatch lease lost for capture {}", capture_event_id)
+    return dispatched
+
+
 # ---------------------------------------------------------------------------
 # Async main
 # ---------------------------------------------------------------------------
@@ -211,6 +309,19 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     store.finish_run(run_id, status="dry_run")
                     return 0
 
+                # Mis avisos exposes both the Inmuebles24 listing ID and the
+                # EB advertiser code; lead detail pages expose only the first.
+                conflicting_listing_ids: set[str] = set()
+                try:
+                    live_property_map = await extract_property_public_id_map(
+                        page, conflicts_out=conflicting_listing_ids
+                    )
+                    store.delete_property_public_id_mappings(conflicting_listing_ids)
+                    store.upsert_property_public_id_map(live_property_map)
+                except Exception as e:
+                    logger.warning("Property mapping refresh failed safely: {}", str(e))
+                    live_property_map = {}
+
                 # Scrape all Pendiente leads (with session recovery).
                 try:
                     all_leads = await scrape_pendiente_leads(page, limit=args.limit)
@@ -222,6 +333,9 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     await navigate_to_avisos(page)
                     all_leads = await scrape_pendiente_leads(page, limit=args.limit)
                 total = len(all_leads)
+                property_map = store.property_public_id_map()
+                property_map.update(live_property_map)
+                enrich_property_public_ids(all_leads, property_map)
 
                 # One-shot diagnostic: when INSPECT_ON_PENDIENTE is set, dump the
                 # clickable controls of the first real Pendiente lead so we can
@@ -237,28 +351,45 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                         except Exception as e:
                             logger.warning("INSPECT_ON_PENDIENTE dump failed: {}", e)
 
-                # Dedup: only send leads we have not already pushed. A lead stays
-                # Pendiente on the portal until an agent attends it, so without
-                # this filter the same lead would be re-sent on every run.
-                new_leads = store.filter_new(all_leads)
-                new_count = len(new_leads)
+                v3_enabled = bool(getattr(settings, "lead_routing_v3_enabled", False))
+                if v3_enabled:
+                    # V3 durable intake is the first state transition. No
+                    # webhook or portal effect runs before every lead has an
+                    # idempotent capture result.
+                    from inmobiliaria24.supa import v3_intake_lead
 
-                # Send only new leads, then mark them seen. Marking AFTER a
-                # successful POST means a webhook failure is retried next run
-                # instead of being silently dropped.
-                if new_leads:
-                    await send_to_webhook(
-                        new_leads, webhook_url=settings.webhook_url
-                    )
-                    store.mark_seen(new_leads)
+                    for lead in all_leads:
+                        lead_id = str(lead.get("lead_id") or "").strip()
+                        if not lead_id:
+                            continue
+                        try:
+                            await v3_intake_lead(settings, lead)
+                        except Exception as exc:
+                            logger.warning("V3 intake failed for lead {}: {}", lead_id, exc)
+
+                    await _run_v3_contactado(page, all_leads)
+                    # The route queue is durable and contains the full lead
+                    # context. It remains the source of truth after Contactado
+                    # removes a lead from the next portal scrape.
+                    new_leads = await _run_v3_route_dispatch(settings, store)
+                    new_count = len(new_leads)
                 else:
-                    logger.info("No new leads to send — all already pushed")
+                    # V2 compatibility path. Kept behind the explicit V3 flag.
+                    new_leads = store.filter_new(all_leads)
+                    new_count = len(new_leads)
+                    if new_leads:
+                        await send_to_webhook(
+                            new_leads,
+                            webhook_url=settings.webhook_url,
+                            webhook_token=settings.webhook_token,
+                        )
+                        store.mark_seen(new_leads)
+                    else:
+                        logger.info("No new leads to send — all already pushed")
 
-                # Portal side effect starts only after routing-v2 committed the
-                # exact opportunity assignment. Work comes from Supabase rather
-                # than the Pendiente scrape so a portal-success/DB-failure is
-                # reconciled next run as the idempotent "already Contactado" case.
-                if os.environ.get("MARK_CONTACTED", "").strip().lower() in ("1", "true", "yes"):
+                # V2 portal side effect. V3 has already completed its per-capture
+                # Contactado gate above and must never use the legacy RPC.
+                if not v3_enabled and os.environ.get("MARK_CONTACTED", "").strip().lower() in ("1", "true", "yes"):
                     from inmobiliaria24.supa import (
                         claim_pending_i24_contacts,
                         finish_i24_contact_attempt,
@@ -292,18 +423,16 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                         except Exception as e:
                             logger.warning("i24 Contactado task failed safely: {}", str(e))
 
-                # Case A: write the Inmuebles24 advisor note ("Asignado a <asesor>")
-                # for any assigned lead that still lacks one. Reuses this logged-in
-                # session (shares Chrome profile/port 9222, so it cannot run as a
-                # separate process). Best-effort — never breaks the scraper run.
-                try:
-                    from inmobiliaria24.notes import write_pending_for_page
+                # V2-only: V3 never writes an advisor note in Inmuebles24.
+                if not v3_enabled:
+                    try:
+                        from inmobiliaria24.notes import write_pending_for_page
 
-                    notes_written = await write_pending_for_page(page)
-                    if notes_written:
-                        logger.info("Wrote {} i24 advisor note(s)", notes_written)
-                except Exception as e:
-                    logger.warning("i24 note pass failed: {}", str(e))
+                        notes_written = await write_pending_for_page(page)
+                        if notes_written:
+                            logger.info("Wrote {} i24 advisor note(s)", notes_written)
+                    except Exception as e:
+                        logger.warning("i24 note pass failed: {}", str(e))
 
                 print(f"Scraped {total} Pendiente leads, {new_count} new")
                 for lead in new_leads:

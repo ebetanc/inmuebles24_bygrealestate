@@ -181,7 +181,7 @@ BEGIN
   VALUES('EB-SAFEMODE-1','email:safemode1@example.test','normalized_email','captured','owner')
   RETURNING opportunity_id INTO v_opp1;
   SELECT * INTO v_fallback FROM public.route_missing_owner_data(v_opp1,'routing_safe_mode','fixture:safe-mode:route-1');
-  IF v_fallback.state IS DISTINCT FROM 'primary_guard_open' OR v_fallback.routing_tier IS DISTINCT FROM 'primary_guard' THEN
+  IF v_fallback.state IS DISTINCT FROM 'guard_delivery_pending' OR v_fallback.routing_tier IS DISTINCT FROM 'primary_guard' THEN
     RAISE EXCEPTION 'route_missing_owner_data must succeed with reason routing_safe_mode';
   END IF;
 
@@ -189,7 +189,7 @@ BEGIN
   VALUES('EB-SAFEMODE-2','email:safemode2@example.test','normalized_email','captured','owner')
   RETURNING opportunity_id INTO v_opp2;
   SELECT * INTO v_fallback FROM public.route_missing_owner_data(v_opp2,'missing_owner_data','fixture:safe-mode:route-2');
-  IF v_fallback.state IS DISTINCT FROM 'primary_guard_open' OR v_fallback.routing_tier IS DISTINCT FROM 'primary_guard' THEN
+  IF v_fallback.state IS DISTINCT FROM 'guard_delivery_pending' OR v_fallback.routing_tier IS DISTINCT FROM 'primary_guard' THEN
     RAISE EXCEPTION 'route_missing_owner_data must still succeed with reason missing_owner_data';
   END IF;
 

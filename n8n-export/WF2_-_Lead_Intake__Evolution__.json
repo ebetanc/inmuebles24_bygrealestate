@@ -542,7 +542,10 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "saveExecutionProgress": true
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "errorWorkflow": "He95yJflKVspGFyb"
   },
   "staticData": null,
   "meta": null,
@@ -1121,7 +1124,10 @@
     "workflowPublishHistory": [],
     "settings": {
       "executionOrder": "v1",
-      "saveExecutionProgress": true
+      "saveExecutionProgress": true,
+      "saveDataErrorExecution": "all",
+      "saveDataSuccessExecution": "none",
+      "errorWorkflow": "He95yJflKVspGFyb"
     }
   }
 }

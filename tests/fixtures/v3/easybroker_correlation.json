@@ -1,0 +1,8 @@
+[
+  {"name":"exact_candidate","candidates":1,"property_exact":true,"identity":"compatible","contradiction":false,"expected":"linked","effect_allowed":true},
+  {"name":"awaiting_request","candidates":0,"horizon":"open","expected":"awaiting_eb_request","effect_allowed":false},
+  {"name":"no_request_after_horizon","candidates":0,"horizon":"covered","expected":"manual_review:no_eb_request","effect_allowed":false},
+  {"name":"ambiguous","candidates":2,"property_exact":true,"identity":"compatible","contradiction":false,"expected":"manual_review:ambiguous","effect_allowed":false},
+  {"name":"identity_contradiction","candidates":1,"property_exact":true,"identity":"contradictory","contradiction":true,"expected":"manual_review","reason":"identity_contradiction","effect_allowed":false},
+  {"name":"already_linked","candidates":1,"property_exact":true,"identity":"compatible","contradiction":false,"expected":"already_linked","effect_allowed":false}
+]

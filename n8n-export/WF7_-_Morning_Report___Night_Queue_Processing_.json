@@ -1,1 +1,916 @@
-{"updatedAt":"2026-07-08T15:36:04.676Z","createdAt":"2026-05-08T11:27:30.867Z","id":"xzBG0GIsHCUd44DC","name":"WF7 - Morning Report \u0026 Night Queue Processing","description":null,"active":true,"isArchived":false,"nodes":[{"parameters":{"rule":{"interval":[{"field":"cronExpression","expression":"0 8 * * *"}]},"options":{"cronTimezone":{"timezone":"America/Mexico_City"}}},"id":"wf7-0001-4000-8000-000000000001","name":"Trigger 8:00 AM CDMX (Report)","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[200,200],"notes":"Fires at 8:00 AM CDMX. Uses cronTimezone to auto-adjust for DST."},{"parameters":{"rule":{"interval":[{"field":"cronExpression","expression":"5 8 * * *"}]},"options":{"cronTimezone":{"timezone":"America/Mexico_City"}}},"id":"wf7-0002-4000-8000-000000000002","name":"Trigger 8:05 AM CDMX (Process Queue)","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[200,700],"notes":"Fires at 8:05 AM CDMX. Uses cronTimezone to auto-adjust for DST."},{"parameters":{"operation":"executeQuery","query":"SELECT\n  nq.id,\n  nq.conversation_id,\n  nq.source,\n  nq.lead_phone,\n  nq.lead_name,\n  nq.property_id,\n  nq.lead_email,\n  nq.temperature,\n  nq.bot_summary,\n  nq.queued_at\nFROM night_queue nq\nWHERE nq.processed = FALSE\nORDER BY nq.queued_at;","options":{}},"id":"wf7-0003-4000-8000-000000000003","name":"Fetch Pending Night Queue","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[460,200],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}},"alwaysOutputData":true},{"parameters":{"operation":"executeQuery","query":"SELECT\n  COUNT(*) AS total_night_conversations,\n  COUNT(*) FILTER (WHERE source = \u0027inmuebles24\u0027) AS from_inmuebles24,\n  COUNT(*) FILTER (WHERE source = \u0027easybroker\u0027) AS from_easybroker,\n  COUNT(*) FILTER (WHERE source = \u0027whatsapp_direct\u0027) AS from_whatsapp_direct\nFROM conversations\nWHERE arrived_during = \u0027night\u0027\n  AND created_at \u003e= (NOW() AT TIME ZONE \u0027America/Mexico_City\u0027)::date - INTERVAL \u00273 hours\u0027;","options":{}},"id":"wf7-0004-4000-8000-000000000004","name":"Fetch Night Stats","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[460,400],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}},"alwaysOutputData":true},{"parameters":{"jsCode":"// Build the morning report message for the manager.\n// Inputs: night_queue leads + night conversation stats.\n\nconst queueItems = $(\u0027Fetch Pending Night Queue\u0027).all().map(i =\u003e i.json);\nconst stats = $(\u0027Fetch Night Stats\u0027).first().json;\n\nconst totalQueued = queueItems.length;\nconst totalConvs = parseInt(stats.total_night_conversations || 0);\nconst fromInmuebles = parseInt(stats.from_inmuebles24 || 0);\nconst fromEasyBroker = parseInt(stats.from_easybroker || 0);\nconst fromWhatsApp = parseInt(stats.from_whatsapp_direct || 0);\n\n// Build header\nconst lines = [];\nlines.push(\u0027===========================\u0027);\nlines.push(\u0027REPORTE MATUTINO\u0027);\nlines.push(new Date().toLocaleDateString(\u0027es-MX\u0027, { timeZone: \u0027America/Mexico_City\u0027, weekday: \u0027long\u0027, year: \u0027numeric\u0027, month: \u0027long\u0027, day: \u0027numeric\u0027 }));\nlines.push(\u0027===========================\u0027);\nlines.push(\u0027\u0027);\n\n// Night stats summary\nlines.push(`Conversaciones nocturnas: ${totalConvs}`);\nlines.push(`Leads en cola pendiente: ${totalQueued}`);\nlines.push(\u0027\u0027);\n\nif (totalConvs \u003e 0 || totalQueued \u003e 0) {\n  lines.push(\u0027--- Desglose por fuente ---\u0027);\n  if (fromInmuebles \u003e 0) lines.push(`  Inmuebles24: ${fromInmuebles}`);\n  if (fromEasyBroker \u003e 0) lines.push(`  EasyBroker: ${fromEasyBroker}`);\n  if (fromWhatsApp \u003e 0) lines.push(`  WhatsApp directo: ${fromWhatsApp}`);\n  lines.push(\u0027\u0027);\n}\n\n// Detail each queued lead\nif (totalQueued \u003e 0) {\n  lines.push(\u0027--- Leads en cola ---\u0027);\n  lines.push(\u0027\u0027);\n  queueItems.forEach((lead, idx) =\u003e {\n    lines.push(`${idx + 1}. ${lead.lead_name || \u0027Sin nombre\u0027}`);\n    lines.push(`   Tel: ${lead.lead_phone}`);\n    if (lead.property_id) lines.push(`   Propiedad: ${lead.property_id}`);\n    if (lead.temperature) lines.push(`   Temperatura: ${lead.temperature.toUpperCase()}`);\n    if (lead.source) lines.push(`   Fuente: ${lead.source}`);\n    if (lead.bot_summary) {\n      lines.push(`   Resumen bot: ${lead.bot_summary}`);\n    }\n    lines.push(\u0027\u0027);\n  });\n} else {\n  lines.push(\u0027No hay leads pendientes en la cola nocturna.\u0027);\n  lines.push(\u0027\u0027);\n}\n\nlines.push(\u0027El proceso TOMO automatico se ejecutara a las 8:05 AM.\u0027);\n\nconst reportText = lines.join(\u0027\\n\u0027);\n\nreturn [{\n  json: {\n    report_text: reportText,\n    total_queued: totalQueued,\n    total_conversations: totalConvs\n  }\n}];"},"id":"wf7-0005-4000-8000-000000000005","name":"Build Morning Report","type":"n8n-nodes-base.code","typeVersion":2,"position":[740,300]},{"parameters":{"operation":"executeQuery","query":"SELECT whatsapp_number FROM agents WHERE agent_id = \u0027agent_manager\u0027 LIMIT 1;","options":{}},"id":"wf7-0006-4000-8000-000000000006","name":"Get Manager Phone","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[960,300],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}},{"parameters":{"method":"POST","url":"={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"apikey","value":"={{ $env.EVOLUTION_API_KEY }}"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($(\u0027Build Morning Report\u0027).first().json.report_text) }},\n  \"delay\": 1200\n}","options":{"timeout":15000}},"id":"wf7-0007-4000-8000-000000000007","name":"Send Report to Manager","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[1180,300],"continueOnFail":true,"notes":"Sends the formatted morning report to the manager via Evolution API (WhatsApp)."},{"parameters":{"operation":"executeQuery","query":"SELECT * FROM claim_night_queue(100, NOW(), INTERVAL \u002710 minutes\u0027);","options":{}},"id":"wf7-0008-4000-8000-000000000008","name":"Fetch Queue for Processing","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[460,700],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}},{"parameters":{"conditions":{"options":{"caseSensitive":true,"typeValidation":"strict","leftValue":""},"conditions":[{"id":"cond-has-items","leftValue":"={{ $input.all().length }}","rightValue":0,"operator":{"type":"number","operation":"gt"}}],"combinator":"and"}},"id":"wf7-0009-4000-8000-000000000009","name":"Has Pending Leads?","type":"n8n-nodes-base.if","typeVersion":2.2,"position":[680,700]},{"parameters":{"jsCode":"// Store total count before splitting into batches.\nconst items = $input.all();\nreturn items.map(item =\u003e ({\n  json: {\n    ...item.json,\n    _total_queue_count: items.length\n  }\n}));"},"id":"wf7-0010-4000-8000-000000000010","name":"Add Count to Items","type":"n8n-nodes-base.code","typeVersion":2,"position":[900,600]},{"parameters":{"batchSize":1,"options":{}},"id":"wf7-0011-4000-8000-000000000011","name":"Process One by One","type":"n8n-nodes-base.splitInBatches","typeVersion":3,"position":[1120,600]},{"parameters":{"source":"database","workflowId":{"__rl":true,"value":"={{ $env.WF3A_WORKFLOW_ID }}","mode":"id"},"options":{}},"id":"wf7-0013-4000-8000-000000000013","name":"Call WF3a: Auction Launcher","type":"n8n-nodes-base.executeWorkflow","typeVersion":1.2,"position":[1560,600],"notes":"Calls WF3a (Auction Launcher) with the lead data.\nWF3a expects: conversation_id, lead_phone, lead_name, property_id, property_title, property_price, assigned_agent_id"},{"parameters":{"operation":"executeQuery","query":"SELECT ack_night_queue_handoff($1, $2::uuid, $3) AS acknowledged;","options":{"queryReplacement":"={{ $(\u0027Process One by One\u0027).item.json.queue_id }},={{ $(\u0027Process One by One\u0027).item.json.lease_token }},={{ $(\u0027Process One by One\u0027).item.json.routing_idempotency_key }}"}},"id":"wf7-0014-4000-8000-000000000014","name":"Acknowledge Durable Handoff","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[1780,600],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}},{"parameters":{"jsCode":"// Count durable queue activations returned by drain_night_queue().\nconst allItems = $(\u0027Fetch Queue for Processing\u0027).all();\nconst total = allItems.length;\n\nreturn [{\n  json: {\n    total_processed: total,\n    message: `Se activaron ${total} leads de la cola nocturna para routing.`\n  }\n}];"},"id":"wf7-0015-4000-8000-000000000015","name":"Build Confirmation Message","type":"n8n-nodes-base.code","typeVersion":2,"position":[1340,900]},{"parameters":{"operation":"executeQuery","query":"SELECT whatsapp_number FROM agents WHERE agent_id = \u0027agent_manager\u0027 LIMIT 1;","options":{}},"id":"wf7-0016-4000-8000-000000000016","name":"Get Manager Phone (B)","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[1560,900],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}},{"parameters":{"method":"POST","url":"={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"apikey","value":"={{ $env.EVOLUTION_API_KEY }}"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($(\u0027Build Confirmation Message\u0027).first().json.message) }},\n  \"delay\": 1200\n}","options":{"timeout":15000}},"id":"wf7-0017-4000-8000-000000000017","name":"Send Confirmation to Manager","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[1780,900],"continueOnFail":true,"notes":"Notifies manager that all night queue leads have been processed via TOMO auctions."},{"parameters":{},"id":"wf7-0018-4000-8000-000000000018","name":"No Pending Leads (Skip)","type":"n8n-nodes-base.noOp","typeVersion":1,"position":[900,840],"notes":"No leads in the night queue. Nothing to process."}],"connections":{"Trigger 8:00 AM CDMX (Report)":{"main":[[{"node":"Fetch Pending Night Queue","type":"main","index":0},{"node":"Fetch Night Stats","type":"main","index":0}]]},"Fetch Pending Night Queue":{"main":[[{"node":"Build Morning Report","type":"main","index":0}]]},"Fetch Night Stats":{"main":[[{"node":"Build Morning Report","type":"main","index":0}]]},"Build Morning Report":{"main":[[{"node":"Get Manager Phone","type":"main","index":0}]]},"Get Manager Phone":{"main":[[{"node":"Send Report to Manager","type":"main","index":0}]]},"Trigger 8:05 AM CDMX (Process Queue)":{"main":[[{"node":"Fetch Queue for Processing","type":"main","index":0}]]},"Fetch Queue for Processing":{"main":[[{"node":"Has Pending Leads?","type":"main","index":0}]]},"Has Pending Leads?":{"main":[[{"node":"Add Count to Items","type":"main","index":0}],[{"node":"No Pending Leads (Skip)","type":"main","index":0}]]},"Add Count to Items":{"main":[[{"node":"Process One by One","type":"main","index":0}]]},"Process One by One":{"main":[[{"node":"Build Confirmation Message","type":"main","index":0}],[{"node":"Call WF3a: Auction Launcher","type":"main","index":0}]]},"Call WF3a: Auction Launcher":{"main":[[{"node":"Acknowledge Durable Handoff","type":"main","index":0}]]},"Acknowledge Durable Handoff":{"main":[[{"node":"Process One by One","type":"main","index":0}]]},"Build Confirmation Message":{"main":[[{"node":"Get Manager Phone (B)","type":"main","index":0}]]},"Get Manager Phone (B)":{"main":[[{"node":"Send Confirmation to Manager","type":"main","index":0}]]}},"settings":{"executionOrder":"v1","saveExecutionProgress":true,"saveManualExecutions":true},"staticData":{"node:Trigger 8:00 AM CDMX (Report)":{"recurrenceRules":[null],"recurrenceRuleSignatures":[null]},"node:Trigger 8:05 AM CDMX (Process Queue)":{"recurrenceRules":[null],"recurrenceRuleSignatures":[null]}},"meta":{"templateCredsSetupCompleted":true},"nodeGroups":[],"pinData":{},"versionId":"1427f218-b008-4026-bbfe-71bb898a9255","activeVersionId":"1427f218-b008-4026-bbfe-71bb898a9255","versionCounter":77,"triggerCount":2,"sourceWorkflowId":null,"shared":[{"updatedAt":"2026-05-08T11:27:30.871Z","createdAt":"2026-05-08T11:27:30.871Z","role":"workflow:owner","workflowId":"xzBG0GIsHCUd44DC","projectId":"q5HebGTNHrfaBGjx","project":{"updatedAt":"2025-06-06T10:18:49.745Z","createdAt":"2025-06-06T10:17:16.319Z","id":"q5HebGTNHrfaBGjx","name":"Esteban Betancourt \u003cesteban.betanc@gmail.com\u003e","type":"personal","icon":null,"description":null,"customTelemetryTags":[],"creatorId":"df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"}}],"tags":[],"activeVersion":{"updatedAt":"2026-07-08T15:36:04.677Z","createdAt":"2026-07-08T15:36:04.677Z","versionId":"1427f218-b008-4026-bbfe-71bb898a9255","workflowId":"xzBG0GIsHCUd44DC","nodes":[{"parameters":{"rule":{"interval":[{"field":"cronExpression","expression":"0 8 * * *"}]},"options":{"cronTimezone":{"timezone":"America/Mexico_City"}}},"id":"wf7-0001-4000-8000-000000000001","name":"Trigger 8:00 AM CDMX (Report)","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[200,200],"notes":"Fires at 8:00 AM CDMX. Uses cronTimezone to auto-adjust for DST."},{"parameters":{"rule":{"interval":[{"field":"cronExpression","expression":"5 8 * * *"}]},"options":{"cronTimezone":{"timezone":"America/Mexico_City"}}},"id":"wf7-0002-4000-8000-000000000002","name":"Trigger 8:05 AM CDMX (Process Queue)","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[200,700],"notes":"Fires at 8:05 AM CDMX. Uses cronTimezone to auto-adjust for DST."},{"parameters":{"operation":"executeQuery","query":"SELECT\n  nq.id,\n  nq.conversation_id,\n  nq.source,\n  nq.lead_phone,\n  nq.lead_name,\n  nq.property_id,\n  nq.lead_email,\n  nq.temperature,\n  nq.bot_summary,\n  nq.queued_at\nFROM night_queue nq\nWHERE nq.processed = FALSE\nORDER BY nq.queued_at;","options":{}},"id":"wf7-0003-4000-8000-000000000003","name":"Fetch Pending Night Queue","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[460,200],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}},"alwaysOutputData":true},{"parameters":{"operation":"executeQuery","query":"SELECT\n  COUNT(*) AS total_night_conversations,\n  COUNT(*) FILTER (WHERE source = \u0027inmuebles24\u0027) AS from_inmuebles24,\n  COUNT(*) FILTER (WHERE source = \u0027easybroker\u0027) AS from_easybroker,\n  COUNT(*) FILTER (WHERE source = \u0027whatsapp_direct\u0027) AS from_whatsapp_direct\nFROM conversations\nWHERE arrived_during = \u0027night\u0027\n  AND created_at \u003e= (NOW() AT TIME ZONE \u0027America/Mexico_City\u0027)::date - INTERVAL \u00273 hours\u0027;","options":{}},"id":"wf7-0004-4000-8000-000000000004","name":"Fetch Night Stats","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[460,400],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}},"alwaysOutputData":true},{"parameters":{"jsCode":"// Build the morning report message for the manager.\n// Inputs: night_queue leads + night conversation stats.\n\nconst queueItems = $(\u0027Fetch Pending Night Queue\u0027).all().map(i =\u003e i.json);\nconst stats = $(\u0027Fetch Night Stats\u0027).first().json;\n\nconst totalQueued = queueItems.length;\nconst totalConvs = parseInt(stats.total_night_conversations || 0);\nconst fromInmuebles = parseInt(stats.from_inmuebles24 || 0);\nconst fromEasyBroker = parseInt(stats.from_easybroker || 0);\nconst fromWhatsApp = parseInt(stats.from_whatsapp_direct || 0);\n\n// Build header\nconst lines = [];\nlines.push(\u0027===========================\u0027);\nlines.push(\u0027REPORTE MATUTINO\u0027);\nlines.push(new Date().toLocaleDateString(\u0027es-MX\u0027, { timeZone: \u0027America/Mexico_City\u0027, weekday: \u0027long\u0027, year: \u0027numeric\u0027, month: \u0027long\u0027, day: \u0027numeric\u0027 }));\nlines.push(\u0027===========================\u0027);\nlines.push(\u0027\u0027);\n\n// Night stats summary\nlines.push(`Conversaciones nocturnas: ${totalConvs}`);\nlines.push(`Leads en cola pendiente: ${totalQueued}`);\nlines.push(\u0027\u0027);\n\nif (totalConvs \u003e 0 || totalQueued \u003e 0) {\n  lines.push(\u0027--- Desglose por fuente ---\u0027);\n  if (fromInmuebles \u003e 0) lines.push(`  Inmuebles24: ${fromInmuebles}`);\n  if (fromEasyBroker \u003e 0) lines.push(`  EasyBroker: ${fromEasyBroker}`);\n  if (fromWhatsApp \u003e 0) lines.push(`  WhatsApp directo: ${fromWhatsApp}`);\n  lines.push(\u0027\u0027);\n}\n\n// Detail each queued lead\nif (totalQueued \u003e 0) {\n  lines.push(\u0027--- Leads en cola ---\u0027);\n  lines.push(\u0027\u0027);\n  queueItems.forEach((lead, idx) =\u003e {\n    lines.push(`${idx + 1}. ${lead.lead_name || \u0027Sin nombre\u0027}`);\n    lines.push(`   Tel: ${lead.lead_phone}`);\n    if (lead.property_id) lines.push(`   Propiedad: ${lead.property_id}`);\n    if (lead.temperature) lines.push(`   Temperatura: ${lead.temperature.toUpperCase()}`);\n    if (lead.source) lines.push(`   Fuente: ${lead.source}`);\n    if (lead.bot_summary) {\n      lines.push(`   Resumen bot: ${lead.bot_summary}`);\n    }\n    lines.push(\u0027\u0027);\n  });\n} else {\n  lines.push(\u0027No hay leads pendientes en la cola nocturna.\u0027);\n  lines.push(\u0027\u0027);\n}\n\nlines.push(\u0027El proceso TOMO automatico se ejecutara a las 8:05 AM.\u0027);\n\nconst reportText = lines.join(\u0027\\n\u0027);\n\nreturn [{\n  json: {\n    report_text: reportText,\n    total_queued: totalQueued,\n    total_conversations: totalConvs\n  }\n}];"},"id":"wf7-0005-4000-8000-000000000005","name":"Build Morning Report","type":"n8n-nodes-base.code","typeVersion":2,"position":[740,300]},{"parameters":{"operation":"executeQuery","query":"SELECT whatsapp_number FROM agents WHERE agent_id = \u0027agent_manager\u0027 LIMIT 1;","options":{}},"id":"wf7-0006-4000-8000-000000000006","name":"Get Manager Phone","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[960,300],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}},{"parameters":{"method":"POST","url":"={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"apikey","value":"={{ $env.EVOLUTION_API_KEY }}"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($(\u0027Build Morning Report\u0027).first().json.report_text) }},\n  \"delay\": 1200\n}","options":{"timeout":15000}},"id":"wf7-0007-4000-8000-000000000007","name":"Send Report to Manager","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[1180,300],"continueOnFail":true,"notes":"Sends the formatted morning report to the manager via Evolution API (WhatsApp)."},{"parameters":{"operation":"executeQuery","query":"SELECT * FROM claim_night_queue(100, NOW(), INTERVAL \u002710 minutes\u0027);","options":{}},"id":"wf7-0008-4000-8000-000000000008","name":"Fetch Queue for Processing","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[460,700],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}},{"parameters":{"conditions":{"options":{"caseSensitive":true,"typeValidation":"strict","leftValue":""},"conditions":[{"id":"cond-has-items","leftValue":"={{ $input.all().length }}","rightValue":0,"operator":{"type":"number","operation":"gt"}}],"combinator":"and"}},"id":"wf7-0009-4000-8000-000000000009","name":"Has Pending Leads?","type":"n8n-nodes-base.if","typeVersion":2.2,"position":[680,700]},{"parameters":{"jsCode":"// Store total count before splitting into batches.\nconst items = $input.all();\nreturn items.map(item =\u003e ({\n  json: {\n    ...item.json,\n    _total_queue_count: items.length\n  }\n}));"},"id":"wf7-0010-4000-8000-000000000010","name":"Add Count to Items","type":"n8n-nodes-base.code","typeVersion":2,"position":[900,600]},{"parameters":{"batchSize":1,"options":{}},"id":"wf7-0011-4000-8000-000000000011","name":"Process One by One","type":"n8n-nodes-base.splitInBatches","typeVersion":3,"position":[1120,600]},{"parameters":{"source":"database","workflowId":{"__rl":true,"value":"={{ $env.WF3A_WORKFLOW_ID }}","mode":"id"},"options":{}},"id":"wf7-0013-4000-8000-000000000013","name":"Call WF3a: Auction Launcher","type":"n8n-nodes-base.executeWorkflow","typeVersion":1.2,"position":[1560,600],"notes":"Calls WF3a (Auction Launcher) with the lead data.\nWF3a expects: conversation_id, lead_phone, lead_name, property_id, property_title, property_price, assigned_agent_id"},{"parameters":{"operation":"executeQuery","query":"SELECT ack_night_queue_handoff($1, $2::uuid, $3) AS acknowledged;","options":{"queryReplacement":"={{ $(\u0027Process One by One\u0027).item.json.queue_id }},={{ $(\u0027Process One by One\u0027).item.json.lease_token }},={{ $(\u0027Process One by One\u0027).item.json.routing_idempotency_key }}"}},"id":"wf7-0014-4000-8000-000000000014","name":"Acknowledge Durable Handoff","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[1780,600],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}},{"parameters":{"jsCode":"// Count durable queue activations returned by drain_night_queue().\nconst allItems = $(\u0027Fetch Queue for Processing\u0027).all();\nconst total = allItems.length;\n\nreturn [{\n  json: {\n    total_processed: total,\n    message: `Se activaron ${total} leads de la cola nocturna para routing.`\n  }\n}];"},"id":"wf7-0015-4000-8000-000000000015","name":"Build Confirmation Message","type":"n8n-nodes-base.code","typeVersion":2,"position":[1340,900]},{"parameters":{"operation":"executeQuery","query":"SELECT whatsapp_number FROM agents WHERE agent_id = \u0027agent_manager\u0027 LIMIT 1;","options":{}},"id":"wf7-0016-4000-8000-000000000016","name":"Get Manager Phone (B)","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[1560,900],"credentials":{"postgres":{"id":"REPLACE_WITH_POSTGRES_CREDENTIAL_ID","name":"Postgres - Supabase"}}},{"parameters":{"method":"POST","url":"={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"apikey","value":"={{ $env.EVOLUTION_API_KEY }}"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($(\u0027Build Confirmation Message\u0027).first().json.message) }},\n  \"delay\": 1200\n}","options":{"timeout":15000}},"id":"wf7-0017-4000-8000-000000000017","name":"Send Confirmation to Manager","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[1780,900],"continueOnFail":true,"notes":"Notifies manager that all night queue leads have been processed via TOMO auctions."},{"parameters":{},"id":"wf7-0018-4000-8000-000000000018","name":"No Pending Leads (Skip)","type":"n8n-nodes-base.noOp","typeVersion":1,"position":[900,840],"notes":"No leads in the night queue. Nothing to process."}],"connections":{"Trigger 8:00 AM CDMX (Report)":{"main":[[{"node":"Fetch Pending Night Queue","type":"main","index":0},{"node":"Fetch Night Stats","type":"main","index":0}]]},"Fetch Pending Night Queue":{"main":[[{"node":"Build Morning Report","type":"main","index":0}]]},"Fetch Night Stats":{"main":[[{"node":"Build Morning Report","type":"main","index":0}]]},"Build Morning Report":{"main":[[{"node":"Get Manager Phone","type":"main","index":0}]]},"Get Manager Phone":{"main":[[{"node":"Send Report to Manager","type":"main","index":0}]]},"Trigger 8:05 AM CDMX (Process Queue)":{"main":[[{"node":"Fetch Queue for Processing","type":"main","index":0}]]},"Fetch Queue for Processing":{"main":[[{"node":"Has Pending Leads?","type":"main","index":0}]]},"Has Pending Leads?":{"main":[[{"node":"Add Count to Items","type":"main","index":0}],[{"node":"No Pending Leads (Skip)","type":"main","index":0}]]},"Add Count to Items":{"main":[[{"node":"Process One by One","type":"main","index":0}]]},"Process One by One":{"main":[[{"node":"Build Confirmation Message","type":"main","index":0}],[{"node":"Call WF3a: Auction Launcher","type":"main","index":0}]]},"Call WF3a: Auction Launcher":{"main":[[{"node":"Acknowledge Durable Handoff","type":"main","index":0}]]},"Acknowledge Durable Handoff":{"main":[[{"node":"Process One by One","type":"main","index":0}]]},"Build Confirmation Message":{"main":[[{"node":"Get Manager Phone (B)","type":"main","index":0}]]},"Get Manager Phone (B)":{"main":[[{"node":"Send Confirmation to Manager","type":"main","index":0}]]}},"nodeGroups":[],"authors":"Esteban Betancourt","name":null,"description":null,"autosaved":false,"workflowPublishHistory":[{"createdAt":"2026-07-08T15:36:04.746Z","id":1630,"workflowId":"xzBG0GIsHCUd44DC","versionId":"1427f218-b008-4026-bbfe-71bb898a9255","event":"activated","userId":"df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"}]}}
+{
+  "updatedAt": "2026-07-08T15:36:04.676Z",
+  "createdAt": "2026-05-08T11:27:30.867Z",
+  "id": "xzBG0GIsHCUd44DC",
+  "name": "WF7 - Morning Report & Night Queue Processing",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        },
+        "options": {
+          "cronTimezone": {
+            "timezone": "America/Mexico_City"
+          }
+        }
+      },
+      "id": "wf7-0001-4000-8000-000000000001",
+      "name": "Trigger 8:00 AM CDMX (Report)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        200
+      ],
+      "notes": "Fires at 8:00 AM CDMX. Uses cronTimezone to auto-adjust for DST."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "5 8 * * *"
+            }
+          ]
+        },
+        "options": {
+          "cronTimezone": {
+            "timezone": "America/Mexico_City"
+          }
+        }
+      },
+      "id": "wf7-0002-4000-8000-000000000002",
+      "name": "Trigger 8:05 AM CDMX (Process Queue)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        700
+      ],
+      "notes": "Fires at 8:05 AM CDMX. Uses cronTimezone to auto-adjust for DST."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM public.v3_release_night_queue(100,NOW()) AS opportunity_id;",
+        "options": {}
+      },
+      "id": "wf7-v3-release-0805",
+      "name": "Release V3 Night Queue 08:05",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        700
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "notes": "V3 release gate is 08:05 America/Mexico_City; no release at 08:00."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  nq.id,\n  nq.conversation_id,\n  nq.source,\n  nq.lead_phone,\n  nq.lead_name,\n  nq.property_id,\n  nq.lead_email,\n  nq.temperature,\n  nq.bot_summary,\n  nq.queued_at\nFROM night_queue nq\nWHERE nq.processed = FALSE\nORDER BY nq.queued_at;",
+        "options": {}
+      },
+      "id": "wf7-0003-4000-8000-000000000003",
+      "name": "Fetch Pending Night Queue",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  COUNT(*) AS total_night_conversations,\n  COUNT(*) FILTER (WHERE source = 'inmuebles24') AS from_inmuebles24,\n  COUNT(*) FILTER (WHERE source = 'easybroker') AS from_easybroker,\n  COUNT(*) FILTER (WHERE source = 'whatsapp_direct') AS from_whatsapp_direct\nFROM conversations\nWHERE arrived_during = 'night'\n  AND created_at >= (NOW() AT TIME ZONE 'America/Mexico_City')::date - INTERVAL '3 hours';",
+        "options": {}
+      },
+      "id": "wf7-0004-4000-8000-000000000004",
+      "name": "Fetch Night Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the morning report message for the manager.\n// Inputs: night_queue leads + night conversation stats.\n\nconst queueItems = $('Fetch Pending Night Queue').all().map(i => i.json);\nconst stats = $('Fetch Night Stats').first().json;\n\nconst totalQueued = queueItems.length;\nconst totalConvs = parseInt(stats.total_night_conversations || 0);\nconst fromInmuebles = parseInt(stats.from_inmuebles24 || 0);\nconst fromEasyBroker = parseInt(stats.from_easybroker || 0);\nconst fromWhatsApp = parseInt(stats.from_whatsapp_direct || 0);\n\n// Build header\nconst lines = [];\nlines.push('===========================');\nlines.push('REPORTE MATUTINO');\nlines.push(new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));\nlines.push('===========================');\nlines.push('');\n\n// Night stats summary\nlines.push(`Conversaciones nocturnas: ${totalConvs}`);\nlines.push(`Leads en cola pendiente: ${totalQueued}`);\nlines.push('');\n\nif (totalConvs > 0 || totalQueued > 0) {\n  lines.push('--- Desglose por fuente ---');\n  if (fromInmuebles > 0) lines.push(`  Inmuebles24: ${fromInmuebles}`);\n  if (fromEasyBroker > 0) lines.push(`  EasyBroker: ${fromEasyBroker}`);\n  if (fromWhatsApp > 0) lines.push(`  WhatsApp directo: ${fromWhatsApp}`);\n  lines.push('');\n}\n\n// Detail each queued lead\nif (totalQueued > 0) {\n  lines.push('--- Leads en cola ---');\n  lines.push('');\n  queueItems.forEach((lead, idx) => {\n    lines.push(`${idx + 1}. ${lead.lead_name || 'Sin nombre'}`);\n    lines.push(`   Tel: ${lead.lead_phone}`);\n    if (lead.property_id) lines.push(`   Propiedad: ${lead.property_id}`);\n    if (lead.temperature) lines.push(`   Temperatura: ${lead.temperature.toUpperCase()}`);\n    if (lead.source) lines.push(`   Fuente: ${lead.source}`);\n    if (lead.bot_summary) {\n      lines.push(`   Resumen bot: ${lead.bot_summary}`);\n    }\n    lines.push('');\n  });\n} else {\n  lines.push('No hay leads pendientes en la cola nocturna.');\n  lines.push('');\n}\n\nlines.push('El proceso TOMO automatico se ejecutara a las 8:05 AM.');\n\nconst reportText = lines.join('\\n');\n\nreturn [{\n  json: {\n    report_text: reportText,\n    total_queued: totalQueued,\n    total_conversations: totalConvs\n  }\n}];"
+      },
+      "id": "wf7-0005-4000-8000-000000000005",
+      "name": "Build Morning Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT whatsapp_number FROM agents WHERE agent_id = 'agent_manager' LIMIT 1;",
+        "options": {}
+      },
+      "id": "wf7-0006-4000-8000-000000000006",
+      "name": "Get Manager Phone",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        960,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($('Build Morning Report').first().json.report_text) }},\n  \"delay\": 1200\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "wf7-0007-4000-8000-000000000007",
+      "name": "Send Report to Manager",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        300
+      ],
+      "continueOnFail": true,
+      "notes": "Sends the formatted morning report to the manager via Evolution API (WhatsApp)."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM claim_night_queue(100, NOW(), INTERVAL '10 minutes');",
+        "options": {}
+      },
+      "id": "wf7-0008-4000-8000-000000000008",
+      "name": "Fetch Queue for Processing",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        700
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "cond-has-items",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf7-0009-4000-8000-000000000009",
+      "name": "Has Pending Leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        680,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store total count before splitting into batches.\nconst items = $input.all();\nreturn items.map(item => ({\n  json: {\n    ...item.json,\n    _total_queue_count: items.length\n  }\n}));"
+      },
+      "id": "wf7-0010-4000-8000-000000000010",
+      "name": "Add Count to Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "wf7-0011-4000-8000-000000000011",
+      "name": "Process One by One",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM public.get_routing_safe_mode();",
+        "options": {}
+      },
+      "id": "wf7-0020-4000-8000-000000000020",
+      "name": "Check Routing Safe Mode",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1340,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "wf7-safe-mode-active",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "safe_mode",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf7-0021-4000-8000-000000000021",
+      "name": "Safe Mode Active?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1560,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM public.route_missing_owner_data(\n  $1::bigint,\n  'routing_safe_mode',\n  $2\n);",
+        "options": {
+          "queryReplacement": "={{ [$('Process One by One').item.json.opportunity_id, 'wf7:safe-mode:' + $('Process One by One').item.json.opportunity_id + ':' + ($('Process One by One').item.json.property_public_id || 'unknown')] }}"
+        }
+      },
+      "id": "wf7-0022-4000-8000-000000000022",
+      "name": "Route Direct To Guard (Safe Mode)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1780,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Process One by One').item.json }];"
+      },
+      "id": "wf7-0023-4000-8000-000000000023",
+      "name": "Restore Night Routing Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "w7yJr7naWoxPq6Pw",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {}
+        },
+        "options": {},
+        "mode": "each"
+      },
+      "id": "wf7-0024-4000-8000-000000000024",
+      "name": "Resolve Owner (WF12)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2000,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "wf7-owner-resolved",
+              "leftValue": "={{ $json.resolved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf7-0025-4000-8000-000000000025",
+      "name": "Owner Resolved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2220,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const owner=$input.item.json; const lead=$('Process One by One').item.json; return [{json:{conversation_id:lead.conversation_id,opportunity_id:lead.opportunity_id,property_id:lead.property_id,property_public_id:lead.property_public_id,property_title:lead.property_title,property_price:lead.property_price,lead_name:lead.lead_name,lead_phone:lead.lead_phone,owner_agent_id:owner.owner_agent_id,owner_name:owner.owner_name,owner_number:owner.owner_number,routing_tier:'owner'}}];"
+      },
+      "id": "wf7-0026-4000-8000-000000000026",
+      "name": "Prepare Owner Notify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "Bo2YbbUpmBzRbhDa",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {}
+        },
+        "options": {},
+        "mode": "each"
+      },
+      "id": "wf7-0027-4000-8000-000000000027",
+      "name": "Notify Owner (WF13)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2660,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM public.route_missing_owner_data(\n  $1::bigint,\n  'missing_owner_data',\n  $2\n);",
+        "options": {
+          "queryReplacement": "={{ [$json.opportunity_id, 'wf7:missing-owner:' + $json.opportunity_id + ':' + ($json.property_public_id || 'unknown')] }}"
+        }
+      },
+      "id": "wf7-0028-4000-8000-000000000028",
+      "name": "Route Missing Owner Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2440,
+        780
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ack_night_queue_handoff($1, $2::uuid, $3) AS acknowledged;",
+        "options": {
+          "queryReplacement": "={{ $('Process One by One').item.json.queue_id }},={{ $('Process One by One').item.json.lease_token }},={{ $('Process One by One').item.json.routing_idempotency_key }}"
+        }
+      },
+      "id": "wf7-0014-4000-8000-000000000014",
+      "name": "Acknowledge Durable Handoff",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1780,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Count durable queue activations returned by drain_night_queue().\nconst allItems = $('Fetch Queue for Processing').all();\nconst total = allItems.length;\n\nreturn [{\n  json: {\n    total_processed: total,\n    message: `Se activaron ${total} leads de la cola nocturna para routing.`\n  }\n}];"
+      },
+      "id": "wf7-0015-4000-8000-000000000015",
+      "name": "Build Confirmation Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT whatsapp_number FROM agents WHERE agent_id = 'agent_manager' LIMIT 1;",
+        "options": {}
+      },
+      "id": "wf7-0016-4000-8000-000000000016",
+      "name": "Get Manager Phone (B)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        900
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.whatsapp_number }}\",\n  \"text\": {{ JSON.stringify($('Build Confirmation Message').first().json.message) }},\n  \"delay\": 1200\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "wf7-0017-4000-8000-000000000017",
+      "name": "Send Confirmation to Manager",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        900
+      ],
+      "continueOnFail": true,
+      "notes": "Notifies manager that all night queue leads have been processed via TOMO auctions."
+    },
+    {
+      "parameters": {},
+      "id": "wf7-0018-4000-8000-000000000018",
+      "name": "No Pending Leads (Skip)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        840
+      ],
+      "notes": "No leads in the night queue. Nothing to process."
+    }
+  ],
+  "connections": {
+    "Trigger 8:00 AM CDMX (Report)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Night Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Night Queue": {
+      "main": [
+        [
+          {
+            "node": "Fetch Night Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Night Stats": {
+      "main": [
+        [
+          {
+            "node": "Build Morning Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Morning Report": {
+      "main": [
+        [
+          {
+            "node": "Get Manager Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Manager Phone": {
+      "main": [
+        [
+          {
+            "node": "Send Report to Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger 8:05 AM CDMX (Process Queue)": {
+      "main": [
+        [
+          {
+            "node": "Release V3 Night Queue 08:05",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release V3 Night Queue 08:05": {
+      "main": [
+        [
+          {
+            "node": "Fetch Queue for Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Queue for Processing": {
+      "main": [
+        [
+          {
+            "node": "Has Pending Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Pending Leads?": {
+      "main": [
+        [
+          {
+            "node": "Add Count to Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Pending Leads (Skip)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Count to Items": {
+      "main": [
+        [
+          {
+            "node": "Process One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process One by One": {
+      "main": [
+        [
+          {
+            "node": "Build Confirmation Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Routing Safe Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Routing Safe Mode": {
+      "main": [
+        [
+          {
+            "node": "Safe Mode Active?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Safe Mode Active?": {
+      "main": [
+        [
+          {
+            "node": "Route Direct To Guard (Safe Mode)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Restore Night Routing Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Direct To Guard (Safe Mode)": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Durable Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Night Routing Context": {
+      "main": [
+        [
+          {
+            "node": "Resolve Owner (WF12)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Owner (WF12)": {
+      "main": [
+        [
+          {
+            "node": "Owner Resolved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Owner Resolved?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Owner Notify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route Missing Owner Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Owner Notify": {
+      "main": [
+        [
+          {
+            "node": "Notify Owner (WF13)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Owner (WF13)": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Durable Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Missing Owner Data": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Durable Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acknowledge Durable Handoff": {
+      "main": [
+        [
+          {
+            "node": "Process One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Confirmation Message": {
+      "main": [
+        [
+          {
+            "node": "Get Manager Phone (B)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Manager Phone (B)": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation to Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "staticData": {
+    "node:Trigger 8:00 AM CDMX (Report)": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    },
+    "node:Trigger 8:05 AM CDMX (Process Queue)": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": null,
+  "activeVersionId": null,
+  "versionCounter": 77,
+  "triggerCount": 2,
+  "sourceWorkflowId": null,
+  "shared": [
+    {
+      "updatedAt": "2026-05-08T11:27:30.871Z",
+      "createdAt": "2026-05-08T11:27:30.871Z",
+      "role": "workflow:owner",
+      "workflowId": "xzBG0GIsHCUd44DC",
+      "projectId": "q5HebGTNHrfaBGjx",
+      "project": {
+        "updatedAt": "2025-06-06T10:18:49.745Z",
+        "createdAt": "2025-06-06T10:17:16.319Z",
+        "id": "q5HebGTNHrfaBGjx",
+        "name": "Esteban Betancourt <esteban.betanc@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

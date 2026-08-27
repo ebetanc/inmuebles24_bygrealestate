@@ -41,6 +41,27 @@ LRV2_CHAIN = [
     EXPORTS / "WF23_-_Delivery_Timeout_Sweeper_.json",
 ]
 
+OBSERVABLE_V2 = [
+    "WF7_morning_report.json",
+    "WF10_scraper_intake.json",
+    "WF12_owner_resolver.json",
+    "WF13_directed_notify.json",
+    "WF22_delivery_status.json",
+    "WF23_delivery_timeout_sweeper.json",
+    "WF3b_claim_handler.json",
+    "WF3c_expiry_sweeper.json",
+]
+OBSERVABLE_V2_EXPORTS = [
+    "WF7_-_Morning_Report___Night_Queue_Processing_.json",
+    "WF10_-_Scraper_Lead_Intake_.json",
+    "WF12_-_Owner_Resolver__EB_owner_table__.json",
+    "WF13_-_Directed_Owner_Notify__Cloud_API__.json",
+    "WF22_-_Delivery_Status_.json",
+    "WF23_-_Delivery_Timeout_Sweeper_.json",
+    "WF3b_-_Claim_Handler__Evolution__.json",
+    "WF3c_-_Auction_Expiry_Sweeper__Tiered__.json",
+]
+
 
 def load(path):
     return json.loads(path.read_text(encoding="utf-8-sig"))
@@ -56,6 +77,20 @@ def execute_workflow_nodes(edition):
     for node in edition.get("nodes", []):
         if isinstance(node, dict) and node.get("type") == "n8n-nodes-base.executeWorkflow":
             yield node
+
+
+def test_v2_dependencies_persist_errors_but_not_successes():
+    for directory, names in (
+        (WORKFLOWS, OBSERVABLE_V2),
+        (EXPORTS, OBSERVABLE_V2_EXPORTS),
+    ):
+        for name in names:
+            for edition in editions(load(directory / name)):
+                settings = edition.get("settings", {})
+                assert settings.get("saveDataErrorExecution") == "all", name
+                assert settings.get("saveDataSuccessExecution") == "none", name
+                if name.startswith(("WF23", "WF3c")):
+                    assert settings.get("timezone") == "America/Mexico_City", name
 
 
 class ExecuteWorkflowResourceLocatorTests(unittest.TestCase):
@@ -97,9 +132,12 @@ class ExecuteWorkflowResourceLocatorTests(unittest.TestCase):
 
     def test_wf1_to_wf3b_chain_is_wired(self):
         wf1 = load(WORKFLOWS / "WF1_inbound_router.json")
-        self.assertEqual(wf1["connections"]["Classify & Route"]["main"][0][0]["node"], "Route Message")
-        targets = [t["node"] for group in wf1["connections"]["Route Message"]["main"] for t in group]
-        self.assertIn("Call WF3b: Claim Handler", targets)
+        self.assertEqual(wf1["connections"]["Classify & Route"]["main"][0][0]["node"], "Attach V3 Capture Context")
+        self.assertEqual(wf1["connections"]["Attach V3 Capture Context"]["main"][0][0]["node"], "Switch")
+        self.assertEqual(
+            wf1["connections"]["Switch"]["main"][1][0]["node"],
+            "Call WF3b: Claim Handler",
+        )
         wf3b = load(WORKFLOWS / "WF3b_claim_handler.json")
         self.assertEqual(wf3b["connections"]["When Called by WF1"]["main"][0][0]["node"], "Is Routing V2 Claim?")
 

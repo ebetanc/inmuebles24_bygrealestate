@@ -1,0 +1,42 @@
+{
+  "checked_at_utc": "2026-08-27T19:24:52.249692+00:00",
+  "since_utc": "2026-08-27T19:01:59+00:00",
+  "meta_inbox": [
+    {
+      "processing_state": "processed",
+      "event_kind": "status",
+      "status_name": "delivered",
+      "rows": 9,
+      "first_received_at": "2026-08-27T19:17:54.930000+00:00",
+      "last_received_at": "2026-08-27T19:23:29.543000+00:00",
+      "max_attempts": 1
+    },
+    {
+      "processing_state": "processed",
+      "event_kind": "status",
+      "status_name": "read",
+      "rows": 15,
+      "first_received_at": "2026-08-27T19:17:17.009000+00:00",
+      "last_received_at": "2026-08-27T19:20:34.965000+00:00",
+      "max_attempts": 1
+    },
+    {
+      "processing_state": "processed",
+      "event_kind": "status",
+      "status_name": "sent",
+      "rows": 4,
+      "first_received_at": "2026-08-27T19:16:55.093000+00:00",
+      "last_received_at": "2026-08-27T19:18:31.610000+00:00",
+      "max_attempts": 1
+    }
+  ],
+  "delivery_callbacks": {
+    "delivered": 9,
+    "sent": 4,
+    "read_is_reconciled_by_dedicated_v3_rpc": 15
+  },
+  "total_processed_events": 28,
+  "failed_or_exhausted_events": 0,
+  "read_only": true,
+  "secrets_printed": false
+}

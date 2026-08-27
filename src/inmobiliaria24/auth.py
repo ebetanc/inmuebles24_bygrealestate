@@ -63,6 +63,11 @@ class AuthenticationError(Exception):
 
 
 _CF_TITLES = ("just a moment", "un momento")
+_HARD_BLOCK_TITLES = (
+    "attention required",
+    "access denied",
+    "you have been blocked",
+)
 
 # Set to True the first time this process rotates the proxy IP, so a run
 # never rotates more than once even if _wait_for_cloudflare is hit again
@@ -77,17 +82,30 @@ ROTATE_PROXY_CMD = ["sudo", "/usr/local/bin/rotate-proxy-ip"]
 # interstitial AND the hard "1020 / Attention Required" block page. Used by the
 # session-validity check so a block/empty page is never mistaken for a live
 # session (the old bug: it only checked the URL and silently scraped 0 leads).
-_LOGGED_OUT_TITLES = _CF_TITLES + (
-    "attention required",
-    "access denied",
-    "you have been blocked",
-)
+_LOGGED_OUT_TITLES = _CF_TITLES + _HARD_BLOCK_TITLES
+
+_CF_CLEARED_JS = """() => {
+    const t = document.title.toLowerCase();
+    return ![
+        'just a moment',
+        'un momento',
+        'attention required',
+        'access denied',
+        'you have been blocked',
+    ].some(value => t.includes(value));
+}"""
 
 
 def _is_cloudflare_page(title: str) -> bool:
-    """Return True if the page title matches a Cloudflare challenge (EN or ES)."""
+    """Return True for a solvable challenge or a hard Cloudflare block."""
     lower = title.lower()
-    return any(t in lower for t in _CF_TITLES)
+    return any(t in lower for t in _LOGGED_OUT_TITLES)
+
+
+def _is_hard_cloudflare_block(title: str) -> bool:
+    """Return True when waiting cannot clear the current Cloudflare page."""
+    lower = title.lower()
+    return any(t in lower for t in _HARD_BLOCK_TITLES)
 
 
 def _rotate_proxy_ip() -> str | None:
@@ -168,24 +186,31 @@ async def _wait_for_cloudflare(page: Page, timeout_ms: int = 90_000) -> None:
     if not _is_cloudflare_page(title):
         return
 
-    logger.info(
-        "Cloudflare challenge detected (title={!r}) — waiting up to {}s for "
-        "auto-resolve (click the checkbox if running --headful)",
-        title, timeout_ms // 1000,
-    )
+    hard_block = _is_hard_cloudflare_block(title)
+    if hard_block:
+        logger.warning(
+            "Cloudflare hard block detected (title={!r}) — rotating proxy "
+            "without waiting for a challenge that cannot auto-resolve",
+            title,
+        )
+    else:
+        logger.info(
+            "Cloudflare challenge detected (title={!r}) — waiting up to {}s for "
+            "auto-resolve (click the checkbox if running --headful)",
+            title, timeout_ms // 1000,
+        )
 
     # A challenge that stalls past the timeout usually never resolves on that
     # page load, but a fresh load on the same session often passes (observed
     # 2026-07-02: intermittent midday streaks that self-healed). Retry once
     # with a reload before giving up.
-    last_error: Exception | None = None
-    for attempt in (1, 2):
+    last_error: Exception | None = (
+        AuthenticationError(f"Cloudflare hard block: {title}") if hard_block else None
+    )
+    for attempt in (() if hard_block else (1, 2)):
         try:
             await page.wait_for_function(
-                """() => {
-                    const t = document.title.toLowerCase();
-                    return !t.includes('just a moment') && !t.includes('un momento');
-                }""",
+                _CF_CLEARED_JS,
                 timeout=timeout_ms,
             )
             await page.wait_for_load_state("domcontentloaded")
@@ -232,21 +257,25 @@ async def _wait_for_cloudflare(page: Page, timeout_ms: int = 90_000) -> None:
                 logger.info("Cloudflare challenge gone after IP rotation")
                 return
 
-            try:
-                await page.wait_for_function(
-                    """() => {
-                        const t = document.title.toLowerCase();
-                        return !t.includes('just a moment') && !t.includes('un momento');
-                    }""",
-                    timeout=timeout_ms,
+            rotated_title = await page.title()
+            if _is_hard_cloudflare_block(rotated_title):
+                last_error = AuthenticationError(
+                    f"Cloudflare hard block persisted after IP rotation: {rotated_title}"
                 )
-                await page.wait_for_load_state("domcontentloaded")
-                await asyncio.sleep(random.uniform(1.5, 3.0))
-                logger.info("Cloudflare challenge resolved after IP rotation")
-                return
-            except Exception as e:
-                last_error = e
-                logger.warning("Cloudflare challenge still stuck after IP rotation")
+                logger.warning("Cloudflare hard block persists after IP rotation")
+            else:
+                try:
+                    await page.wait_for_function(
+                        _CF_CLEARED_JS,
+                        timeout=timeout_ms,
+                    )
+                    await page.wait_for_load_state("domcontentloaded")
+                    await asyncio.sleep(random.uniform(1.5, 3.0))
+                    logger.info("Cloudflare challenge resolved after IP rotation")
+                    return
+                except Exception as e:
+                    last_error = e
+                    logger.warning("Cloudflare challenge still stuck after IP rotation")
         else:
             logger.warning("Proxy IP rotation failed — no point retrying on the same IP")
 

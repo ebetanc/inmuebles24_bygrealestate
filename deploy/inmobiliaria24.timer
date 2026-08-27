@@ -1,12 +1,10 @@
 [Unit]
-Description=Run Inmobiliaria24 scraper every 15 minutes during business hours
+Description=Run Inmobiliaria24 scraper every 15 minutes, 24/7
 
 [Timer]
-# Every 15 minutes from 8am to 7:45pm, plus a final run at 8pm (Mexico City)
-OnCalendar=*-*-* 08..19:0/15:00 America/Mexico_City
-OnCalendar=*-*-* 20:00:00 America/Mexico_City
-# Randomize start within 60s to avoid exact-second races
-RandomizedDelaySec=60
+# Capture always runs; only notification routing changes during the night window.
+OnCalendar=*-*-* *:0/15:00 America/Mexico_City
+RandomizedDelaySec=5
 Persistent=true
 
 [Install]

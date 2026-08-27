@@ -32,6 +32,8 @@ from easybroker.browser import launch_chrome
 from easybroker.config import EBSettings
 from easybroker.inbox import attend_lead, dump_buzon
 from easybroker.supa import (
+    claim_v3_easybroker_effects,
+    finish_v3_easybroker_effect,
     fetch_pending_attend,
     finish_attend_attempt,
     list_pending_attend,
@@ -42,6 +44,96 @@ logger.remove()
 logger.add(sys.stderr, level="INFO", format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
 logger.add("logs/eb_run.log", level="DEBUG", rotation="10 MB", retention="7 days",
            format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
+
+
+async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int, bool]:
+    """Execute one request-level V3 effect step with exact-request evidence.
+
+    One lease handles one step per invocation. This deliberately lets the
+    database release a lease after recording the note before a later claim
+    performs Atendida, so status can never outrun durable note evidence.
+    """
+    try:
+        claims = await claim_v3_easybroker_effects(settings, limit=limit)
+    except Exception as exc:
+        logger.warning("EasyBroker V3 effect claim failed: {}", exc)
+        return 0, True
+
+    completed = 0
+    failed = False
+    for claim in claims:
+        request_id = int(claim["eb_request_id"])
+        responsible = str(claim.get("responsible_first_name") or "").strip()
+        lease_token = str(claim["lease_token"])
+        note_text = f"RESPONSABLE: {responsible}"
+
+        if claim.get("note_due"):
+            result = await attend_lead(
+                page,
+                request_id=request_id,
+                agent_name=responsible,
+                note_text=note_text,
+                note_done=False,
+                status_done=True,
+                allow_legacy_note=False,
+            )
+            note_ok = bool(result.get("found") and result.get("note_ok"))
+            evidence = {
+                "eb_request_id": str(request_id),
+                "note": note_text,
+                "note_written": bool(result.get("note_changed")),
+                "reconciled_existing": bool(note_ok and not result.get("note_changed")),
+            }
+            try:
+                saved = await finish_v3_easybroker_effect(
+                    settings,
+                    request_id=request_id,
+                    lease_token=lease_token,
+                    step="note",
+                    ok=note_ok,
+                    evidence=evidence,
+                )
+                if not saved.get("ok"):
+                    failed = True
+            except Exception as exc:
+                logger.warning("EasyBroker V3 note evidence failed for {}: {}", request_id, exc)
+                failed = True
+            continue
+
+        if claim.get("attended_due"):
+            result = await attend_lead(
+                page,
+                request_id=request_id,
+                agent_name=responsible,
+                note_text=note_text,
+                note_done=True,
+                status_done=False,
+                allow_legacy_note=False,
+            )
+            status_ok = bool(result.get("found") and result.get("status_ok"))
+            evidence = {
+                "eb_request_id": str(request_id),
+                "status": "Atendida",
+                "status_changed": bool(result.get("status_changed")),
+            }
+            try:
+                saved = await finish_v3_easybroker_effect(
+                    settings,
+                    request_id=request_id,
+                    lease_token=lease_token,
+                    step="attended",
+                    ok=status_ok,
+                    evidence=evidence,
+                )
+                if saved.get("ok"):
+                    completed += 1
+                else:
+                    failed = True
+            except Exception as exc:
+                logger.warning("EasyBroker V3 Atendida evidence failed for {}: {}", request_id, exc)
+                failed = True
+
+    return completed, failed
 
 
 def _parse_args() -> argparse.Namespace:
@@ -105,6 +197,17 @@ async def async_main(args: argparse.Namespace) -> int:
             # Default: poll + attend each pending EB lead.
             gate = os.environ.get("EB_MARK_ATTENDED", "").strip() == "1"
             reconcile_failed = False
+            if settings.v3_inbox_enabled:
+                # V3 ingestion/correlation is durable and idempotent. The
+                # external EasyBroker mutations remain behind the existing
+                # explicit gate, preserving the V2 safe-mode behavior.
+                reconcile_failed = await reconcile_i24_easybroker_requests(settings) is None
+                if not gate:
+                    print("EasyBroker V3 inbox reconciled; EB_MARK_ATTENDED!=1 — effect worker paused.")
+                    return 1 if reconcile_failed else 0
+                completed, effects_failed = await _run_v3_effect_worker(settings, page)
+                print(f"V3 EasyBroker effects completed: {completed}; failures: {int(effects_failed)}")
+                return 1 if (reconcile_failed or effects_failed) else 0
             if gate:
                 reconcile_failed = await reconcile_i24_easybroker_requests(settings) is None
             leads = (await fetch_pending_attend(settings) if gate

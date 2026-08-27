@@ -1,0 +1,21 @@
+{
+  "applied_at": "2026-08-27T18:53:21.806328+00:00",
+  "project_ref": "wkaeutndwawkdhswisqe",
+  "version": "20260827184755",
+  "name": "lead_routing_v3_safe_offer_claim",
+  "sql_sha256": "52a4ff33f1dc5094c12c07ef11e69eb332b1c59283eb99b004e61d79224128bb",
+  "already_applied": false,
+  "committed": true,
+  "verification": {
+    "security_invoker": true,
+    "anon_execute": false,
+    "authenticated_execute": false,
+    "service_role_execute": true,
+    "required_guards": 6,
+    "zero_limit_rows": 0,
+    "old_candidate_rows": 0,
+    "safe_candidate_rows": 0,
+    "function_definition_sha256": "ac290a33f44da351c769ddf7267904d1e8a0d0c20817ddabc27ec3f3cd2b4b4f"
+  },
+  "secrets_printed": false
+}

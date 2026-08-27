@@ -17,6 +17,12 @@ class Settings:
 
     # Webhook (interim CRM adapter)
     webhook_url: str = ""
+    webhook_token: str = field(default="", repr=False)
+
+    # Lead Routing V3. Disabled by default so existing V2 deployments keep
+    # their behavior until the database and downstream workflows are ready.
+    lead_routing_v3_enabled: bool = False
+    lead_routing_account_key: str = "default"
 
     # Monitoring — Telegram (errors only)
     telegram_bot_token: str = ""
@@ -45,13 +51,29 @@ class Settings:
                 f"Copy .env.example to .env and fill in your credentials."
             )
 
+        webhook_url = os.environ.get("WEBHOOK_URL", "").strip()
+        webhook_token = os.environ.get("I24_WEBHOOK_TOKEN", "").strip()
+        if webhook_url and not webhook_url.startswith("https://"):
+            raise ValueError("WEBHOOK_URL must use HTTPS")
+        if webhook_url and not webhook_token:
+            raise ValueError("I24_WEBHOOK_TOKEN is required when WEBHOOK_URL is configured")
+
         return cls(
             email=email,
             password=password,
             state_db_path=Path(
                 os.environ.get("STATE_DB_PATH", "data/state.db")
             ),
-            webhook_url=os.environ.get("WEBHOOK_URL", "").strip(),
+            webhook_url=webhook_url,
+            webhook_token=webhook_token,
+            lead_routing_v3_enabled=os.environ.get(
+                "LEAD_ROUTING_V3_ENABLED", ""
+            ).strip().lower() in ("1", "true", "yes"),
+            lead_routing_account_key=(
+                os.environ.get("LEAD_ROUTING_ACCOUNT_KEY")
+                or os.environ.get("EASYBROKER_ACCOUNT_KEY")
+                or "default"
+            ).strip() or "default",
             telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
             telegram_alert_chat_id=os.environ.get("TELEGRAM_ALERT_CHAT_ID", "").strip(),
             webhook_health_url=os.environ.get(

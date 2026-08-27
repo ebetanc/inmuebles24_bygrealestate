@@ -267,9 +267,9 @@
     <section class="hero" id="inicio">
       <div class="shell hero-grid">
         <div>
-          <p class="eyebrow">Proceso operativo acordado</p>
+          <p class="eyebrow">Entrega técnica completada y validada</p>
           <h1>Una oportunidad. Un responsable. Evidencia completa.</h1>
-          <p class="hero-copy">Flujo detallado para detectar, ofrecer, escalar y cerrar cada consulta sin doble asignación.</p>
+          <p class="hero-copy">Flujo construido y probado para detectar, ofrecer, escalar y cerrar cada consulta sin doble asignación. La activación se realizará de forma gradual y controlada.</p>
           <div class="hero-actions">
             <a class="button" href="#flujo">Ver flujo principal</a>
             <a class="button secondary" href="#escenarios">Explorar escenarios</a>
@@ -400,7 +400,7 @@
           </details>
           <details class="scenario" data-category="normal">
             <summary><span class="scenario-title">Misma persona y misma propiedad</span><span class="scenario-summary">La repetición no abre una segunda oportunidad.</span><span class="status-label">Confirmado</span></summary>
-            <div class="scenario-body"><dl><dt>Regla</dt><dd>Unir con la oportunidad existente por persona y propiedad.</dd><dt>Resultado</dt><dd>No se reinicia competencia ni se crea doble asignación.</dd><dt>Pendiente</dt><dd>Ventana temporal exacta y precedencia cuando faltan identificadores.</dd></dl></div>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>Unir con la oportunidad existente por persona y propiedad.</dd><dt>Resultado</dt><dd>No se reinicia competencia ni se crea doble asignación.</dd><dt>Control</dt><dd>Se priorizan identificadores confiables del portal, correo y teléfono internacional validado.</dd></dl></div>
           </details>
           <details class="scenario" data-category="normal">
             <summary><span class="scenario-title">Misma persona, otra propiedad</span><span class="scenario-summary">El interés adicional sí crea otra oportunidad.</span><span class="status-label">Confirmado</span></summary>
@@ -416,31 +416,31 @@
           </details>
           <details class="scenario" data-category="exception">
             <summary><span class="scenario-title">Aceptaciones simultáneas</span><span class="scenario-summary">Dos respuestas intentan tomar la misma oportunidad.</span><span class="status-label">Confirmado</span></summary>
-            <div class="scenario-body"><dl><dt>Regla</dt><dd>La primera aceptación válida gana.</dd><dt>Resultado</dt><dd>Las demás respuestas se registran sin cambiar al responsable.</dd><dt>Pendiente</dt><dd>Texto exacto de confirmación para quien no obtuvo la oportunidad.</dd></dl></div>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>La primera aceptación válida gana.</dd><dt>Resultado</dt><dd>Las demás respuestas se registran sin cambiar al responsable.</dd><dt>Control</dt><dd>La asignación queda protegida contra respuestas simultáneas, repetidas o tardías.</dd></dl></div>
           </details>
           <details class="scenario" data-category="exception">
             <summary><span class="scenario-title">Respuesta tardía</span><span class="scenario-summary">El ejecutivo responde después del vencimiento.</span><span class="status-label">Confirmado</span></summary>
-            <div class="scenario-body"><dl><dt>Regla</dt><dd>La respuesta no cambia al responsable que ya ganó la asignación.</dd><dt>Control</dt><dd>Registrar respuesta tardía para medir comportamiento y explicar el resultado.</dd><dt>Pendiente</dt><dd>Canal y redacción de la notificación de rechazo.</dd></dl></div>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>La respuesta no cambia al responsable que ya ganó la asignación.</dd><dt>Control</dt><dd>La respuesta tardía queda registrada como rechazada y no modifica la conversación.</dd><dt>Evidencia</dt><dd>La prueba real confirmó que un intento vencido no reasigna la oportunidad.</dd></dl></div>
           </details>
           <details class="scenario" data-category="exception">
-            <summary><span class="scenario-title">Falla de entrega por WhatsApp</span><span class="scenario-summary">No puede comprobarse la entrega al ejecutivo.</span><span class="status-label pending">Pendiente técnico</span></summary>
-            <div class="scenario-body"><dl><dt>Confirmado</dt><dd>El SLA se mide desde la entrega, no desde el intento de envío.</dd><dt>Criterio</dt><dd>No iniciar reloj sin evidencia de entrega. Mantener captura y evitar pérdida del caso.</dd><dt>Por definir</dt><dd>Número de reintentos, espera y umbral para derivar a guardia.</dd></dl></div>
+            <summary><span class="scenario-title">Falla de entrega por WhatsApp</span><span class="scenario-summary">No puede comprobarse la entrega al ejecutivo.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>El SLA se mide desde la entrega, no desde el intento de envío.</dd><dt>Recuperación</dt><dd>Una falla o falta de confirmación activa el siguiente nivel de cobertura sin perder el caso.</dd><dt>Resultado</dt><dd>El contacto pasa en orden a guardia primaria, respaldo o alerta manual.</dd></dl></div>
           </details>
           <details class="scenario" data-category="exception">
-            <summary><span class="scenario-title">EasyBroker sin tag</span><span class="scenario-summary">La propiedad existe, pero no ofrece responsable preferente.</span><span class="status-label pending">Pendiente técnico</span></summary>
-            <div class="scenario-body"><dl><dt>Confirmado</dt><dd>El primer tag es la fuente del ejecutivo responsable cuando existe.</dd><dt>Criterio seguro</dt><dd>No inventar responsable. Mantener trazabilidad y resolver por cobertura operativa.</dd><dt>Por definir</dt><dd>Si entra directo a guardia o queda como caso manual alertado.</dd></dl></div>
+            <summary><span class="scenario-title">EasyBroker sin tag</span><span class="scenario-summary">La propiedad existe, pero no ofrece responsable preferente.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>El primer tag es la fuente del ejecutivo responsable cuando existe.</dd><dt>Criterio seguro</dt><dd>No inventar responsable. Mantener trazabilidad y resolver por cobertura operativa.</dd><dt>Resultado</dt><dd>Se intenta guardia primaria, luego respaldo y finalmente una alerta manual.</dd></dl></div>
           </details>
           <details class="scenario" data-category="exception">
-            <summary><span class="scenario-title">Propiedad sin código EB</span><span class="scenario-summary">No es posible enlazar de forma confiable la propiedad.</span><span class="status-label pending">Pendiente técnico</span></summary>
-            <div class="scenario-body"><dl><dt>Riesgo</dt><dd>Asignar con una coincidencia ambigua puede escribir en la conversación incorrecta.</dd><dt>Criterio seguro</dt><dd>No completar automáticamente un enlace incierto.</dd><dt>Por definir</dt><dd>Cola manual, reglas de coincidencia y tiempo máximo de resolución.</dd></dl></div>
+            <summary><span class="scenario-title">Propiedad sin código EB</span><span class="scenario-summary">No es posible enlazar de forma confiable la propiedad.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Riesgo</dt><dd>Asignar con una coincidencia ambigua puede escribir en la conversación incorrecta.</dd><dt>Criterio seguro</dt><dd>No completar automáticamente un enlace incierto.</dd><dt>Resultado</dt><dd>El caso queda identificado para revisión manual, sin inventar responsable ni propiedad.</dd></dl></div>
           </details>
           <details class="scenario" data-category="recovery">
             <summary><span class="scenario-title">Caída crítica de n8n, Supabase o scraper</span><span class="scenario-summary">Un componente central impide el flujo normal.</span><span class="status-label">Modo seguro confirmado</span></summary>
-            <div class="scenario-body"><dl><dt>Regla</dt><dd>Conservar la captura y enviar casos nuevos directo a guardia.</dd><dt>Alerta</dt><dd>Dashboard y correo muestran casos sin asignar sin asignarlos por sí mismos.</dd><dt>Por definir</dt><dd>Umbrales particulares, detección de salud y política de reintentos por componente.</dd></dl></div>
+            <div class="scenario-body"><dl><dt>Regla</dt><dd>Conservar la captura y enviar casos nuevos directo a guardia.</dd><dt>Alerta</dt><dd>Dashboard y correo muestran casos sin asignar sin asignarlos por sí mismos.</dd><dt>Control</dt><dd>La entrada a modo seguro queda registrada y la salida exige verificación de salud y autorización.</dd></dl></div>
           </details>
           <details class="scenario" data-category="recovery">
-            <summary><span class="scenario-title">Recuperación del servicio</span><span class="scenario-summary">El componente afectado vuelve a estar disponible.</span><span class="status-label pending">Pendiente técnico</span></summary>
-            <div class="scenario-body"><dl><dt>Objetivo</dt><dd>Reconciliar capturas preservadas sin duplicar ofertas ni cambiar responsables finales.</dd><dt>Control</dt><dd>Comparar estado actual, evidencia de entrega y asignación antes de reanudar.</dd><dt>Por definir</dt><dd>Orden de reproceso, lotes, límite de antigüedad y autorización de salida del modo seguro.</dd></dl></div>
+            <summary><span class="scenario-title">Recuperación del servicio</span><span class="scenario-summary">El componente afectado vuelve a estar disponible.</span><span class="status-label">Confirmado</span></summary>
+            <div class="scenario-body"><dl><dt>Objetivo</dt><dd>Reconciliar capturas preservadas sin duplicar ofertas ni cambiar responsables finales.</dd><dt>Control</dt><dd>Comparar estado actual, evidencia de entrega y asignación antes de reanudar.</dd><dt>Salida</dt><dd>El modo normal se restablece únicamente con salud verificada y autorización registrada.</dd></dl></div>
           </details>
         </div>
       </div>
@@ -450,7 +450,7 @@
       <div class="shell">
         <div class="section-intro reveal">
           <h2>Matriz de estado, responsabilidad y evidencia</h2>
-          <p>La matriz alinea operación, temporizadores y prueba auditable. Los SLA no confirmados quedan expresamente abiertos.</p>
+          <p>La matriz alinea operación, temporizadores y prueba auditable. Cada reloj inicia únicamente cuando existe evidencia real de entrega.</p>
         </div>
         <div class="matrix-wrap" role="region" aria-label="Matriz operativa" tabindex="0">
           <table>
@@ -458,13 +458,13 @@
             <tbody>
               <tr><td>Capturada</td><td>Sistema de monitoreo</td><td>Revisión cada 15 min</td><td>Canal, persona, propiedad, hora y origen</td><td>Deduplicar</td></tr>
               <tr><td>En silencio</td><td>Orquestación</td><td>Hasta 08:05</td><td>Hora de entrada y activación prevista</td><td>Activar atención</td></tr>
-              <tr><td>Resuelta</td><td>Orquestación y EasyBroker</td><td>Pendiente técnico</td><td>Código EB, tags y ejecutivo elegido</td><td>Preparar entrega</td></tr>
+              <tr><td>Resuelta</td><td>Orquestación y EasyBroker</td><td>Resolución automática</td><td>Código EB, tags y ejecutivo elegido</td><td>Preparar entrega</td></tr>
               <tr><td>Entregada</td><td>Ejecutivo preferente</td><td>5 min desde entrega</td><td>ID de mensaje, entrega y vencimiento</td><td>Aceptar o escalar</td></tr>
-              <tr><td>Escalada</td><td>Guardia primaria</td><td>Pendiente técnico</td><td>Motivo, hora y destinatario</td><td>Aceptar o pasar a respaldo</td></tr>
-              <tr><td>En respaldo</td><td>Guardia de respaldo</td><td>Pendiente técnico</td><td>Falla primaria y nueva entrega</td><td>Aceptar o alertar</td></tr>
+              <tr><td>Escalada</td><td>Guardia primaria</td><td>5 min desde entrega</td><td>Motivo, hora y destinatario</td><td>Aceptar o pasar a respaldo</td></tr>
+              <tr><td>En respaldo</td><td>Guardia de respaldo</td><td>5 min desde entrega</td><td>Falla primaria y nueva entrega</td><td>Aceptar o alertar</td></tr>
               <tr><td>Asignada</td><td>Primer aceptante válido</td><td>Inmediato tras validación</td><td>Aceptación ganadora y respuestas rechazadas</td><td>Cerrar en EasyBroker</td></tr>
-              <tr><td>Atendida</td><td>Responsable final</td><td>Pendiente técnico</td><td>Nota en conversación exacta y estatus Atendida</td><td>Seguimiento operativo</td></tr>
-              <tr><td>Modo seguro</td><td>Guardia y operación</td><td>Pendiente técnico</td><td>Falla, captura preservada, alertas y derivación</td><td>Reconciliar al recuperar</td></tr>
+              <tr><td>Atendida</td><td>Responsable final</td><td>Registro por conversación</td><td>Nota en conversación exacta y estatus Atendida</td><td>Seguimiento operativo</td></tr>
+              <tr><td>Modo seguro</td><td>Guardia y operación</td><td>Hasta recuperación autorizada</td><td>Falla, captura preservada, alertas y derivación</td><td>Reconciliar al recuperar</td></tr>
             </tbody>
           </table>
         </div>
@@ -501,19 +501,20 @@
       <div class="shell">
         <div class="section-intro reveal"><h2>Despliegue con puertas de control</h2><p>El avance depende de evidencia real. Cada etapa tiene una condición clara antes de ampliar exposición.</p></div>
         <div class="rollout">
-          <article class="phase"><span class="phase-time">Preparación</span><h3>Validar antes del primer lead</h3><ul><li>Confirmar ejecutivos, tags y guardias.</li><li>Probar entrega y aceptación concurrente.</li><li>Simular horario nocturno y modo seguro.</li><li>Verificar escritura en conversación exacta.</li></ul><div class="gate">Puerta: pruebas críticas aprobadas y pendientes operativos resueltos.</div></article>
-          <article class="phase"><span class="phase-time">Primeros 7 días</span><h3>Revisión diaria</h3><ul><li>Reconciliar capturas contra oportunidades.</li><li>Revisar entregas, vencimientos y tardías.</li><li>Auditar nota EasyBroker y Atendida.</li><li>Ajustar solo con evidencia registrada.</li></ul><div class="gate">Puerta: cero casos perdidos y asignación única sostenida.</div></article>
-          <article class="phase"><span class="phase-time">Día 14 o 100 oportunidades</span><h3>Evaluación formal</h3><ul><li>Analizar conversión por tramo del flujo.</li><li>Medir carga de guardias y concentración.</li><li>Cerrar pendientes de SLA y recuperación.</li><li>Decidir continuidad, ajuste o expansión.</li></ul><div class="gate">Puerta: decisión conjunta basada en KPIs y excepciones reales.</div></article>
+          <article class="phase"><span class="phase-time">Completado</span><h3>Construcción y prueba real</h3><ul><li>Flujo, seguridad y respaldos implementados.</li><li>Robot de Inmuebles24 actualizado.</li><li>Entrega y botón de WhatsApp comprobados.</li><li>Asignación única e intentos tardíos validados.</li></ul><div class="gate">Puerta superada: entrega técnica y E2E aprobados.</div></article>
+          <article class="phase"><span class="phase-time">14 y 15 de agosto</span><h3>Observación silenciosa</h3><ul><li>Comparar decisiones sin enviar mensajes.</li><li>Revisar horarios, propiedades y responsables.</li><li>Documentar cualquier diferencia inesperada.</li><li>Mantener el proceso actual sin cambios.</li></ul><div class="gate">Puerta: tres observaciones válidas y reporte final.</div></article>
+          <article class="phase"><span class="phase-time">24 horas</span><h3>Piloto de una propiedad</h3><ul><li>Una propiedad sana y una asesora autorizada.</li><li>Revisión de entregas, tiempos y asignaciones.</li><li>Cero mensajes masivos o doble asignación.</li><li>Restauración inmediata ante incidente importante.</li></ul><div class="gate">Puerta: aprobación de la cliente y piloto sin incidentes críticos.</div></article>
+          <article class="phase"><span class="phase-time">Siguiente etapa</span><h3>Ampliación gradual</h3><ul><li>Agregar propiedades sanas en grupos pequeños.</li><li>Completar responsables faltantes del catálogo.</li><li>Revisar métricas y excepciones cada día.</li><li>Decidir expansión final con evidencia real.</li></ul><div class="gate">Puerta: estabilidad sostenida y decisión conjunta.</div></article>
         </div>
       </div>
     </section>
 
     <section class="tint" id="decisiones">
       <div class="shell">
-        <div class="section-intro reveal"><h2>Decisiones confirmadas y pendientes</h2><p>Separar ambos grupos protege el alcance: el equipo implementa lo acordado y valida lo que todavía puede cambiar.</p></div>
+        <div class="section-intro reveal"><h2>Decisiones confirmadas y próximos pasos</h2><p>La parte técnica está terminada. Lo pendiente corresponde a observación, autorización y activación gradual.</p></div>
         <div class="decisions">
           <article class="decision-panel confirmed"><h3>Confirmado</h3><ul><li>Monitoreo de tres canales cada 15 minutos.</li><li>Deduplicación por persona y propiedad.</li><li>Silencio de 20:00 a 08:00 y arranque 08:05.</li><li>Código EB y primer tag para preferencia.</li><li>Botón Tomar prospecto y SLA de 5 minutos desde entrega.</li><li>Contactado al iniciar y primera aceptación válida.</li><li>Guardia primaria, respaldo y respuesta tardía sin reasignación.</li><li>Nota en conversación exacta y estatus Atendida.</li><li>Telemetría, revisión diaria y evaluación formal.</li><li>Modo seguro con captura preservada y derivación a guardia.</li></ul></article>
-          <article class="decision-panel pending"><h3>Pendiente de validación</h3><ul><li>SLA de guardia primaria y respaldo.</li><li>Política de reintentos de WhatsApp y umbral de falla.</li><li>Tratamiento final de propiedad sin código EB.</li><li>Tratamiento final de propiedad sin tag.</li><li>Umbrales de salud para n8n, Supabase y scraper.</li><li>Orden de reconciliación después de una recuperación.</li><li>Mensajes exactos para aceptación perdida o tardía.</li><li>Roles autorizados para activar y cerrar modo seguro.</li><li>Ventana temporal y precedencia de identificadores para deduplicación.</li></ul></article>
+          <article class="decision-panel pending"><h3>Próximos pasos</h3><ul><li>Completar las dos observaciones silenciosas restantes.</li><li>Presentar el reporte comparativo a la cliente.</li><li>Autorizar una propiedad y una asesora para el piloto.</li><li>Ejecutar el piloto controlado durante 24 horas.</li><li>Completar los responsables faltantes en 47 propiedades.</li><li>Ampliar por grupos pequeños únicamente si las métricas son sanas.</li></ul></article>
         </div>
       </div>
     </section>

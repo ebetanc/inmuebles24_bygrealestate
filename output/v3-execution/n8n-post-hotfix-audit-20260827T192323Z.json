@@ -1,0 +1,41 @@
+{
+  "checked_at_utc": "2026-08-27T19:23:23.336052+00:00",
+  "since_utc": "2026-08-27T19:15:52.000+00:00",
+  "workflows": {
+    "WF21": {
+      "id": "He95yJflKVspGFyb",
+      "active": true,
+      "version_id": "67cba6ae-e466-4c13-8ee3-152c11a71cdc",
+      "active_version_id": "67cba6ae-e466-4c13-8ee3-152c11a71cdc",
+      "published_matches_active": true,
+      "per_signature_throttle": true,
+      "global_cap_3_per_15_minutes": true
+    },
+    "WF22": {
+      "id": "Z89IQDw1fgWlqXEW",
+      "active": true,
+      "version_id": "19f8ecec-6b65-4ee2-88ba-0bcee9651d0f",
+      "active_version_id": "19f8ecec-6b65-4ee2-88ba-0bcee9651d0f",
+      "published_matches_active": true,
+      "empty_payload_ack": true,
+      "read_reconciliation": true,
+      "processing_500": true,
+      "error_output_nodes": 7,
+      "registered_methods": ["GET", "POST"]
+    },
+    "WF23": {
+      "id": "MjfHw3tYE2qYgJfM",
+      "active": false,
+      "version_id": "a8b7db05-58d1-4c31-a03b-c4eb1bddc9f4",
+      "active_version_id": null
+    }
+  },
+  "executions_since_hotfix": {
+    "WF21": 0,
+    "WF22": 0,
+    "WF23": 0
+  },
+  "latest_backup": "/root/backups/wf22-signature-fix-pre-20260827T191552Z",
+  "read_only": true,
+  "secrets_printed": false
+}

@@ -1,261 +1,346 @@
 {
-    "updatedAt":  "2026-07-06T19:29:58.000Z",
-    "createdAt":  "2026-06-17T21:14:07.974Z",
-    "id":  "w7yJr7naWoxPq6Pw",
-    "name":  "WF12 - Owner Resolver (EB owner table)",
-    "description":  null,
-    "active":  true,
-    "isArchived":  false,
-    "nodes":  [
-                  {
-                      "parameters":  {
-                                         "inputSource":  "passthrough"
-                                     },
-                      "id":  "c1c2c3c4-0001-4000-8000-000000000001",
-                      "name":  "When Called",
-                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
-                      "typeVersion":  1,
-                      "position":  [
-                                       200,
-                                       300
-                                   ],
-                      "notes":  "Input: property_public_id, conversation_id, opportunity_id. Output: resolved, reason, failure_detail, observed_tag and validated owner. Strict tags[0]; unresolved routes to primary guard."
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "GET",
-                                         "url":  "={{ $env.EASYBROKER_BASE }}/properties/{{ $json.property_public_id }}",
-                                         "sendHeaders":  true,
-                                         "headerParameters":  {
-                                                                  "parameters":  [
-                                                                                     {
-                                                                                         "name":  "X-Authorization",
-                                                                                         "value":  "={{ $env.EASYBROKER_API_KEY }}"
-                                                                                     },
-                                                                                     {
-                                                                                         "name":  "Accept",
-                                                                                         "value":  "application/json"
-                                                                                     }
-                                                                                 ]
-                                                              },
-                                         "options":  {
-                                                         "timeout":  15000
-                                                     }
-                                     },
-                      "id":  "c1c2c3c4-0002-4000-8000-000000000002",
-                      "name":  "Fetch EasyBroker Property",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.2,
-                      "position":  [
-                                       440,
-                                       300
-                                   ],
-                      "continueOnFail":  true,
-                      "alwaysOutputData":  true
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const trig = $(\u0027When Called\u0027).first().json;\nconst resp = $input.first().json || {};\nconst tags = Array.isArray(resp.tags) ? resp.tags : [];\nconst firstTag = tags.length ? String(tags[0]) : null;\nconst tags_pg = firstTag === null ? \u0027{}\u0027 : \u0027{\"\u0027 + firstTag.replace(/\\\\/g, \u0027\\\\\\\\\u0027).replace(/\"/g, \u0027\\\\\"\u0027) + \u0027\"}\u0027;\nreturn [{ json: { ...trig, tags, observed_tag: firstTag, tags_pg } }];"
-                                     },
-                      "id":  "c1c2c3c4-0003-4000-8000-000000000003",
-                      "name":  "Extract Tags",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       680,
-                                       300
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT * FROM public.resolve_first_property_tag($1, $2::text[]);",
-                                         "options":  {
-                                                         "queryReplacement":  "={{ $json.property_public_id }},={{ $json.tags_pg }}"
-                                                     }
-                                     },
-                      "id":  "c1c2c3c4-0004-4000-8000-000000000004",
-                      "name":  "Resolve Owner Agent",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       920,
-                                       300
-                                   ],
-                      "credentials":  {
-                                          "postgres":  {
-                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-                                                           "name":  "Postgres - Supabase"
-                                                       }
-                                      },
-                      "alwaysOutputData":  true
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const ctx = $(\u0027Extract Tags\u0027).first().json;\nconst row = $input.first().json || {};\nreturn [{ json: {\n  conversation_id: ctx.conversation_id || null,\n  opportunity_id: ctx.opportunity_id || null,\n  property_public_id: ctx.property_public_id || null,\n  tags: ctx.tags,\n  observed_tag: row.observed_tag || ctx.observed_tag || null,\n  resolved: row.resolved === true,\n  reason: row.reason || \u0027missing_owner_data\u0027,\n  failure_detail: row.failure_detail || null,\n  owner_agent_id: row.owner_agent_id || null,\n  owner_name: row.owner_name || null,\n  owner_number: row.owner_number || null\n} }];"
-                                     },
-                      "id":  "c1c2c3c4-0005-4000-8000-000000000005",
-                      "name":  "Shape Output",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       1160,
-                                       300
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "const input = $input.first().json;\nconst code = String(input.property_public_id || \u0027\u0027).trim().toUpperCase();\nreturn [{ json: { ...input, property_public_id: code, valid_eb_code: /^EB-[A-Z0-9]{4,}$/.test(code) } }];"
-                                     },
-                      "id":  "lrv2-007-validate-eb-code",
-                      "name":  "Validate EB Code",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       320,
-                                       300
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "options":  {
-                                                                            "caseSensitive":  true,
-                                                                            "typeValidation":  "strict",
-                                                                            "leftValue":  ""
-                                                                        },
-                                                            "conditions":  [
-                                                                               {
-                                                                                   "id":  "valid-eb-code-condition",
-                                                                                   "leftValue":  "={{ $json.valid_eb_code }}",
-                                                                                   "rightValue":  true,
-                                                                                   "operator":  {
-                                                                                                    "type":  "boolean",
-                                                                                                    "operation":  "true"
-                                                                                                }
-                                                                               }
-                                                                           ],
-                                                            "combinator":  "and"
-                                                        }
-                                     },
-                      "id":  "lrv2-007-valid-eb-code",
-                      "name":  "Valid EB Code?",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2.2,
-                      "position":  [
-                                       400,
-                                       300
-                                   ]
-                  }
-              ],
-    "connections":  {
-                        "When Called":  {
-                                            "main":  [
-                                                         [
-                                                             {
-                                                                 "node":  "Validate EB Code",
-                                                                 "type":  "main",
-                                                                 "index":  0
-                                                             }
-                                                         ]
-                                                     ]
-                                        },
-                        "Fetch EasyBroker Property":  {
-                                                          "main":  [
-                                                                       [
-                                                                           {
-                                                                               "node":  "Extract Tags",
-                                                                               "type":  "main",
-                                                                               "index":  0
-                                                                           }
-                                                                       ]
-                                                                   ]
-                                                      },
-                        "Extract Tags":  {
-                                             "main":  [
-                                                          [
-                                                              {
-                                                                  "node":  "Resolve Owner Agent",
-                                                                  "type":  "main",
-                                                                  "index":  0
-                                                              }
-                                                          ]
-                                                      ]
-                                         },
-                        "Resolve Owner Agent":  {
-                                                    "main":  [
-                                                                 [
-                                                                     {
-                                                                         "node":  "Shape Output",
-                                                                         "type":  "main",
-                                                                         "index":  0
-                                                                     }
-                                                                 ]
-                                                             ]
-                                                },
-                        "Validate EB Code":  {
-                                                 "main":  [
-                                                              [
-                                                                  {
-                                                                      "node":  "Valid EB Code?",
-                                                                      "type":  "main",
-                                                                      "index":  0
-                                                                  }
-                                                              ]
-                                                          ]
-                                             },
-                        "Valid EB Code?":  {
-                                               "main":  [
-                                                            [
-                                                                {
-                                                                    "node":  "Fetch EasyBroker Property",
-                                                                    "type":  "main",
-                                                                    "index":  0
-                                                                }
-                                                            ],
-                                                            [
-                                                                {
-                                                                    "node":  "Extract Tags",
-                                                                    "type":  "main",
-                                                                    "index":  0
-                                                                }
-                                                            ]
-                                                        ]
-                                           }
-                    },
-    "settings":  {
-                     "saveManualExecutions":  true,
-                     "callerPolicy":  "workflowsFromSameOwner",
-                     "executionOrder":  "v1",
-                     "errorWorkflow":  "He95yJflKVspGFyb"
-                 },
-    "staticData":  null,
-    "meta":  null,
-    "pinData":  null,
-    "versionId":  "811e1bec-3b54-4ba9-8716-146bc7fa2af5",
-    "activeVersionId":  "811e1bec-3b54-4ba9-8716-146bc7fa2af5",
-    "versionCounter":  42,
-    "triggerCount":  0,
-    "tags":  [
-
-             ],
-    "shared":  [
-                   {
-                       "updatedAt":  "2026-06-17T21:14:07.980Z",
-                       "createdAt":  "2026-06-17T21:14:07.980Z",
-                       "role":  "workflow:owner",
-                       "workflowId":  "w7yJr7naWoxPq6Pw",
-                       "projectId":  "q5HebGTNHrfaBGjx",
-                       "project":  {
-                                       "updatedAt":  "2025-06-06T10:18:49.745Z",
-                                       "createdAt":  "2025-06-06T10:17:16.319Z",
-                                       "id":  "q5HebGTNHrfaBGjx",
-                                       "name":  "Esteban Betancourt \u003cesteban.betanc@gmail.com\u003e",
-                                       "type":  "personal",
-                                       "icon":  null,
-                                       "description":  null,
-                                       "creatorId":  "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
-                                   }
-                   }
-               ]
+  "updatedAt": "2026-07-06T19:29:58.000Z",
+  "createdAt": "2026-06-17T21:14:07.974Z",
+  "id": "w7yJr7naWoxPq6Pw",
+  "name": "WF12 - Owner Resolver (EB owner table)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "c1c2c3c4-0001-4000-8000-000000000001",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "notes": "Input: property_public_id, conversation_id, opportunity_id. Output: resolved, reason, failure_detail, observed_tag and validated owner. Strict tags[0]; unresolved routes to primary guard."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.EASYBROKER_BASE }}/properties/{{ $json.property_public_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Authorization",
+              "value": "={{ $env.EASYBROKER_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "c1c2c3c4-0002-4000-8000-000000000002",
+      "name": "Fetch EasyBroker Property",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH recorded AS (\n  INSERT INTO public.lead_routing_events (\n    opportunity_id, event_type, routing_tier, idempotency_key, metadata\n  )\n  SELECT $1::bigint, 'owner_lookup_failed', NULL, $2,\n         jsonb_build_object(\n           'reason', 'easybroker_lookup_failed_after_retries',\n           'property_public_id', NULLIF($3, '')\n         )\n  WHERE $1::bigint IS NOT NULL\n  ON CONFLICT (idempotency_key) DO NOTHING\n)\nSELECT $4::uuid AS conversation_id,\n       $1::bigint AS opportunity_id,\n       NULLIF($3, '') AS property_public_id,\n       ARRAY[]::text[] AS tags,\n       NULL::text AS observed_tag,\n       FALSE AS resolved,\n       'owner_lookup_failed'::text AS reason,\n       'easybroker_lookup_failed_after_retries'::text AS failure_detail,\n       NULL::text AS owner_agent_id,\n       NULL::text AS owner_name,\n       NULL::text AS owner_number;",
+        "options": {
+          "queryReplacement": "={{ [$('When Called').first().json.opportunity_id || null, 'wf12:owner-lookup-failed:' + ($('When Called').first().json.opportunity_id || 'missing') + ':' + ($('When Called').first().json.property_public_id || 'missing'), $('When Called').first().json.property_public_id || '', $('When Called').first().json.conversation_id || null] }}"
+        }
+      },
+      "id": "c1c2c3c4-0007-4000-8000-000000000007",
+      "name": "Record Owner Lookup Failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        680,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "Records one idempotent technical event after EasyBroker retries fail, then returns the unresolved contract so WF10 can route the lead to guardia."
+    },
+    {
+      "parameters": {
+        "jsCode": "const trig = $('When Called').first().json;\nconst resp = $input.first().json || {};\nconst tags = Array.isArray(resp.tags) ? resp.tags.map(tag => String(tag).trim()).filter(Boolean) : [];\nconst tag_count = tags.length;\nconst tag_cardinality_valid = tag_count === 1;\nconst firstTag = tag_cardinality_valid ? tags[0] : null;\n// The resolver SQL is first-tag based; never call it for zero or multiple tags.\nconst tags_pg = tag_cardinality_valid\n  ? '{\"' + firstTag.replace(/\\\\\\\\/g, '\\\\\\\\\\\\\\\\').replace(/\"/g, '\\\\\\\\\\\\\"') + '\"}'\n  : '{}';\nreturn [{ json: { ...trig, tags, tag_count, tag_cardinality_valid, observed_tag: firstTag, tags_pg } }];"
+      },
+      "id": "c1c2c3c4-0003-4000-8000-000000000003",
+      "name": "Extract Tags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM public.resolve_first_property_tag($1, $2::text[]);",
+        "options": {
+          "queryReplacement": "={{ [$json.property_public_id || '__MISSING_PROPERTY__', $json.tags_pg || '{}'] }}"
+        }
+      },
+      "id": "c1c2c3c4-0004-4000-8000-000000000004",
+      "name": "Resolve Owner Agent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        920,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Extract Tags').first().json;\nconst row = $input.first().json || {};\nreturn [{ json: {\n  conversation_id: ctx.conversation_id || null,\n  opportunity_id: ctx.opportunity_id || null,\n  property_public_id: ctx.property_public_id || null,\n  tags: ctx.tags,\n  observed_tag: row.observed_tag || ctx.observed_tag || null,\n  resolved: row.resolved === true,\n  reason: row.reason || (ctx.tag_count !== 1 ? 'invalid_tag_count' : 'missing_owner_data'),\n  failure_detail: row.failure_detail || null,\n  owner_agent_id: row.owner_agent_id || null,\n  owner_name: row.owner_name || null,\n  owner_number: row.owner_number || null\n} }];"
+      },
+      "id": "c1c2c3c4-0005-4000-8000-000000000005",
+      "name": "Shape Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst code = String(input.property_public_id || '').trim().toUpperCase();\nreturn [{ json: { ...input, property_public_id: code, valid_eb_code: /^EB-[A-Z0-9]{4,}$/.test(code) } }];"
+      },
+      "id": "lrv2-007-validate-eb-code",
+      "name": "Validate EB Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "valid-eb-code-condition",
+              "leftValue": "={{ $json.valid_eb_code }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "lrv2-007-valid-eb-code",
+      "name": "Valid EB Code?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "c1c2c3c4-0006-4000-8000-000000000006",
+              "leftValue": "={{ $json.tag_cardinality_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c1c2c3c4-0006-4000-8000-000000000006",
+      "name": "Tag Count Exactly One?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Validate EB Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch EasyBroker Property": {
+      "main": [
+        [
+          {
+            "node": "Extract Tags",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Owner Lookup Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Tags": {
+      "main": [
+        [
+          {
+            "node": "Tag Count Exactly One?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Owner Agent": {
+      "main": [
+        [
+          {
+            "node": "Shape Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate EB Code": {
+      "main": [
+        [
+          {
+            "node": "Valid EB Code?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid EB Code?": {
+      "main": [
+        [
+          {
+            "node": "Fetch EasyBroker Property",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Count Exactly One?": {
+      "main": [
+        [
+          {
+            "node": "Resolve Owner Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "errorWorkflow": "He95yJflKVspGFyb"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "811e1bec-3b54-4ba9-8716-146bc7fa2af5",
+  "activeVersionId": "811e1bec-3b54-4ba9-8716-146bc7fa2af5",
+  "versionCounter": 42,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-17T21:14:07.980Z",
+      "createdAt": "2026-06-17T21:14:07.980Z",
+      "role": "workflow:owner",
+      "workflowId": "w7yJr7naWoxPq6Pw",
+      "projectId": "q5HebGTNHrfaBGjx",
+      "project": {
+        "updatedAt": "2025-06-06T10:18:49.745Z",
+        "createdAt": "2025-06-06T10:17:16.319Z",
+        "id": "q5HebGTNHrfaBGjx",
+        "name": "Esteban Betancourt <esteban.betanc@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "df13e6c2-f271-4cfe-a59d-2ab436fdf0b2"
+      }
+    }
+  ]
 }

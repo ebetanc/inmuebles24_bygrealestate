@@ -1,0 +1,6 @@
+[
+  {"name":"batch_statuses","entries":2,"statuses":2,"messages":0,"signature":"valid","expected":"persist_each_once"},
+  {"name":"batch_messages","entries":1,"statuses":0,"messages":2,"signature":"valid","expected":"persist_each_once"},
+  {"name":"invalid_signature","entries":1,"statuses":1,"messages":0,"signature":"invalid","expected":"reject_without_mutation"},
+  {"name":"accepted_is_not_delivered","entries":1,"statuses":1,"messages":0,"signature":"valid","status":"accepted","expected":"not_delivered"}
+]

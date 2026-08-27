@@ -50,6 +50,25 @@
     {
       "parameters": {
         "operation": "executeQuery",
+        "query": "SELECT * FROM public.v3_release_night_queue(100,NOW()) AS opportunity_id;",
+        "options": {}
+      },
+      "id": "wf7-v3-release-0805",
+      "name": "Release V3 Night Queue 08:05",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 700],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "notes": "V3 release gate is 08:05 America/Mexico_City; no release at 08:00."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
         "query": "SELECT\n  nq.id,\n  nq.conversation_id,\n  nq.source,\n  nq.lead_phone,\n  nq.lead_name,\n  nq.property_id,\n  nq.lead_email,\n  nq.temperature,\n  nq.bot_summary,\n  nq.queued_at\nFROM night_queue nq\nWHERE nq.processed = FALSE\nORDER BY nq.queued_at;",
         "options": {}
       },
@@ -209,21 +228,79 @@
       "position": [1120, 600]
     },
     {
-      "parameters": {
-        "source": "database",
-        "workflowId": {
-          "__rl": true,
-          "value": "={{ $env.WF3A_WORKFLOW_ID }}",
-          "mode": "id"
-        },
-        "options": {}
-      },
-      "id": "wf7-0013-4000-8000-000000000013",
-      "name": "Call WF3a: Auction Launcher",
+      "parameters": {"operation": "executeQuery", "query": "SELECT * FROM public.get_routing_safe_mode();", "options": {}},
+      "id": "wf7-0020-4000-8000-000000000020",
+      "name": "Check Routing Safe Mode",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1340, 600],
+      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
+    },
+    {
+      "parameters": {"conditions": {"options": {"caseSensitive": true, "typeValidation": "strict", "leftValue": ""}, "conditions": [{"id": "wf7-safe-mode-active", "leftValue": "={{ $json.status }}", "rightValue": "safe_mode", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "options": {}},
+      "id": "wf7-0021-4000-8000-000000000021",
+      "name": "Safe Mode Active?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1560, 600]
+    },
+    {
+      "parameters": {"operation": "executeQuery", "query": "SELECT * FROM public.route_missing_owner_data(\n  $1::bigint,\n  'routing_safe_mode',\n  $2\n);", "options": {"queryReplacement": "={{ [$('Process One by One').item.json.opportunity_id, 'wf7:safe-mode:' + $('Process One by One').item.json.opportunity_id + ':' + ($('Process One by One').item.json.property_public_id || 'unknown')] }}"}},
+      "id": "wf7-0022-4000-8000-000000000022",
+      "name": "Route Direct To Guard (Safe Mode)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1780, 500],
+      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
+    },
+    {
+      "parameters": {"jsCode": "return [{ json: $('Process One by One').item.json }];"},
+      "id": "wf7-0023-4000-8000-000000000023",
+      "name": "Restore Night Routing Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 700]
+    },
+    {
+      "parameters": {"workflowId": {"__rl": true, "value": "w7yJr7naWoxPq6Pw", "mode": "id"}, "workflowInputs": {"mappingMode": "defineBelow", "value": {}}, "options": {}, "mode": "each"},
+      "id": "wf7-0024-4000-8000-000000000024",
+      "name": "Resolve Owner (WF12)",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1560, 600],
-      "notes": "Calls WF3a (Auction Launcher) with the lead data.\nWF3a expects: conversation_id, lead_phone, lead_name, property_id, property_title, property_price, assigned_agent_id"
+      "position": [2000, 700]
+    },
+    {
+      "parameters": {"conditions": {"options": {"caseSensitive": true, "typeValidation": "strict", "leftValue": ""}, "conditions": [{"id": "wf7-owner-resolved", "leftValue": "={{ $json.resolved }}", "rightValue": true, "operator": {"type": "boolean", "operation": "true"}}], "combinator": "and"}, "options": {}},
+      "id": "wf7-0025-4000-8000-000000000025",
+      "name": "Owner Resolved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2220, 700]
+    },
+    {
+      "parameters": {"jsCode": "const owner=$input.item.json; const lead=$('Process One by One').item.json; return [{json:{conversation_id:lead.conversation_id,opportunity_id:lead.opportunity_id,property_id:lead.property_id,property_public_id:lead.property_public_id,property_title:lead.property_title,property_price:lead.property_price,lead_name:lead.lead_name,lead_phone:lead.lead_phone,owner_agent_id:owner.owner_agent_id,owner_name:owner.owner_name,owner_number:owner.owner_number,routing_tier:'owner'}}];"},
+      "id": "wf7-0026-4000-8000-000000000026",
+      "name": "Prepare Owner Notify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 620]
+    },
+    {
+      "parameters": {"workflowId": {"__rl": true, "value": "Bo2YbbUpmBzRbhDa", "mode": "id"}, "workflowInputs": {"mappingMode": "defineBelow", "value": {}}, "options": {}, "mode": "each"},
+      "id": "wf7-0027-4000-8000-000000000027",
+      "name": "Notify Owner (WF13)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [2660, 620]
+    },
+    {
+      "parameters": {"operation": "executeQuery", "query": "SELECT * FROM public.route_missing_owner_data(\n  $1::bigint,\n  'missing_owner_data',\n  $2\n);", "options": {"queryReplacement": "={{ [$json.opportunity_id, 'wf7:missing-owner:' + $json.opportunity_id + ':' + ($json.property_public_id || 'unknown')] }}"}},
+      "id": "wf7-0028-4000-8000-000000000028",
+      "name": "Route Missing Owner Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2440, 780],
+      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
     },
     {
       "parameters": {
@@ -319,11 +396,6 @@
             "node": "Fetch Pending Night Queue",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Fetch Night Stats",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -332,7 +404,7 @@
       "main": [
         [
           {
-            "node": "Build Morning Report",
+            "node": "Fetch Night Stats",
             "type": "main",
             "index": 0
           }
@@ -373,6 +445,17 @@
       ]
     },
     "Trigger 8:05 AM CDMX (Process Queue)": {
+      "main": [
+        [
+          {
+            "node": "Release V3 Night Queue 08:05",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release V3 Night Queue 08:05": {
       "main": [
         [
           {
@@ -434,24 +517,32 @@
         ],
         [
           {
-            "node": "Call WF3a: Auction Launcher",
+            "node": "Check Routing Safe Mode",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Call WF3a: Auction Launcher": {
+    "Check Routing Safe Mode": {
       "main": [
         [
           {
-            "node": "Acknowledge Durable Handoff",
+            "node": "Safe Mode Active?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
+    "Safe Mode Active?": {"main": [[{"node": "Route Direct To Guard (Safe Mode)", "type": "main", "index": 0}], [{"node": "Restore Night Routing Context", "type": "main", "index": 0}]]},
+    "Route Direct To Guard (Safe Mode)": {"main": [[{"node": "Acknowledge Durable Handoff", "type": "main", "index": 0}]]},
+    "Restore Night Routing Context": {"main": [[{"node": "Resolve Owner (WF12)", "type": "main", "index": 0}]]},
+    "Resolve Owner (WF12)": {"main": [[{"node": "Owner Resolved?", "type": "main", "index": 0}]]},
+    "Owner Resolved?": {"main": [[{"node": "Prepare Owner Notify", "type": "main", "index": 0}], [{"node": "Route Missing Owner Data", "type": "main", "index": 0}]]},
+    "Prepare Owner Notify": {"main": [[{"node": "Notify Owner (WF13)", "type": "main", "index": 0}]]},
+    "Notify Owner (WF13)": {"main": [[{"node": "Acknowledge Durable Handoff", "type": "main", "index": 0}]]},
+    "Route Missing Owner Data": {"main": [[{"node": "Acknowledge Durable Handoff", "type": "main", "index": 0}]]},
     "Acknowledge Durable Handoff": {
       "main": [
         [
@@ -489,6 +580,8 @@
   "settings": {
     "executionOrder": "v1",
     "saveExecutionProgress": true,
-    "saveManualExecutions": true
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
   }
 }

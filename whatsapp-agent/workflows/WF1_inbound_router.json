@@ -2,28 +2,16 @@
   "name": "WF1 - Inbound Router (Evolution)",
   "nodes": [
     {
-      "parameters": {"inputSource": "passthrough"},
-      "id": "2dd402fb-2665-45d6-82c4-7d7cdb08242a",
-      "name": "When Called by WF22",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.1,
-      "position": [
-        200,
-        300
-      ],
-      "notes": "Receives only authenticated Meta message payloads from WF22."
-    },
-    {
       "parameters": {
-        "jsCode": "// Parse authenticated Meta Cloud API inbound message.\nconst body=$input.first().json.body||{}; const value=body.entry?.[0]?.changes?.[0]?.value||{}; const msg=value.messages?.[0];\nif(!msg) return [{json:{_action:'ignore',reason:'no_message'}}];\nlet text=msg.text?.body||msg.button?.text||''; let interactive_id='';\nif(msg.interactive?.button_reply){text=msg.interactive.button_reply.title||'';interactive_id=msg.interactive.button_reply.id||'';}\nelse if(msg.interactive?.list_reply){text=msg.interactive.list_reply.title||'';interactive_id=msg.interactive.list_reply.id||'';}\nif(!text&&!interactive_id) return [{json:{_action:'ignore',reason:'unsupported_message_type'}}];\nconst phone=String(msg.from||''); const contact=value.contacts?.[0]||{};\nreturn [{json:{_action:'process',phone,text:String(text).trim(),interactive_id,pushName:contact.profile?.name||'',messageId:String(msg.id||''),timestamp:Number(msg.timestamp)||Math.floor(Date.now()/1000),remoteJid:phone}}];"
+        "jsCode": "// Parse one normalized Meta WhatsApp payload. WF22 is the sole active Meta ingress.\nconst item = $input.first().json || {};\nconst body = item.body || {};\nconst entry = (body.entry && body.entry[0]) || {};\nconst change = (entry.changes && entry.changes[0]) || {};\nconst value = change.value || {};\nif (value.statuses) return [{ json: { _action: 'ignore', reason: 'status_event' } }];\nconst msg = value.messages && value.messages[0];\nif (!msg) return [{ json: { _action: 'ignore', reason: 'no_message' } }];\nconst phone = msg.from || '';\nlet text = '';\nlet interactive_id = '';\nconst message_type = String(msg.type || '');\nif (message_type === 'text' && msg.text) text = msg.text.body || '';\nelse if (message_type === 'button' && msg.button) { text = msg.button.text || ''; interactive_id = msg.button.payload || ''; }\nelse if (message_type === 'interactive' && msg.interactive) {\n  const it = msg.interactive;\n  text = (it.button_reply && it.button_reply.title) || (it.list_reply && it.list_reply.title) || '';\n  interactive_id = (it.button_reply && it.button_reply.id) || (it.list_reply && it.list_reply.id) || '';\n} else return [{ json: { _action: 'ignore', reason: 'unsupported_message_type' } }];\nconst contact = (value.contacts && value.contacts[0]) || {};\nconst pushName = (contact.profile && contact.profile.name) || '';\nconst messageId = msg.id || '';\nconst context_id = msg.context && msg.context.id ? String(msg.context.id) : null;\nconst timestamp = msg.timestamp ? parseInt(msg.timestamp, 10) : Math.floor(Date.now() / 1000);\nreturn [{ json: { _action: 'process', phone, text: String(text).trim(), interactive_id: String(interactive_id).trim(), message_type, context_id, reply_to_wamid: context_id, wamid: messageId, pushName, messageId, timestamp, remoteJid: phone } }];"
       },
       "id": "cea82b5d-4fde-4e15-a0a0-5f279866802b",
       "name": "Parse Evolution Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        420,
-        300
+        608,
+        304
       ]
     },
     {
@@ -46,21 +34,22 @@
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       },
       "id": "80631397-0ac5-4044-b540-7f30602bb797",
       "name": "Valid Message?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        640,
-        300
+        368,
+        304
       ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Dedup + Classify + Link + Night activation in one round-trip.\n-- C3 fix: classify FIRST, then insert message with correct conversation_id.\n-- C4 fix: auto-activate night_queued conversations for AI handling.\nWITH classification AS (\n  SELECT * FROM classify_sender($4)\n),\nactivate_night AS (\n  UPDATE conversations\n  SET mode = 'ai'\n  WHERE conversation_id = (SELECT conversation_id FROM classification)\n    AND mode = 'night_queued'\n),\ndedup AS (\n  INSERT INTO messages (conversation_id, direction, sender_type, body, msg_external_id, metadata)\n  VALUES ((SELECT conversation_id FROM classification), 'inbound', 'lead', $1, $2, $3::jsonb)\n  ON CONFLICT (msg_external_id) DO NOTHING\n  RETURNING message_id\n)\nSELECT\n  (SELECT message_id FROM dedup) AS new_message_id,\n  c.is_agent,\n  c.agent_id,\n  c.agent_name,\n  c.conversation_id,\n  CASE WHEN c.conv_mode = 'night_queued' THEN 'ai' ELSE c.conv_mode END AS conv_mode,\n  c.assigned_agent_id,\n  c.current_property,\n  c.assigned_agent_phone\nFROM classification c;",
+        "query": "-- Dedup: try to insert the message. If msg_external_id already exists, skip.\n-- Also classify the sender in one round-trip.\nWITH dedup AS (\n  INSERT INTO messages (conversation_id, direction, sender_type, body, msg_external_id, metadata)\n  VALUES (NULL, 'inbound', 'lead', $1, $2, $3::jsonb)\n  ON CONFLICT (msg_external_id) DO NOTHING\n  RETURNING message_id\n),\nclassification AS (\n  SELECT * FROM classify_sender($4)\n)\nSELECT\n  (SELECT message_id FROM dedup) AS new_message_id,\n  c.*\nFROM classification c;",
         "options": {
           "queryReplacement": "={{ [$json.text, $json.messageId, JSON.stringify({ phone: $json.phone, pushName: $json.pushName, timestamp: $json.timestamp }), $json.phone] }}"
         }
@@ -70,191 +59,32 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        860,
-        200
+        592,
+        208
       ],
+      "alwaysOutputData": true,
       "credentials": {
         "postgres": {
           "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
           "name": "Postgres - Supabase"
         }
-      },
-      "alwaysOutputData": true
+      }
     },
     {
       "parameters": {
-        "jsCode": "// Route deduplicated inbound messages and bind claims to opportunity+tier.\nconst parsed = $('Parse Evolution Payload').first().json;\nconst db = $input.first().json;\nif (!db.new_message_id && db.new_message_id !== 0) return [{ json: { route: 'ignore', reason: 'duplicate_message' } }];\nconst { phone, text, pushName, messageId } = parsed;\nif (db.is_agent) {\n  const claim = String(parsed.interactive_id || '').match(/^claim:(\\d+):(owner|primary_guard|backup_guard)$/);\n  if (claim) return [{ json: { route: 'agent_claim', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, opportunity_id: Number(claim[1]), routing_tier: claim[2], button_id: parsed.interactive_id, raw_message: text, messageId } }];\n  const legacy = text.match(/^TOMO-([A-Z0-9]{4})$/i);\n  if (legacy) return [{ json: { route: 'agent_claim', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, short_code: legacy[1].toUpperCase(), raw_message: text, messageId } }];\n  return [{ json: { route: 'agent_followup_reply', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, text, messageId } }];\n}\nif (!db.conversation_id) return [{ json: { route: 'new_lead', phone, pushName, text, messageId } }];\nconst common = { conversation_id: db.conversation_id, phone, pushName, text, messageId };\nif (db.conv_mode === 'ai') return [{ json: { route: 'ai_conversation', ...common, current_property: db.current_property, assigned_agent_id: db.assigned_agent_id } }];\nif (db.conv_mode === 'human') return [{ json: { route: 'human_forward', ...common, assigned_agent_id: db.assigned_agent_id, assigned_agent_phone: db.assigned_agent_phone } }];\nif (db.conv_mode === 'pending_assignment') return [{ json: { route: 'pending', ...common } }];\nreturn [{ json: { route: 'ignore', reason: 'unknown_mode' } }];"
+        "jsCode": "// Route normalized messages. V3 claims require a Meta button payload; V2 remains drain-only.\nconst parsed = $('Parse Evolution Payload').first().json;\nconst db = $input.first().json;\nif (!db.new_message_id && db.new_message_id !== 0) return [{ json: { route: 'ignore', reason: 'duplicate_message' } }];\nconst phone = parsed.phone, text = parsed.text, pushName = parsed.pushName, messageId = parsed.messageId;\nif (db.is_agent) {\n  const v3ClaimMatch = parsed.message_type === 'button' ? String(parsed.interactive_id || '').match(/^claim:v3:(\\\\d+):(\\\\d+)$/) : null;\n  if (v3ClaimMatch) {\n    const opportunityId = Number(v3ClaimMatch[1]), attemptId = Number(v3ClaimMatch[2]);\n    if (!Number.isSafeInteger(opportunityId) || opportunityId <= 0 || !Number.isSafeInteger(attemptId) || attemptId <= 0) return [{ json: { route: 'ignore', reason: 'invalid_v3_claim_payload' } }];\n    return [{ json: { route: 'agent_claim', claim_version: 'v3', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, opportunity_id: opportunityId, attempt_id: attemptId, routing_tier: null, context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: parsed.interactive_id, messageId } }];\n  }\n  const claimMatch = String(parsed.interactive_id || '').match(/^claim:(\\\\d+):(owner|primary_guard|backup_guard)$/);\n  if (claimMatch) {\n    const opportunityId = Number(claimMatch[1]);\n    if (!Number.isSafeInteger(opportunityId) || opportunityId <= 0) return [{ json: { route: 'ignore', reason: 'invalid_v2_claim_payload' } }];\n    return [{ json: { route: 'agent_claim', claim_version: 'v2_drain', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, opportunity_id: opportunityId, routing_tier: claimMatch[2], context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: parsed.interactive_id, messageId } }];\n  }\n  const textClaimMatch = String(text || '').trim().match(/^TOMO-V2-(\\\\d+)-(O|P|B)$/i);\n  if (textClaimMatch) {\n    const opportunityId = Number(textClaimMatch[1]);\n    if (!Number.isSafeInteger(opportunityId) || opportunityId <= 0) return [{ json: { route: 'ignore', reason: 'invalid_v2_claim_text' } }];\n    const tierByCode = { O: 'owner', P: 'primary_guard', B: 'backup_guard' };\n    return [{ json: { route: 'agent_claim', claim_version: 'v2_drain', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, opportunity_id: opportunityId, routing_tier: tierByCode[textClaimMatch[2].toUpperCase()], context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: text, messageId } }];\n  }\n  const tomoMatch = String(text || '').match(/^TOMO-([A-Z0-9]{4})$/i);\n  if (tomoMatch) return [{ json: { route: 'agent_claim', claim_version: 'v2_drain', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, short_code: tomoMatch[1].toUpperCase(), context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: text, messageId } }];\n  return [{ json: { route: 'agent_followup_reply', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, text, messageId } }];\n}\nif (!db.conversation_id) return [{ json: { route: 'new_lead', phone, pushName, text, messageId } }];\nconst mode = db.conv_mode;\nif (mode === 'ai') return [{ json: { route: 'ai_conversation', conversation_id: db.conversation_id, phone, pushName, text, messageId, current_property: db.current_property, assigned_agent_id: db.assigned_agent_id } }];\nif (mode === 'human') return [{ json: { route: 'human_forward', conversation_id: db.conversation_id, phone, pushName, text, messageId, assigned_agent_id: db.assigned_agent_id, assigned_agent_phone: db.assigned_agent_phone } }];\nif (mode === 'pending_assignment') return [{ json: { route: 'pending', conversation_id: db.conversation_id, phone, pushName, text, messageId } }];\nreturn [{ json: { route: 'ignore', reason: 'unknown_mode' } }];"
       },
       "id": "249f2966-93e8-4a93-a6bc-35e166b4dbb3",
       "name": "Classify & Route",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1080,
-        200
+        816,
+        208
       ]
     },
     {
       "parameters": {
-        "rules": {
-          "values": [
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "typeValidation": "strict",
-                  "leftValue": ""
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "new_lead",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    },
-                    "id": "6199da73-e7cd-48e1-af01-318fb452859a"
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "new_lead"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "typeValidation": "strict",
-                  "leftValue": ""
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "agent_claim",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    },
-                    "id": "448325d7-bdd8-4481-8018-9db3f8972c2e"
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "agent_claim"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "typeValidation": "strict",
-                  "leftValue": ""
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "ai_conversation",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    },
-                    "id": "8074adb6-44eb-420d-bfaf-cbd87708d01b"
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "ai_conversation"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "typeValidation": "strict",
-                  "leftValue": ""
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "human_forward",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    },
-                    "id": "bf1857ed-f47e-4c71-860b-e0672fc16760"
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "human_forward"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "typeValidation": "strict",
-                  "leftValue": ""
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "pending",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    },
-                    "id": "1d0ef960-b18c-45c2-8ed6-e4fe150b4a07"
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "pending"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "typeValidation": "strict",
-                  "leftValue": ""
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.route }}",
-                    "rightValue": "agent_followup_reply",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    },
-                    "id": "c0ffee00-0001-4000-8000-000000000001"
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "agent_followup_reply"
-            }
-          ],
-          "fallbackOutput": {
-            "active": true
-          }
-        },
-        "options": {}
-      },
-      "id": "d7a2e059-02b8-46b4-bb0f-0a36b0b4253b",
-      "name": "Route Message",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3.2,
-      "position": [
-        1300,
-        200
-      ]
-    },
-    {
-      "parameters": {
-        "source": "database",
         "workflowId": {
           "__rl": true,
           "value": "={{ $env.WF2_WORKFLOW_ID }}",
@@ -267,13 +97,12 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        1560,
+        1568,
         0
       ]
     },
     {
       "parameters": {
-        "source": "database",
         "workflowId": {
           "__rl": true,
           "value": "={{ $env.WF3B_WORKFLOW_ID }}",
@@ -286,13 +115,12 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        1560,
-        140
+        1568,
+        144
       ]
     },
     {
       "parameters": {
-        "source": "database",
         "workflowId": {
           "__rl": true,
           "value": "={{ $env.WF4_WORKFLOW_ID }}",
@@ -305,8 +133,8 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        1560,
-        280
+        1568,
+        288
       ]
     },
     {
@@ -318,26 +146,30 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1560,
-        420
+        1568,
+        432
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "url": "={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "apikey",
-              "value": "={{ $env.EVOLUTION_API_KEY }}"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $json.number }}\",\n  \"text\": {{ JSON.stringify($json.text) }}\n}",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": {{ JSON.stringify($json.text) }}\n  }\n}",
         "options": {
           "timeout": 10000
         }
@@ -347,27 +179,31 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1780,
-        420
+        1792,
+        432
       ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "url": "={{ \"https://graph.facebook.com/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "apikey",
-              "value": "={{ $env.EVOLUTION_API_KEY }}"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $json.phone }}\",\n  \"text\": \"Hola! Estamos buscando un asesor disponible para atenderte. En unos momentos te contactamos. \\n\\nHi! We're finding an available agent for you. We'll be in touch shortly.\"\n}",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"Hola! Estamos buscando un asesor disponible para atenderte. En unos momentos te contactamos. \\n\\nHi! We're finding an available agent for you. We'll be in touch shortly.\"\n  }\n}",
         "options": {
           "timeout": 10000
         }
@@ -377,7 +213,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1560,
+        1568,
         560
       ],
       "continueOnFail": true
@@ -389,13 +225,191 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        860,
-        420
+        592,
+        432
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "4e30f4b2-cc12-4b56-a21b-fed158933d39",
+      "name": "End (Fallback)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        704
       ]
     },
     {
       "parameters": {
-        "source": "database",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "new_lead",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "6307d6ac-c873-42ef-a043-8b269c30c3cb"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "new_lead"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f065b350-aec4-4a0a-8e10-ab35dc49bbae",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "agent_claim",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "agent_claim"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "5b514a9f-6a36-40a4-b152-6415e103f7cf",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "ai_conversation",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ai_conversation"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c65aa2fe-bf11-441d-b4b6-68f901adf5a3",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "human_forward",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "human_forward"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "14f64f78-1c72-4502-9133-2391c3f2ec3e",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "pending",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "pending"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c0ffee00-0001-4000-8000-000000000001",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "agent_followup_reply",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "agent_followup_reply"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1024,
+        208
+      ],
+      "id": "cdfc7555-623e-47d3-a86c-f1d82ec72025",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
         "workflowId": {
           "__rl": true,
           "value": "={{ $env.WF15_WORKFLOW_ID }}",
@@ -413,29 +427,257 @@
       ]
     },
     {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "evolution-webhook",
+        "responseMode": "onReceived",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "a1a1a1a1-post-4000-8000-000000000001",
+      "name": "WA Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        304
+      ],
+      "webhookId": "18d79979-c54f-4687-9aa1-ed2ca88a754b",
+      "notes": "Meta Cloud API inbound messages (POST). GET verification handled by separate workflow WA-Meta-Verify.",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto=require('crypto');\nconst item=$input.first(); const headers=item.json.headers||{}; const signature=String(headers['x-hub-signature-256']||headers['X-Hub-Signature-256']||'');\nconst encoded=item.binary?.data?.data; const secret=$env.WA_WEBHOOK_SECRET;\nif(typeof encoded!=='string'||!secret||!signature.startsWith('sha256=')) throw new Error('invalid webhook signature');\nconst raw=Buffer.from(encoded,'base64'); const expected='sha256='+crypto.createHmac('sha256',secret).update(raw).digest('hex'); const a=Buffer.from(signature),b=Buffer.from(expected);\nif(a.length!==b.length||!crypto.timingSafeEqual(a,b)) throw new Error('invalid webhook signature');\nreturn [{json:{body:JSON.parse(raw.toString('utf8'))}}];"
+      },
+      "id": "wf1-signed-status-1",
+      "name": "Verify Meta Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body=$input.first().json.body; const value=body.entry?.[0]?.changes?.[0]?.value||{}; return [{json:{kind:value.statuses?.length?'status':value.messages?.length?'message':'ignore',body}}];"
+      },
+      "id": "wf1-signed-status-2",
+      "name": "Dispatch Meta Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "wf22-kind-status",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "status"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "wf22-kind-message",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "message",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "message"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "wf1-signed-status-3",
+      "name": "Route Meta Payload",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        60,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body=$input.first().json.body;\nconst value=body.entry?.[0]?.changes?.[0]?.value||{};\nconst s=value.statuses?.[0]||{};\nconst message_id=String(s.id||''); const status=String(s.status||'');\nif(!message_id||!['sent','delivered','failed'].includes(status)) return [{json:{valid:false}}];\nconst ts=Number(s.timestamp); const evidence={status};\nif(Array.isArray(s.errors)) evidence.error_codes=s.errors.map(e=>String(e.code||'')).filter(Boolean).slice(0,5);\nreturn [{json:{valid:true,message_id,status,provider_timestamp:Number.isFinite(ts)?new Date(ts*1000).toISOString():null,evidence}}];"
+      },
+      "id": "wf1-signed-status-4",
+      "name": "Parse Whitelisted Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "wf22-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "wf1-signed-status-5",
+      "name": "Valid Status?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        420,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM public.record_delivery_callback($1, $2, $3::timestamptz, $4::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [$json.message_id, $json.status, $json.provider_timestamp, JSON.stringify($json.evidence)] }}"
+        }
+      },
+      "id": "wf1-signed-status-6",
+      "name": "Record and Reconcile Callback",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        600,
+        520
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
       "parameters": {},
-      "id": "4e30f4b2-cc12-4b56-a21b-fed158933d39",
-      "name": "End (Fallback)",
+      "id": "wf1-signed-status-7",
+      "name": "Ignore Invalid Status",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        1560,
-        700
+        780,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "wf1-execute-trigger",
+      "name": "When Called by WF22",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        368,
+        520
+      ],
+      "notes": "WF22 is the sole Meta ingress; this trigger receives the normalized envelope."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT $1::text AS context_id,(SELECT a.capture_event_id FROM public.lead_routing_delivery_attempts a WHERE a.provider_message_id=$1 LIMIT 1) AS capture_event_id;",
+        "options": {
+          "queryReplacement": "={{ [$('Parse Evolution Payload').item.json.context_id || $('Parse Evolution Payload').item.json.reply_to_wamid || null] }}"
+        }
+      },
+      "id": "wf1-resolve-v3-capture",
+      "name": "Resolve V3 Capture Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        700,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Dedup + Classify Sender').item.json; const correlation = $input.first().json || {}; return [{ json: { ...original, ...correlation } }];"
+      },
+      "id": "wf1-merge-v3-capture",
+      "name": "Merge V3 Capture Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const route = $input.first().json || {}; const correlation = $('Merge V3 Capture Context').item.json || {}; return [{ json: { ...route, capture_event_id: route.capture_event_id || correlation.capture_event_id } }];"
+      },
+      "id": "wf1-attach-v3-capture",
+      "name": "Attach V3 Capture Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
       ]
     }
   ],
   "connections": {
-    "When Called by WF22": {
-      "main": [
-        [
-          {
-            "node": "Parse Evolution Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Parse Evolution Payload": {
       "main": [
         [
@@ -469,6 +711,28 @@
       "main": [
         [
           {
+            "node": "Resolve V3 Capture Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve V3 Capture Context": {
+      "main": [
+        [
+          {
+            "node": "Merge V3 Capture Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge V3 Capture Context": {
+      "main": [
+        [
+          {
             "node": "Classify & Route",
             "type": "main",
             "index": 0
@@ -480,14 +744,36 @@
       "main": [
         [
           {
-            "node": "Route Message",
+            "node": "Attach V3 Capture Context",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Route Message": {
+    "Attach V3 Capture Context": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Forward Message": {
+      "main": [
+        [
+          {
+            "node": "Send Forward via Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
       "main": [
         [
           {
@@ -540,11 +826,98 @@
         ]
       ]
     },
-    "Build Forward Message": {
+    "WA Webhook": {
       "main": [
         [
           {
-            "node": "Send Forward via Evolution",
+            "node": "Verify Meta Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Meta Signature": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Meta Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Meta Payload": {
+      "main": [
+        [
+          {
+            "node": "Route Meta Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Meta Payload": {
+      "main": [
+        [
+          {
+            "node": "Parse Whitelisted Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Evolution Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore Invalid Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Whitelisted Status": {
+      "main": [
+        [
+          {
+            "node": "Valid Status?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Status?": {
+      "main": [
+        [
+          {
+            "node": "Record and Reconcile Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore Invalid Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Called by WF22": {
+      "main": [
+        [
+          {
+            "node": "Parse Evolution Payload",
             "type": "main",
             "index": 0
           }
@@ -552,5 +925,14 @@
       ]
     }
   },
-  "settings":{"executionOrder":"v1","saveExecutionProgress":false,"saveManualExecutions":false,"saveDataErrorExecution":"none","saveDataSuccessExecution":"none"}
+  "settings": {
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "errorWorkflow": "He95yJflKVspGFyb",
+    "availableInMCP": false,
+    "saveExecutionProgress": false,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none"
+  }
 }

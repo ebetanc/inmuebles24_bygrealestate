@@ -17,14 +17,36 @@
     },
     {
       "parameters": {
+        "jsCode": "const trigger = $('When Called by WF1').first().json;\nconst raw = $input.first().json;\nconst claim = raw.result || raw;\nconst claim_status = claim.claim_status || claim.outcome || 'error';\nconst text = { accepted: 'Prospecto asignado. Ya puedes atenderlo.', already_assigned: 'Este prospecto ya fue asignado.', expired: 'La oferta ya vencio o pertenece a un turno anterior.', not_authorized: 'Esta oferta no estaba dirigida a tu usuario.', delivery_pending: 'La oferta aun no tiene entrega confirmada.', invalid_input: 'No fue posible validar el boton V3.' }[claim_status] || 'No fue posible procesar la aceptacion.';\nreturn [{ json: { number: trigger.agent_phone, text, claim_status, opportunity_id: claim.opportunity_id || trigger.opportunity_id } }];"
+      },
+      "id": "wf3b-build-v3-result",
+      "name": "Build V3 Claim Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        360
+      ]
+    },
+    {
+      "parameters": {
         "conditions": {
-          "options": {"caseSensitive": true, "typeValidation": "strict"},
-          "conditions": [{
-            "id": "wf3b-routing-v2-id",
-            "leftValue": "={{ String($json.opportunity_id || '') }}",
-            "rightValue": "",
-            "operator": {"type": "string", "operation": "notEmpty", "singleValue": true}
-          }],
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "wf3b-routing-v2-id",
+              "leftValue": "={{ $json.claim_version || ($json.short_code ? 'v2_drain' : '') }}",
+              "rightValue": "v2_drain",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
           "combinator": "and"
         }
       },
@@ -32,20 +54,33 @@
       "name": "Is Routing V2 Claim?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [420, 300]
+      "position": [
+        420,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM public.claim_lead_opportunity($1::bigint,$2,$3,encode(digest($4,'sha256'),'hex'),$5);",
-        "options": {"queryReplacement": "={{ [$json.opportunity_id, $json.routing_tier, $json.agent_id, $json.agent_phone, $json.messageId] }}"}
+        "query": "WITH claim_input AS (SELECT encode(extensions.digest($4,'sha256'),'hex') AS actor_phone_hash), recovered AS MATERIALIZED (SELECT public.recover_delivery_from_authenticated_claim($1::bigint,$2,$3,claim_input.actor_phone_hash) FROM claim_input) SELECT claim.* FROM claim_input, recovered CROSS JOIN LATERAL public.claim_lead_opportunity($1::bigint,$2,$3,claim_input.actor_phone_hash,$5) claim;",
+        "options": {
+          "queryReplacement": "={{ [$json.opportunity_id, $json.routing_tier, $json.agent_id, $json.agent_phone, $json.messageId] }}"
+        }
       },
       "id": "wf3b-claim-routing-v2",
       "name": "Claim Routing V2 Opportunity",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [640, 120],
-      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
+      "position": [
+        640,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
     },
     {
       "parameters": {
@@ -55,24 +90,43 @@
       "name": "Build Routing V2 Claim Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [860, 120]
+      "position": [
+        860,
+        120
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.WA_CLOUD_API_BASE_URL + '/' + $env.WA_API_VERSION + '/' + $env.WA_PHONE_NUMBER_ID + '/messages' }}",
         "sendHeaders": true,
-        "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"}, {"name": "Content-Type", "value": "application/json"}]},
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify($json.text) }} }\n}",
-        "options": {"timeout": 10000}
+        "options": {
+          "timeout": 10000
+        }
       },
       "id": "wf3b-send-v2-result",
       "name": "Send Routing V2 Claim Result",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1080, 120],
+      "position": [
+        1080,
+        120
+      ],
       "continueOnFail": true
     },
     {
@@ -344,6 +398,24 @@
         420
       ],
       "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT public.claim_v3_delivery($1::bigint,$2::bigint,$3::bigint,$4,$5,$6,$7,NOW()) AS result;",
+        "options": {
+          "queryReplacement": "={{ [$json.opportunity_id, $json.attempt_id, $json.capture_event_id, $json.agent_id, $json.agent_phone, $json.reply_to_wamid, $json.context_wamid || $json.context_id] }}"
+        }
+      },
+      "id": "wf3b-claim-v3-delivery",
+      "name": "Claim V3 Delivery",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        640,
+        360
+      ],
+      "notes": "V3 exact claim: opportunity, attempt, capture event, sender agent/number, reply/context WAMID. Accepted is not delivery proof."
     }
   ],
   "connections": {
@@ -360,15 +432,65 @@
     },
     "Is Routing V2 Claim?": {
       "main": [
-        [{"node": "Claim Routing V2 Opportunity", "type": "main", "index": 0}],
-        [{"node": "Atomic Claim (WHERE status=open)", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Claim Routing V2 Opportunity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claim V3 Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim V3 Delivery": {
+      "main": [
+        [
+          {
+            "node": "Build V3 Claim Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build V3 Claim Result": {
+      "main": [
+        [
+          {
+            "node": "Send Routing V2 Claim Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Claim Routing V2 Opportunity": {
-      "main": [[{"node": "Build Routing V2 Claim Result", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Build Routing V2 Claim Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Routing V2 Claim Result": {
-      "main": [[{"node": "Send Routing V2 Claim Result", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Send Routing V2 Claim Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Atomic Claim (WHERE status=open)": {
       "main": [
@@ -488,7 +610,7 @@
     "executionOrder": "v1",
     "saveExecutionProgress": false,
     "saveManualExecutions": false,
-    "saveDataErrorExecution": "none",
+    "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "none"
   }
 }

@@ -25,6 +25,10 @@ class EBSettings:
     supabase_url: str = ""
     supabase_service_key: str = field(default="", repr=False)
 
+    # V3 request-level inbox is opt-in until its migration is applied.
+    v3_inbox_enabled: bool = False
+    account_key: str = "default"
+
     @classmethod
     def load(cls, env_file: str = ".env") -> "EBSettings":
         load_dotenv(env_file, override=False)
@@ -49,4 +53,6 @@ class EBSettings:
             api_key=os.environ.get("EASYBROKER_API_KEY", "").strip(),
             supabase_url=os.environ.get("SUPABASE_URL", "").strip(),
             supabase_service_key=os.environ.get("SUPABASE_SERVICE_KEY", "").strip(),
+            v3_inbox_enabled=os.environ.get("EASYBROKER_V3_INBOX", "").strip().lower() in {"1", "true", "yes"},
+            account_key=os.environ.get("EASYBROKER_ACCOUNT_KEY", "default").strip() or "default",
         )

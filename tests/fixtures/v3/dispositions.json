@@ -1,0 +1,9 @@
+[
+  {"name":"new_event","disposition":"created_new","identity":"phone","property":"i24_listing"},
+  {"name":"active_duplicate","disposition":"active_duplicate","identity":"phone","property":"same"},
+  {"name":"returning_assigned","disposition":"returning_assigned","identity":"email","property":"same"},
+  {"name":"missing_external_id","disposition":"non_routable","reason":"missing_external_id"},
+  {"name":"missing_prospect_identity","disposition":"non_routable","reason":"missing_prospect_identity"},
+  {"name":"missing_property_identity","disposition":"non_routable","reason":"missing_property_identity"},
+  {"name":"missing_description_is_allowed","disposition":"created_new","identity":"phone","property":"eb_public_id"}
+]

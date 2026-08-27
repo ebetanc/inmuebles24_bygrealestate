@@ -1,12 +1,13 @@
 [Unit]
-Description=Run the EasyBroker Buzon final-note bot every 5 min (CDMX)
+Description=Run the EasyBroker Buzon final-note bot every minute (CDMX)
 
 [Timer]
 # Final responsibility can settle after the intake window closes, so note/status
-# reconciliation runs every 5 minutes all day. Night-queued leads still wait for
+# effect reconciliation runs every minute. Inbox API fetch is internally gated
+# to every 5 minutes. Night-queued leads still wait for
 # the routing workflow's 08:05 release before anyone becomes responsible.
-OnCalendar=*-*-* *:0/5:00 America/Mexico_City
-RandomizedDelaySec=60
+OnCalendar=*-*-* *:*:00 America/Mexico_City
+RandomizedDelaySec=5
 Persistent=true
 
 [Install]

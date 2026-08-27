@@ -1,0 +1,7 @@
+[
+  {"name":"accepted_without_delivery","events":["accepted"],"expected":"technical_timeout_only"},
+  {"name":"delivered_starts_owner_sla","events":["sent","delivered"],"expected":"owner_open"},
+  {"name":"read_without_delivered","events":["sent","read"],"expected":"delivered_once_no_extension"},
+  {"name":"failed_escalates","events":["sent","failed"],"expected":"next_tier_immediate"},
+  {"name":"duplicate_out_of_order","events":["delivered","read","delivered","failed"],"expected":"first_delivery_clock_preserved"}
+]

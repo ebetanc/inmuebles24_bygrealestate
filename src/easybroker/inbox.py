@@ -296,6 +296,7 @@ async def attend_lead(
     page: Page, *, request_id: int | str | None = None, phone: str = "",
     agent_name: str, note_text: str | None = None, note_done: bool = False,
     status_done: bool = False, allow_phone_fallback: bool = False,
+    allow_legacy_note: bool = True,
 ) -> dict:
     """Full flow for one lead: open request, set Atendida, add the agent note.
 
@@ -339,7 +340,7 @@ async def attend_lead(
         # Guardar but before Supabase evidence, reconcile the visible note
         # without writing a duplicate.
         result["note_ok"] = await note_exists(page, note)
-        if not result["note_ok"]:
+        if not result["note_ok"] and allow_legacy_note:
             # Reconcile any pre-migration note without adding a second one.
             result["note_ok"] = await note_exists(page, legacy_note)
         if not result["note_ok"]:

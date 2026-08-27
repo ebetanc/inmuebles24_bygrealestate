@@ -8,13 +8,13 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "*/30 * * * *"
+              "expression": "*/5 * * * *"
             }
           ]
         }
       },
       "id": "9a1b0c1e-1111-4a1a-8000-000000000001",
-      "name": "Cada 30 min (8-20 MX)",
+      "name": "Cada 5 min (routing watchdog)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [0, 0]
@@ -107,20 +107,34 @@
     },
     {
       "parameters": {
-        "rule": {
-          "interval": [
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
             {
-              "field": "cronExpression",
-              "expression": "*/5 * * * *"
+              "id": "9a1b0c1e-1111-4a1a-8000-000000000008",
+              "leftValue": "={{ $now.minute === 0 || $now.minute === 30 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
       "id": "9a1b0c1e-1111-4a1a-8000-000000000008",
-      "name": "Cada 5 min (modo seguro)",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [0, 320]
+      "name": "Run scraper check?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [224, -160]
     },
     {
       "parameters": {
@@ -260,8 +274,12 @@
     }
   ],
   "connections": {
-    "Cada 30 min (8-20 MX)": {
-      "main": [[{ "node": "Check scraper health", "type": "main", "index": 0 }]]
+    "Cada 5 min (routing watchdog)": {
+      "main": [[
+        { "node": "Run scraper check?", "type": "main", "index": 0 },
+        { "node": "Revisar Fallos de Routing", "type": "main", "index": 0 },
+        { "node": "Revisar Casos Sin Asignar", "type": "main", "index": 0 }
+      ]]
     },
     "Manual (prueba)": {
       "main": [[{ "node": "Check scraper health", "type": "main", "index": 0 }]]
@@ -278,11 +296,11 @@
         []
       ]
     },
-    "Cada 5 min (modo seguro)": {
-      "main": [[
-        { "node": "Revisar Fallos de Routing", "type": "main", "index": 0 },
-        { "node": "Revisar Casos Sin Asignar", "type": "main", "index": 0 }
-      ]]
+    "Run scraper check?": {
+      "main": [
+        [{ "node": "Check scraper health", "type": "main", "index": 0 }],
+        []
+      ]
     },
     "Revisar Fallos de Routing": {
       "main": [[{ "node": "Modo Seguro Activo?", "type": "main", "index": 0 }]]
@@ -305,6 +323,7 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "timezone": "America/Mexico_City"
+    "timezone": "America/Mexico_City",
+    "errorWorkflow": "He95yJflKVspGFyb"
   }
 }

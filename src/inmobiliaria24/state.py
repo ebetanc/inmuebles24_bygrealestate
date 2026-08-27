@@ -49,7 +49,40 @@ class StateStore:
                 new_leads   INTEGER DEFAULT 0,
                 status      TEXT DEFAULT 'running'
             );
+
+            CREATE TABLE IF NOT EXISTS property_public_id_map (
+                listing_id         TEXT PRIMARY KEY,
+                property_public_id TEXT NOT NULL,
+                last_seen          TEXT NOT NULL
+            );
         """)
+        self._conn.commit()
+
+    def upsert_property_public_id_map(self, mapping: dict[str, str]) -> None:
+        """Persist validated listing-id -> EB-code mappings from Mis avisos."""
+        now = datetime.now(timezone.utc).isoformat()
+        self._conn.executemany(
+            """INSERT INTO property_public_id_map(listing_id, property_public_id, last_seen)
+               VALUES (?, ?, ?)
+               ON CONFLICT(listing_id) DO UPDATE SET
+                 property_public_id=excluded.property_public_id,
+                 last_seen=excluded.last_seen""",
+            [(listing_id, public_id, now) for listing_id, public_id in mapping.items()],
+        )
+        self._conn.commit()
+
+    def property_public_id_map(self) -> dict[str, str]:
+        """Return all cached listing-id -> EB-code mappings."""
+        return dict(self._conn.execute(
+            "SELECT listing_id, property_public_id FROM property_public_id_map"
+        ).fetchall())
+
+    def delete_property_public_id_mappings(self, listing_ids: set[str]) -> None:
+        """Remove ambiguous mappings so stale EB codes cannot be reused."""
+        self._conn.executemany(
+            "DELETE FROM property_public_id_map WHERE listing_id = ?",
+            [(listing_id,) for listing_id in listing_ids],
+        )
         self._conn.commit()
 
     # ------------------------------------------------------------------

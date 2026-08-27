@@ -1,439 +1,159 @@
 {
-    "name":  "WF23 - Delivery Timeout Sweeper",
-    "nodes":  [
-                  {
-                      "parameters":  {
-                                         "rule":  {
-                                                      "interval":  [
-                                                                       {
-                                                                           "field":  "minutes",
-                                                                           "minutesInterval":  1
-                                                                       }
-                                                                   ]
-                                                  }
-                                     },
-                      "id":  "wf23-every-minute",
-                      "name":  "Every Minute",
-                      "type":  "n8n-nodes-base.scheduleTrigger",
-                      "typeVersion":  1.2,
-                      "position":  [
-                                       240,
-                                       300
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT * FROM public.sweep_owner_delivery_no_callback(INTERVAL \u00272 minutes\u0027, 100);",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "wf23-sweep-timeouts",
-                      "name":  "Sweep Delivery Timeouts",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       480,
-                                       300
-                                   ],
-                      "credentials":  {
-                                          "postgres":  {
-                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-                                                           "name":  "Postgres - Supabase"
-                                                       }
-                                      }
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT * FROM public.claim_pending_guard_deliveries(100);",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "wf23-claim-pending",
-                      "name":  "Claim Pending Guard Deliveries",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       700,
-                                       300
-                                   ],
-                      "credentials":  {
-                                          "postgres":  {
-                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-                                                           "name":  "Postgres - Supabase"
-                                                       }
-                                      }
-                  },
-                  {
-                      "parameters":  {
-                                         "jsCode":  "return $input.all().map(({json:a})=\u003e({json:{attempt_id:a.attempt_id,opportunity_id:a.opportunity_id,routing_tier:a.routing_tier,lease_token:a.lease_token}}));"
-                                     },
-                      "id":  "wf23-shape-claimed",
-                      "name":  "Shape Claimed Deliveries",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       900,
-                                       300
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "workflowId":  {
-                                                            "__rl":  true,
-                                                            "value":  "={{ $env.WF13_WORKFLOW_ID }}",
-                                                            "mode":  "id"
-                                                        },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "wf23-call-sender",
-                      "name":  "Call Durable Offer Sender",
-                      "type":  "n8n-nodes-base.executeWorkflow",
-                      "typeVersion":  1.2,
-                      "position":  [
-                                       1120,
-                                       300
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "rule":  {
-                                                      "interval":  [
-                                                                       {
-                                                                           "field":  "days",
-                                                                           "daysInterval":  1,
-                                                                           "triggerAtHour":  3
-                                                                       }
-                                                                   ]
-                                                  }
-                                     },
-                      "id":  "wf23-daily-purge",
-                      "name":  "Daily Purge",
-                      "type":  "n8n-nodes-base.scheduleTrigger",
-                      "typeVersion":  1.2,
-                      "position":  [
-                                       240,
-                                       500
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "executeQuery",
-                                         "query":  "SELECT public.purge_delivery_callback_evidence(NOW()-INTERVAL \u002730 days\u0027);",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "wf23-purge-callbacks",
-                      "name":  "Purge Callback Evidence",
-                      "type":  "n8n-nodes-base.postgres",
-                      "typeVersion":  2.5,
-                      "position":  [
-                                       480,
-                                       500
-                                   ],
-                      "credentials":  {
-                                          "postgres":  {
-                                                           "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-                                                           "name":  "Postgres - Supabase"
-                                                       }
-                                      }
-                  }
-              ],
-    "connections":  {
-                        "Every Minute":  {
-                                             "main":  [
-                                                          [
-                                                              {
-                                                                  "node":  "Sweep Delivery Timeouts",
-                                                                  "type":  "main",
-                                                                  "index":  0
-                                                              }
-                                                          ]
-                                                      ]
-                                         },
-                        "Sweep Delivery Timeouts":  {
-                                                        "main":  [
-                                                                     [
-                                                                         {
-                                                                             "node":  "Claim Pending Guard Deliveries",
-                                                                             "type":  "main",
-                                                                             "index":  0
-                                                                         }
-                                                                     ]
-                                                                 ]
-                                                    },
-                        "Claim Pending Guard Deliveries":  {
-                                                               "main":  [
-                                                                            [
-                                                                                {
-                                                                                    "node":  "Shape Claimed Deliveries",
-                                                                                    "type":  "main",
-                                                                                    "index":  0
-                                                                                }
-                                                                            ]
-                                                                        ]
-                                                           },
-                        "Shape Claimed Deliveries":  {
-                                                         "main":  [
-                                                                      [
-                                                                          {
-                                                                              "node":  "Call Durable Offer Sender",
-                                                                              "type":  "main",
-                                                                              "index":  0
-                                                                          }
-                                                                      ]
-                                                                  ]
-                                                     },
-                        "Daily Purge":  {
-                                            "main":  [
-                                                         [
-                                                             {
-                                                                 "node":  "Purge Callback Evidence",
-                                                                 "type":  "main",
-                                                                 "index":  0
-                                                             }
-                                                         ]
-                                                     ]
-                                        }
-                    },
-    "settings":  {
-                     "executionOrder":  "v1",
-                     "saveExecutionProgress":  false,
-                     "saveManualExecutions":  false,
-                     "saveDataErrorExecution":  "none",
-                     "saveDataSuccessExecution":  "none"
-                 },
-    "activeVersion":  {
-                          "updatedAt":  null,
-                          "createdAt":  null,
-                          "versionId":  null,
-                          "workflowId":  null,
-                          "nodes":  [
-                                        {
-                                            "parameters":  {
-                                                               "rule":  {
-                                                                            "interval":  [
-                                                                                             {
-                                                                                                 "field":  "minutes",
-                                                                                                 "minutesInterval":  1
-                                                                                             }
-                                                                                         ]
-                                                                        }
-                                                           },
-                                            "id":  "wf23-every-minute",
-                                            "name":  "Every Minute",
-                                            "type":  "n8n-nodes-base.scheduleTrigger",
-                                            "typeVersion":  1.2,
-                                            "position":  [
-                                                             240,
-                                                             300
-                                                         ]
-                                        },
-                                        {
-                                            "parameters":  {
-                                                               "operation":  "executeQuery",
-                                                               "query":  "SELECT * FROM public.sweep_owner_delivery_no_callback(INTERVAL \u00272 minutes\u0027, 100);",
-                                                               "options":  {
-
-                                                                           }
-                                                           },
-                                            "id":  "wf23-sweep-timeouts",
-                                            "name":  "Sweep Delivery Timeouts",
-                                            "type":  "n8n-nodes-base.postgres",
-                                            "typeVersion":  2.5,
-                                            "position":  [
-                                                             480,
-                                                             300
-                                                         ],
-                                            "credentials":  {
-                                                                "postgres":  {
-                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-                                                                                 "name":  "Postgres - Supabase"
-                                                                             }
-                                                            }
-                                        },
-                                        {
-                                            "parameters":  {
-                                                               "operation":  "executeQuery",
-                                                               "query":  "SELECT * FROM public.claim_pending_guard_deliveries(100);",
-                                                               "options":  {
-
-                                                                           }
-                                                           },
-                                            "id":  "wf23-claim-pending",
-                                            "name":  "Claim Pending Guard Deliveries",
-                                            "type":  "n8n-nodes-base.postgres",
-                                            "typeVersion":  2.5,
-                                            "position":  [
-                                                             700,
-                                                             300
-                                                         ],
-                                            "credentials":  {
-                                                                "postgres":  {
-                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-                                                                                 "name":  "Postgres - Supabase"
-                                                                             }
-                                                            }
-                                        },
-                                        {
-                                            "parameters":  {
-                                                               "jsCode":  "return $input.all().map(({json:a})=\u003e({json:{attempt_id:a.attempt_id,opportunity_id:a.opportunity_id,routing_tier:a.routing_tier,lease_token:a.lease_token}}));"
-                                                           },
-                                            "id":  "wf23-shape-claimed",
-                                            "name":  "Shape Claimed Deliveries",
-                                            "type":  "n8n-nodes-base.code",
-                                            "typeVersion":  2,
-                                            "position":  [
-                                                             900,
-                                                             300
-                                                         ]
-                                        },
-                                        {
-                                            "parameters":  {
-                                                               "workflowId":  {
-                                                                                  "__rl":  true,
-                                                                                  "value":  "={{ $env.WF13_WORKFLOW_ID }}",
-                                                                                  "mode":  "id"
-                                                                              },
-                                                               "options":  {
-
-                                                                           }
-                                                           },
-                                            "id":  "wf23-call-sender",
-                                            "name":  "Call Durable Offer Sender",
-                                            "type":  "n8n-nodes-base.executeWorkflow",
-                                            "typeVersion":  1.2,
-                                            "position":  [
-                                                             1120,
-                                                             300
-                                                         ]
-                                        },
-                                        {
-                                            "parameters":  {
-                                                               "rule":  {
-                                                                            "interval":  [
-                                                                                             {
-                                                                                                 "field":  "days",
-                                                                                                 "daysInterval":  1,
-                                                                                                 "triggerAtHour":  3
-                                                                                             }
-                                                                                         ]
-                                                                        }
-                                                           },
-                                            "id":  "wf23-daily-purge",
-                                            "name":  "Daily Purge",
-                                            "type":  "n8n-nodes-base.scheduleTrigger",
-                                            "typeVersion":  1.2,
-                                            "position":  [
-                                                             240,
-                                                             500
-                                                         ]
-                                        },
-                                        {
-                                            "parameters":  {
-                                                               "operation":  "executeQuery",
-                                                               "query":  "SELECT public.purge_delivery_callback_evidence(NOW()-INTERVAL \u002730 days\u0027);",
-                                                               "options":  {
-
-                                                                           }
-                                                           },
-                                            "id":  "wf23-purge-callbacks",
-                                            "name":  "Purge Callback Evidence",
-                                            "type":  "n8n-nodes-base.postgres",
-                                            "typeVersion":  2.5,
-                                            "position":  [
-                                                             480,
-                                                             500
-                                                         ],
-                                            "credentials":  {
-                                                                "postgres":  {
-                                                                                 "id":  "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
-                                                                                 "name":  "Postgres - Supabase"
-                                                                             }
-                                                            }
-                                        }
-                                    ],
-                          "connections":  {
-                                              "Every Minute":  {
-                                                                   "main":  [
-                                                                                [
-                                                                                    {
-                                                                                        "node":  "Sweep Delivery Timeouts",
-                                                                                        "type":  "main",
-                                                                                        "index":  0
-                                                                                    }
-                                                                                ]
-                                                                            ]
-                                                               },
-                                              "Sweep Delivery Timeouts":  {
-                                                                              "main":  [
-                                                                                           [
-                                                                                               {
-                                                                                                   "node":  "Claim Pending Guard Deliveries",
-                                                                                                   "type":  "main",
-                                                                                                   "index":  0
-                                                                                               }
-                                                                                           ]
-                                                                                       ]
-                                                                          },
-                                              "Claim Pending Guard Deliveries":  {
-                                                                                     "main":  [
-                                                                                                  [
-                                                                                                      {
-                                                                                                          "node":  "Shape Claimed Deliveries",
-                                                                                                          "type":  "main",
-                                                                                                          "index":  0
-                                                                                                      }
-                                                                                                  ]
-                                                                                              ]
-                                                                                 },
-                                              "Shape Claimed Deliveries":  {
-                                                                               "main":  [
-                                                                                            [
-                                                                                                {
-                                                                                                    "node":  "Call Durable Offer Sender",
-                                                                                                    "type":  "main",
-                                                                                                    "index":  0
-                                                                                                }
-                                                                                            ]
-                                                                                        ]
-                                                                           },
-                                              "Daily Purge":  {
-                                                                  "main":  [
-                                                                               [
-                                                                                   {
-                                                                                       "node":  "Purge Callback Evidence",
-                                                                                       "type":  "main",
-                                                                                       "index":  0
-                                                                                   }
-                                                                               ]
-                                                                           ]
-                                                              }
-                                          },
-                          "nodeGroups":  [
-
-                                         ],
-                          "authors":  [
-
-                                      ],
-                          "name":  "WF23 - Delivery Timeout Sweeper",
-                          "description":  null,
-                          "autosaved":  false,
-                          "workflowPublishHistory":  [
-
-                                                     ],
-                          "settings":  {
-                                           "executionOrder":  "v1",
-                                           "saveExecutionProgress":  false,
-                                           "saveManualExecutions":  false,
-                                           "saveDataErrorExecution":  "none",
-                                           "saveDataSuccessExecution":  "none"
-                                       }
-                      }
+  "id": "MjfHw3tYE2qYgJfM",
+  "name": "WF23 - Delivery Timeout Sweeper",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/30 * * * * *"
+            }
+          ]
+        }
+      },
+      "id": "wf23-every-minute",
+      "name": "Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH claimed AS (SELECT * FROM public.v3_claim_delivery_attempts(100,NOW())) SELECT a.attempt_id,a.opportunity_id,a.capture_event_id,a.routing_tier AS expected_tier,a.target_agent_id,a.target_number,a.lease_token,a.status,a.provider_accepted_at,a.requested_at FROM claimed a JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id WHERE a.delivery_kind='offer' AND a.delivered_at IS NULL AND o.v3_enabled IS TRUE AND o.assigned_agent_id IS NULL AND o.current_delivery_attempt_id=a.attempt_id AND o.routing_tier=a.routing_tier AND COALESCE(a.provider_accepted_at,a.requested_at)+INTERVAL '2 minutes' <= NOW() UNION ALL SELECT a.attempt_id,a.opportunity_id,a.capture_event_id,a.routing_tier AS expected_tier,a.target_agent_id,a.target_number,a.lease_token,a.status,a.provider_accepted_at,a.requested_at FROM public.lead_routing_delivery_attempts a JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id WHERE a.delivery_kind='offer' AND a.status='sent' AND a.delivered_at IS NULL AND o.v3_enabled IS TRUE AND o.assigned_agent_id IS NULL AND o.current_delivery_attempt_id=a.attempt_id AND o.routing_tier=a.routing_tier AND COALESCE(a.provider_accepted_at,a.requested_at)+INTERVAL '2 minutes' <= NOW();",
+        "options": {}
+      },
+      "id": "wf23-sweep-timeouts",
+      "name": "Sweep Delivery Timeouts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "UNIKqyAvIUAZkNIs",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "wf23-call-wf3c",
+      "name": "Call WF3c Transition",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        520,
+        220
+      ],
+      "mode": "each",
+      "notes": "WF23 is the sole delivery-timeout scheduler; WF3c owns the transition."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH claimed AS (SELECT * FROM public.claim_v3_assigned_notices(100,NOW())) SELECT a.*,a.target_number AS number,COALESCE(NULLIF(e.offer_context->>'lead_name',''),NULLIF(c.lead_name,''),'No disponible') AS lead_name,COALESCE(NULLIF(e.offer_context->>'lead_phone',''),NULLIF(c.lead_phone,''),NULLIF(o.e164_phone,''),'No disponible') AS lead_phone,COALESCE(NULLIF(e.offer_context->>'property_title',''),NULLIF(e.offer_context->>'property',''),NULLIF(c.current_property,''),NULLIF(o.property_id,''),'No disponible') AS property_title,COALESCE(NULLIF(e.offer_context->>'operation_type',''),NULLIF(e.offer_context->>'operation',''),NULLIF(e.offer_context->>'listing_type',''),'No disponible') AS operation_type,COALESCE(NULLIF(e.offer_context->>'property_zone',''),NULLIF(e.offer_context->>'zone',''),NULLIF(e.offer_context->>'address',''),'No disponible') AS property_zone,COALESCE(NULLIF(e.offer_context->>'property_price',''),NULLIF(e.offer_context->>'price',''),'No disponible') AS property_price,COALESCE(NULLIF(e.property_public_id,''),NULLIF(o.property_id,''),'No disponible') AS property_public_id,COALESCE(NULLIF(e.offer_context->>'easybroker_url',''),'No disponible') AS easybroker_url FROM claimed a JOIN public.i24_capture_events e ON e.capture_event_id=a.capture_event_id JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id LEFT JOIN public.conversations c ON c.conversation_id=o.conversation_id;",
+        "options": {}
+      },
+      "id": "wf23-claim-assigned-notices",
+      "name": "Claim Assigned Notices",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "Bo2YbbUpmBzRbhDa",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "wf23-call-wf13-assigned",
+      "name": "Call WF13 Assigned Notice",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        500
+      ],
+      "mode": "each"
+    }
+  ],
+  "connections": {
+    "Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Sweep Delivery Timeouts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Claim Assigned Notices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sweep Delivery Timeouts": {
+      "main": [
+        [
+          {
+            "node": "Call WF3c Transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Assigned Notices": {
+      "main": [
+        [
+          {
+            "node": "Call WF13 Assigned Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "timezone": "America/Mexico_City",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "errorWorkflow": "He95yJflKVspGFyb"
+  },
+  "activeVersion": null
 }

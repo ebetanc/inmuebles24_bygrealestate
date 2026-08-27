@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "mode": "applied",
+  "project_ref": "wkaeutndwawkdhswisqe",
+  "version": "20260827173500",
+  "name": "lead_routing_v3_assigned_notice_worker",
+  "sha256": "a95a94806bb1c7ef778f0424698dcb122019d3d4c9deb3c3c9fec2ac7b9427ef",
+  "applied_at": "2026-08-27T17:43:38.586253+00:00",
+  "verification": {
+    "function_count": 2,
+    "unsafe_rows": 0
+  },
+  "backup_path": "backups\\lead-routing-v3\\20260827T174338Z\\supabase-assigned-notice-preapply.json"
+}
