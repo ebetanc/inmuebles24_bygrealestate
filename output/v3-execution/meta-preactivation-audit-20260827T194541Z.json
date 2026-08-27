@@ -1,0 +1,24 @@
+{
+  "checked_at_utc": "2026-08-27T19:45:41.371677+00:00",
+  "since_utc": "2026-08-27T19:15:52+00:00",
+  "meta_inbox": {
+    "total_events": 49,
+    "processed": 49,
+    "pending": 0,
+    "leased": 0,
+    "failed": 0,
+    "exhausted": 0,
+    "sent": 9,
+    "delivered": 21,
+    "read": 19,
+    "max_attempts": 1,
+    "rows_with_error_code": 0,
+    "first_event_id": 2,
+    "first_received_at": "2026-08-27T19:16:55.093+00:00",
+    "last_event_id": 50,
+    "last_received_at": "2026-08-27T19:44:53.050+00:00"
+  },
+  "read_only": true,
+  "secrets_printed": false,
+  "pii_printed": false
+}

@@ -1,0 +1,51 @@
+{
+  "checked_at_utc": "2026-08-27T19:43:44.726190+00:00",
+  "since_utc": "2026-08-27T19:15:52.000+00:00",
+  "workflows": {
+    "WF13": {
+      "id": "Bo2YbbUpmBzRbhDa",
+      "active": true,
+      "version_id": "f2812fbd-ca7f-419e-983c-0a0a8de408cd",
+      "active_version_id": "f2812fbd-ca7f-419e-983c-0a0a8de408cd",
+      "executions": 0,
+      "errors": 0
+    },
+    "WF21": {
+      "id": "He95yJflKVspGFyb",
+      "active": true,
+      "version_id": "67cba6ae-e466-4c13-8ee3-152c11a71cdc",
+      "active_version_id": "67cba6ae-e466-4c13-8ee3-152c11a71cdc",
+      "executions": 0,
+      "errors": 0
+    },
+    "WF22": {
+      "id": "Z89IQDw1fgWlqXEW",
+      "active": true,
+      "version_id": "19f8ecec-6b65-4ee2-88ba-0bcee9651d0f",
+      "active_version_id": "19f8ecec-6b65-4ee2-88ba-0bcee9651d0f",
+      "retained_executions": 10,
+      "retained_errors": 0,
+      "retained_running": 10,
+      "last_retained_execution": "565255|running|2026-08-27 19:40:34.020|None",
+      "interpretation": "Running rows are not treated as success; Supabase durable processing is audited separately."
+    },
+    "WF23": {
+      "id": "MjfHw3tYE2qYgJfM",
+      "active": false,
+      "version_id": "a8b7db05-58d1-4c31-a03b-c4eb1bddc9f4",
+      "active_version_id": null,
+      "executions": 0,
+      "errors": 0
+    },
+    "WF3c": {
+      "id": "UNIKqyAvIUAZkNIs",
+      "active": true,
+      "version_id": "52e30db7-a584-4a34-98ec-f053b27a3fe1",
+      "active_version_id": "52e30db7-a584-4a34-98ec-f053b27a3fe1",
+      "executions": 0,
+      "errors": 0
+    }
+  },
+  "read_only": true,
+  "secrets_printed": false
+}
