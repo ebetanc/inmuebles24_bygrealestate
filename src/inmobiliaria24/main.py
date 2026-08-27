@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -204,6 +205,18 @@ async def _run_v3_route_dispatch(settings, store: StateStore) -> list[dict]:
                 error_code="missing_i24_lead_id",
             )
             continue
+        property_public_id = str(payload.get("property_public_id") or "").strip().upper()
+        if not re.fullmatch(r"EB-[A-Z0-9]{4,}", property_public_id):
+            await finish_v3_route_dispatch(
+                capture_event_id, lease_token, success=False,
+                error_code="missing_property_public_id",
+            )
+            logger.warning(
+                "V3 route dispatch blocked for capture {}: EasyBroker property id required",
+                capture_event_id,
+            )
+            continue
+        payload["property_public_id"] = property_public_id
         try:
             await send_to_webhook(
                 [payload],

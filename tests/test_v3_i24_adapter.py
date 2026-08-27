@@ -220,6 +220,52 @@ def test_v3_route_dispatch_failure_is_reclaimable(monkeypatch):
     assert finishes[-1] == {"success": True}
 
 
+def test_v3_route_dispatch_blocks_incomplete_easybroker_property(monkeypatch):
+    claim = {
+        "capture_event_id": 31,
+        "opportunity_id": 17,
+        "disposition": "created_new",
+        "i24_lead_id": "265183003",
+        "property_public_id": None,
+        "offer_context": {
+            "name": "Prospecto",
+            "listing_id": "150316170",
+            "property": "Departamento",
+        },
+        "lease_token": "route-31",
+    }
+    finished = []
+
+    async def claim_dispatches(limit=20):
+        return [claim]
+
+    async def finish(capture_event_id, lease_token, **kwargs):
+        finished.append((capture_event_id, lease_token, kwargs))
+        return True
+
+    async def webhook(*args, **kwargs):
+        raise AssertionError("an incomplete property must never reach n8n or WhatsApp")
+
+    class Store:
+        def mark_seen(self, leads):
+            raise AssertionError("blocked dispatch must not be marked seen")
+
+    monkeypatch.setattr(supa, "claim_v3_route_dispatches", claim_dispatches)
+    monkeypatch.setattr(supa, "finish_v3_route_dispatch", finish)
+    monkeypatch.setattr(main, "send_to_webhook", webhook)
+    settings = type("Settings", (), {
+        "webhook_url": "https://n8n.example/v3",
+        "webhook_token": "tok",
+    })()
+
+    assert asyncio.run(main._run_v3_route_dispatch(settings, Store())) == []
+    assert finished == [(
+        31,
+        "route-31",
+        {"success": False, "error_code": "missing_property_public_id"},
+    )]
+
+
 def test_v3_main_orders_intake_contactado_then_webhook_and_skips_i24_notes():
     source = inspect.getsource(main.async_main)
     assert source.index("v3_intake_lead") < source.index("_run_v3_contactado")

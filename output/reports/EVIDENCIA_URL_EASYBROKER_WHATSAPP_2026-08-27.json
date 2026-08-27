@@ -1,0 +1,70 @@
+{
+  "fecha_verificacion": "2026-08-27",
+  "resultado": "CORREGIDO_EN_PRODUCCION_N8N",
+  "efectos_reales_generados_por_la_verificacion": {
+    "whatsapp_enviado": false,
+    "nota_easybroker_agregada": false,
+    "solicitud_modificada": false
+  },
+  "regla_activa": "No se permite llamar a Meta si easybroker_url no es una URL HTTPS de EasyBroker.",
+  "workflows_publicados": [
+    {
+      "nombre": "WF10 - Scraper Lead Intake",
+      "id": "Obr38705ZZYS3FB8",
+      "active": true,
+      "version_id": "d4cbb829-6bb0-4095-9e0b-02d787883e99",
+      "active_version_id": "d4cbb829-6bb0-4095-9e0b-02d787883e99",
+      "sha256": "acb0311451e7a80bef45199e9274a421fb8a19eca5eca196266f79973850775e"
+    },
+    {
+      "nombre": "WF12 - Owner Resolver",
+      "id": "w7yJr7naWoxPq6Pw",
+      "active": true,
+      "version_id": "f5042c41-22ae-4245-a8d2-847edefd0f79",
+      "active_version_id": "f5042c41-22ae-4245-a8d2-847edefd0f79",
+      "sha256": "1f6979056b83ac33afd65ed40477c6d092b07e8d9f6186ba9e429ad9ad5b3cb5"
+    },
+    {
+      "nombre": "WF13 - Directed Owner Notify",
+      "id": "Bo2YbbUpmBzRbhDa",
+      "active": true,
+      "version_id": "103aa634-b699-47e6-bf21-518ef1f9baf3",
+      "active_version_id": "103aa634-b699-47e6-bf21-518ef1f9baf3",
+      "sha256": "33ba3abd7d00cae06c4dbdf25ca92841a6296c55ead1fec91a55916fa48c4174"
+    }
+  ],
+  "n8n_health": { "status": "ok" },
+  "backup_produccion": "/root/n8n-url-fix-backup-20260827T205750Z",
+  "prueba_sin_efectos": {
+    "fuente": "GET real de EasyBroker y JavaScript publicado de WF12 -> WF10 -> WF13",
+    "public_id": "EB-WT7538",
+    "owner_tag": "Marusa",
+    "template": "lead_subasta_v3",
+    "parameter_count": 8,
+    "parameters": [
+      "Prospecto de evidencia",
+      "+52XXXXXXXXXX",
+      "PRIVADA EXCLUSIVA DE 5 CASAS, EN BOSQUES DE LAS LOMAS CON CANCHA DE TENIS",
+      "Venta / Renta",
+      "Bosque de las Lomas, Miguel Hidalgo, Ciudad de México",
+      "$38,000,000 MXN / $200,000 MXN",
+      "EB-WT7538",
+      "https://www.easybroker.com/mx/listings/privada-exclusiva-de-5-casas-en-bosques-de-las-lomas-con-cancha-de-tenis-d16b424f-dcb3-4447-a831-3b6d5c16f6bb"
+    ],
+    "missing_url_blocked": true,
+    "provider_called": false,
+    "whatsapp_sent": false,
+    "secrets_printed": false
+  },
+  "tests": {
+    "focused": "23 passed, 1 warning",
+    "full_suite": "307 passed, 2 xfailed, 415 warnings",
+    "javascript_code_nodes_compile": true
+  },
+  "raspberry_pi": {
+    "guardia_temprana_implementada_localmente": true,
+    "despliegue_pendiente": true,
+    "motivo": "Tailscale SSH requiere reautenticacion.",
+    "impacto_actual": "La barrera publicada en n8n ya impide que un mensaje incompleto llegue a Meta."
+  }
+}

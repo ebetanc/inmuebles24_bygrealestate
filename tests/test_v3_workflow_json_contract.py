@@ -67,6 +67,29 @@ def test_wf12_requires_exactly_one_tag_before_sql_resolver():
         assert "Tag Count Exactly One?" in workflow["connections"]["Extract Tags"]["main"][0][0]["node"]
 
 
+def test_wf10_and_wf12_preserve_and_require_real_easybroker_property_context():
+    for path in PAIRS["WF10"]:
+        workflow = load(path)
+        normalize = node(workflow, "Split & Normalize Leads")["parameters"]["jsCode"]
+        prepare = node(workflow, "Prepare V3 Owner Notify")["parameters"]["jsCode"]
+        for field in ("operation_type", "property_zone", "property_price", "easybroker_url"):
+            assert field in normalize
+            assert field in prepare
+        assert "owner.property_title" in prepare
+        assert "easybroker_public_url_required" in prepare
+        assert "easybroker\\.com" in prepare
+
+    for path in PAIRS["WF12"]:
+        workflow = load(path)
+        extract = node(workflow, "Extract Tags")["parameters"]["jsCode"]
+        shape = node(workflow, "Shape Output")["parameters"]["jsCode"]
+        for api_field in ("resp.public_url", "resp.public_id", "resp.title", "resp.location", "resp.operations"):
+            assert api_field in extract
+        assert "easybroker_public_url_required" in extract
+        for field in ("property_title", "operation_type", "property_zone", "property_price", "easybroker_url"):
+            assert field in shape
+
+
 def test_wf13_is_owner_or_primary_and_uses_v3_offer():
     for path in PAIRS["WF13"]:
         workflow = load(path)
@@ -75,6 +98,13 @@ def test_wf13_is_owner_or_primary_and_uses_v3_offer():
         assert "primary_guard" in build and "backup_guard" not in build
         assert "claim:v3" in build and "lead_subasta_v3" in body
         assert body.count('"type": "text"') == 8
+        ordered_fields = (
+            "lead_name", "lead_phone", "property_title", "operation_type",
+            "property_zone", "property_price", "property_public_id", "easybroker_url",
+        )
+        positions = [body.index(f"$json.{field}") for field in ordered_fields]
+        assert positions == sorted(positions)
+        assert "No disponible" not in body[positions[-1]:body.find("}\n        ]", positions[-1])]
 
 
 def test_wf13_and_wf23_process_buttonless_assigned_notices_durably():
