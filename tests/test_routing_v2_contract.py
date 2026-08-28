@@ -420,6 +420,9 @@ def test_s05_s06_s07_tiers_are_sequential_and_end_unassigned():
     assert not any(node["type"] == "n8n-nodes-base.scheduleTrigger" for node in wf3c["nodes"])
     assert wf3c["connections"]["When Called by WF23"]["main"][0][0]["node"] == "Advance Expired Tiers"
     nodes = {node["name"]: node for node in wf3c["nodes"]}
+    assert wf3c["connections"]["Advance Expired Tiers"]["main"][0][0]["node"] == "Hydrate Transition Attempt"
+    assert wf3c["connections"]["Hydrate Transition Attempt"]["main"][0][0]["node"] == "Route Transition"
+    assert "a.attempt_id=ctx.attempt_id" in nodes["Hydrate Transition Attempt"]["parameters"]["query"]
     assert "V3 Sandy Alert Target" not in nodes
     assert "V3 Sandy Alert Target" not in wf3c["connections"]
     route_options = nodes["Route Transition"]["parameters"]["options"]
@@ -820,7 +823,7 @@ def test_s11_first_tag_is_strict_and_missing_owner_falls_back_to_guards():
     assert "route_missing_owner_data" in wf10_nodes["Route Missing Owner Data"]["query"]
     assert "Set Manager Tier" not in wf10_nodes
     assert "Notify Manager (Unresolved)" not in wf10_nodes
-    assert wf10["connections"]["Owner Resolved?"]["main"][1][0]["node"] == "Prepare V3 Owner Notify"
+    assert wf10["connections"]["Owner Resolved?"]["main"][1][0]["node"] == "Route Missing Owner Data"
     webhook = next(n for n in wf10["nodes"] if n["name"] == "Scraper Webhook")
     assert webhook["parameters"]["authentication"] == "headerAuth"
     assert webhook["parameters"]["responseMode"] == "lastNode"
@@ -1356,8 +1359,9 @@ def test_lrv2_013_v3_intake_uses_the_durable_owner_guard_sandy_router():
     node_params = {n["name"]: n["parameters"] for n in wf10["nodes"]}
 
     # Keep the V2 safe-mode nodes available for rollback, while the live V3
-    # intake feeds every owner-resolution outcome into WF13. WF13 owns the
-    # durable owner -> one guard -> Sandy decision and must never be bypassed.
+    # intake sends resolved owners into WF13. Unresolved outcomes first pass
+    # through the fail-closed router: missing ID/URL becomes manual review,
+    # while a valid property with missing owner data continues to guard/Sandy.
     assert "Check V3 Routing Safe Mode" in node_params
     assert "get_routing_safe_mode" in json.dumps(node_params["Check V3 Routing Safe Mode"])
     assert "Safe Mode Active?" in node_params
@@ -1367,7 +1371,7 @@ def test_lrv2_013_v3_intake_uses_the_durable_owner_guard_sandy_router():
     assert conn["Restore V3 Dispatch Context"]["main"][0][0]["node"] == "Resolve Owner (WF12)"
     assert conn["Resolve Owner (WF12)"]["main"][0][0]["node"] == "Owner Resolved?"
     assert conn["Owner Resolved?"]["main"][0][0]["node"] == "Prepare V3 Owner Notify"
-    assert conn["Owner Resolved?"]["main"][1][0]["node"] == "Prepare V3 Owner Notify"
+    assert conn["Owner Resolved?"]["main"][1][0]["node"] == "Route Missing Owner Data"
     assert conn["Prepare V3 Owner Notify"]["main"][0][0]["node"] == "Notify Owner (WF13)"
 
     names = [n["name"] for n in wf10["nodes"]]
@@ -1477,6 +1481,12 @@ def test_wf3c_serializes_guard_delivery_effects():
     assert not any(node["type"] == "n8n-nodes-base.scheduleTrigger" for node in workflow["nodes"])
     assert workflow["connections"]["When Called by WF23"]["main"][0][0]["node"] == (
         "Advance Expired Tiers"
+    )
+    assert workflow["connections"]["Advance Expired Tiers"]["main"][0][0]["node"] == (
+        "Hydrate Transition Attempt"
+    )
+    assert workflow["connections"]["Hydrate Transition Attempt"]["main"][0][0]["node"] == (
+        "Route Transition"
     )
 
 

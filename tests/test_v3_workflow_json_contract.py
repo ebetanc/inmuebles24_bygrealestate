@@ -85,9 +85,32 @@ def test_wf10_and_wf12_preserve_and_require_real_easybroker_property_context():
         shape = node(workflow, "Shape Output")["parameters"]["jsCode"]
         for api_field in ("resp.public_url", "resp.public_id", "resp.title", "resp.location", "resp.operations"):
             assert api_field in extract
-        assert "easybroker_public_url_required" in extract
+        assert "easybroker_public_url_missing" in extract
+        assert "resolution_ready" in extract
+        assert "throw new Error('easybroker_public_url_required')" not in extract
         for field in ("property_title", "operation_type", "property_zone", "property_price", "easybroker_url"):
             assert field in shape
+
+
+def test_wf10_and_wf12_fail_closed_without_email_storm_or_whatsapp():
+    for path in PAIRS["WF12"]:
+        workflow = load(path)
+        invalid_code_target = workflow["connections"]["Valid EB Code?"]["main"][1][0]["node"]
+        assert invalid_code_target == "Extract Tags"
+        gate = node(workflow, "Tag Count Exactly One?")["parameters"]["conditions"]["conditions"][0]["leftValue"]
+        assert "resolution_ready" in gate
+        extract = node(workflow, "Extract Tags")["parameters"]["jsCode"]
+        assert "property_public_id_required" in extract
+        assert "easybroker_public_url_missing" in extract
+
+    for path in PAIRS["WF10"]:
+        workflow = load(path)
+        resolved = workflow["connections"]["Owner Resolved?"]["main"]
+        assert resolved[0][0]["node"] == "Prepare V3 Owner Notify"
+        assert resolved[1][0]["node"] == "Route Missing Owner Data"
+        manual = node(workflow, "Route Missing Owner Data")["parameters"]["query"]
+        assert "route_dispatch_status='manual_review'" in manual
+        assert "easybroker_public_url_missing" in manual
 
 
 def test_wf13_is_owner_or_primary_and_uses_v3_offer():
@@ -105,6 +128,19 @@ def test_wf13_is_owner_or_primary_and_uses_v3_offer():
         positions = [body.index(f"$json.{field}") for field in ordered_fields]
         assert positions == sorted(positions)
         assert "No disponible" not in body[positions[-1]:body.find("}\n        ]", positions[-1])]
+        route_query = node(workflow, "Route Ready V3")["parameters"]["query"]
+        assert "existing AS (" in route_query
+        assert "$13::bigint IS NOT NULL" in route_query
+        assert "a.lease_token=$14" in route_query
+        assert "$13::bigint IS NULL" in route_query
+        assert "enriched_capture AS (UPDATE public.i24_capture_events" in route_query
+        assert "enriched_opportunity AS (UPDATE public.lead_routing_opportunities" in route_query
+        assert "'easybroker_url',NULLIF($12::text,'')" in route_query
+        assert "offer_context=COALESCE(c0.offer_context,'{}'::jsonb)" in route_query
+        assert "v3_offer_context=COALESCE(o1.v3_offer_context,'{}'::jsonb)" in route_query
+        assert "c0.opportunity_id=$1::bigint" in route_query
+        assert "FROM selected s" in route_query
+        assert "JOIN public.agents" not in route_query
 
 
 def test_wf13_and_wf23_process_buttonless_assigned_notices_durably():
@@ -223,6 +259,13 @@ def test_wf23_is_the_30_second_two_minute_dispatcher():
         assert "o.assigned_agent_id IS NULL" in timeout_query
         assert "o.current_delivery_attempt_id=a.attempt_id" in timeout_query
         assert "o.routing_tier=a.routing_tier" in timeout_query
+        assert "a.status='delivered'" in timeout_query
+        assert "INTERVAL '5 minutes'" in timeout_query
+        assert "easybroker_url" in timeout_query
+        assert "easybroker" in timeout_query
+        assigned_query = node(workflow, "Claim Assigned Notices")["parameters"]["query"]
+        assert "easybroker_url" in assigned_query
+        assert "easybroker" in assigned_query
         assert node(workflow, "Call WF3c Transition")["mode"] == "each"
 
 
@@ -234,6 +277,24 @@ def test_wf3c_has_no_schedule_and_only_execute_trigger():
         assigned_target = workflow["connections"]["Route Transition"]["main"][1][0]["node"]
         assert assigned_target == "V3 Sandy Assignment Durable"
         assert assigned_target != "WhatsApp Sandy Unassigned Alert"
+        transition_query = node(workflow, "Advance Expired Tiers")["parameters"]["query"]
+        hydrate_query = node(workflow, "Hydrate Transition Attempt")["parameters"]["query"]
+        assert workflow["connections"]["Advance Expired Tiers"]["main"][0][0]["node"] == "Hydrate Transition Attempt"
+        assert workflow["connections"]["Hydrate Transition Attempt"]["main"][0][0]["node"] == "Route Transition"
+        assert "a.attempt_id=ctx.attempt_id" in hydrate_query
+        assert "COALESCE(a.capture_event_id,ctx.capture_event_id)" in hydrate_query
+        for required_context in (
+            "attempt_id",
+            "capture_event_id",
+            "recipient_number",
+            "lease_token",
+            "property_public_id",
+            "easybroker_url",
+        ):
+            assert required_context in hydrate_query
+        assert "attempt_id" in transition_query
+        assert "capture_event_id" in transition_query
+        assert "lead_routing_delivery_attempts" not in transition_query
 
 
 def test_wf10_recurrent_notification_is_the_eight_field_v3_template():

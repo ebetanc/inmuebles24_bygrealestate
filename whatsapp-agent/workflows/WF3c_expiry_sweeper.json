@@ -4,7 +4,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT r.result, (r.result->>'state') AS state, (r.result->>'opportunity_id')::bigint AS opportunity_id FROM (SELECT public.v3_advance_routing_tier($1::bigint,$2,NOW()) AS result) r;",
+        "query": "WITH advanced AS (SELECT public.v3_advance_routing_tier($1::bigint,$2,NOW()) AS result) SELECT result,result->>'state' AS state,(result->>'opportunity_id')::bigint AS opportunity_id,NULLIF(result->>'attempt_id','')::bigint AS attempt_id,NULLIF(result->>'capture_event_id','')::bigint AS capture_event_id FROM advanced;",
         "options": {
           "queryReplacement": "={{ [$json.opportunity_id, $json.expected_tier || $json.routing_tier] }}"
         }
@@ -15,6 +15,29 @@
       "typeVersion": 2.5,
       "position": [
         460,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ctx AS (SELECT NULLIF($1::text,'')::bigint AS attempt_id,$2::bigint AS opportunity_id,$3::text AS state,NULLIF($4::text,'')::bigint AS capture_event_id) SELECT jsonb_build_object('state',ctx.state,'opportunity_id',ctx.opportunity_id,'attempt_id',ctx.attempt_id,'capture_event_id',COALESCE(a.capture_event_id,ctx.capture_event_id)) AS result,ctx.state,ctx.opportunity_id,a.attempt_id,COALESCE(a.capture_event_id,ctx.capture_event_id) AS capture_event_id,a.routing_tier AS expected_tier,a.routing_tier,a.target_agent_id,a.target_number AS recipient_number,a.lease_token,COALESCE(NULLIF(e.offer_context->>'property_title',''),NULLIF(e.offer_context->>'property',''),NULLIF(c.current_property,''),NULLIF(o.property_id,''),'No disponible') AS property_title,COALESCE(NULLIF(e.offer_context->>'operation_type',''),NULLIF(e.offer_context->>'operation',''),NULLIF(e.offer_context->>'listing_type',''),'No disponible') AS operation_type,COALESCE(NULLIF(e.offer_context->>'property_zone',''),NULLIF(e.offer_context->>'zone',''),NULLIF(e.offer_context->>'address',''),'No disponible') AS property_zone,COALESCE(NULLIF(e.offer_context->>'property_price',''),NULLIF(e.offer_context->>'price',''),'No disponible') AS property_price,COALESCE(NULLIF(e.offer_context->>'lead_name',''),NULLIF(c.lead_name,''),'No disponible') AS lead_name,COALESCE(NULLIF(e.offer_context->>'lead_phone',''),NULLIF(c.lead_phone,''),NULLIF(o.e164_phone,''),'No disponible') AS lead_phone,COALESCE(NULLIF(e.property_public_id,''),NULLIF(o.property_id,''),'No disponible') AS property_public_id,e.offer_context->>'easybroker_url' AS easybroker_url,COALESCE(e.offer_context->'property_tags','[]'::jsonb) AS property_tags FROM ctx LEFT JOIN public.lead_routing_delivery_attempts a ON a.attempt_id=ctx.attempt_id AND a.opportunity_id=ctx.opportunity_id LEFT JOIN public.i24_capture_events e ON e.capture_event_id=COALESCE(a.capture_event_id,ctx.capture_event_id) LEFT JOIN public.lead_routing_opportunities o ON o.opportunity_id=ctx.opportunity_id LEFT JOIN public.conversations c ON c.conversation_id=o.conversation_id;",
+        "options": {
+          "queryReplacement": "={{ [String($json.result?.attempt_id || ''), $json.result?.opportunity_id || $json.opportunity_id, $json.result?.state || $json.state, String($json.result?.capture_event_id || $json.capture_event_id || '')] }}"
+        }
+      },
+      "id": "wf3c-hydrate-transition-attempt",
+      "name": "Hydrate Transition Attempt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        680,
         300
       ],
       "credentials": {
@@ -289,6 +312,17 @@
   ],
   "connections": {
     "Advance Expired Tiers": {
+      "main": [
+        [
+          {
+            "node": "Hydrate Transition Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hydrate Transition Attempt": {
       "main": [
         [
           {

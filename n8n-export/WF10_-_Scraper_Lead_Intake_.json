@@ -556,9 +556,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM public.route_missing_owner_data(\n  $1::bigint,\n  'missing_owner_data',\n  $2\n);",
+        "query": "WITH manual AS (\n  UPDATE public.i24_capture_events\n  SET route_dispatch_status='manual_review',\n      route_dispatch_last_error_code=$3,\n      route_dispatch_lease_token=NULL,\n      route_dispatch_lease_expires_at=NULL,\n      route_dispatch_next_attempt_at=NULL\n  WHERE capture_event_id=$2::bigint\n    AND $3 IN ('property_public_id_required','easybroker_public_url_missing')\n    AND route_dispatch_status IN ('pending','leased','failed')\n  RETURNING capture_event_id, opportunity_id\n), routed AS (\n  SELECT to_jsonb(r) AS result\n  FROM public.route_missing_owner_data($1::bigint,'missing_owner_data',$4) r\n  WHERE $3 NOT IN ('property_public_id_required','easybroker_public_url_missing')\n)\nSELECT jsonb_build_object('state','manual_review','capture_event_id',capture_event_id,'opportunity_id',opportunity_id,'reason',$3) AS result\nFROM manual\nUNION ALL\nSELECT result FROM routed;",
         "options": {
-          "queryReplacement": "={{ [$json.opportunity_id, \"wf10:missing-owner:\" + $json.opportunity_id + \":\" + ($json.property_public_id || \"unknown\")] }}"
+          "queryReplacement": "={{ [$json.opportunity_id, $json.capture_event_id, $json.reason || 'missing_owner_data', 'wf10:missing-owner:' + $json.opportunity_id + ':' + ($json.property_public_id || 'unknown') + ':' + ($json.reason || 'missing_owner_data')] }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
@@ -1058,7 +1058,7 @@
         ],
         [
           {
-            "node": "Prepare V3 Owner Notify",
+            "node": "Route Missing Owner Data",
             "type": "main",
             "index": 0
           }
@@ -1741,9 +1741,9 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "SELECT * FROM public.route_missing_owner_data(\n  $1::bigint,\n  'missing_owner_data',\n  $2\n);",
+          "query": "WITH manual AS (\n  UPDATE public.i24_capture_events\n  SET route_dispatch_status='manual_review',\n      route_dispatch_last_error_code=$3,\n      route_dispatch_lease_token=NULL,\n      route_dispatch_lease_expires_at=NULL,\n      route_dispatch_next_attempt_at=NULL\n  WHERE capture_event_id=$2::bigint\n    AND $3 IN ('property_public_id_required','easybroker_public_url_missing')\n    AND route_dispatch_status IN ('pending','leased','failed')\n  RETURNING capture_event_id, opportunity_id\n), routed AS (\n  SELECT to_jsonb(r) AS result\n  FROM public.route_missing_owner_data($1::bigint,'missing_owner_data',$4) r\n  WHERE $3 NOT IN ('property_public_id_required','easybroker_public_url_missing')\n)\nSELECT jsonb_build_object('state','manual_review','capture_event_id',capture_event_id,'opportunity_id',opportunity_id,'reason',$3) AS result\nFROM manual\nUNION ALL\nSELECT result FROM routed;",
           "options": {
-            "queryReplacement": "={{ [$json.opportunity_id, \"wf10:missing-owner:\" + $json.opportunity_id + \":\" + ($json.property_public_id || \"unknown\")] }}"
+            "queryReplacement": "={{ [$json.opportunity_id, $json.capture_event_id, $json.reason || 'missing_owner_data', 'wf10:missing-owner:' + $json.opportunity_id + ':' + ($json.property_public_id || 'unknown') + ':' + ($json.reason || 'missing_owner_data')] }}"
           }
         },
         "type": "n8n-nodes-base.postgres",
@@ -2130,7 +2130,7 @@
         "main": [
           [
             {
-              "node": "Prepare Owner Notify",
+              "node": "Prepare V3 Owner Notify",
               "type": "main",
               "index": 0
             }
