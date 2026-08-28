@@ -37,15 +37,15 @@ the lease token before releasing it.
 
 ```bash
 # one lead, by exact EasyBroker request ID (forces the gate on; ignores Supabase)
-python -m easybroker --once 12345678 --agent "Sandy" --headful
+python -m easybroker --once 12345678 --agent "Sandy"
 
 # poll + attend every pending EB lead (gated)
 EB_MARK_ATTENDED=1 python -m easybroker
 
 # diagnostics (read-only)
-python -m easybroker --dry-run --headful           # verify login
-python -m easybroker --inspect-login --headful      # dump login form
-python -m easybroker --inspect-buzon 5519205636 --headful  # dump Buzón controls
+python -m easybroker --dry-run                     # verify login
+python -m easybroker --inspect-login               # dump login form
+python -m easybroker --inspect-buzon 5519205636    # dump Buzón controls
 ```
 
 Without `EB_MARK_ATTENDED=1` the default poll mode only lists pending leads.
@@ -69,6 +69,12 @@ port `9222`). The persistent profile keeps the EB session logged in between runs
 ## Env
 
 `EASYBROKER_EMAIL`, `EASYBROKER_PASSWORD` (UI login), `EASYBROKER_API_KEY`
-(read-only request correlation),
+(account API GET reconciliation), `EASYBROKER_PARTNER_API_KEY` (Partners API
+creation; no fallback to the account key), `EASYBROKER_PARTNER_COUNTRY_CODE=MX`
+(two-letter country code),
 `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `EB_MARK_ATTENDED=1`,
+`EASYBROKER_V3_INBOX=1`, and `EASYBROKER_CREATE_REQUESTS=1` (POST creation only when `EASYBROKER_CREATE_REQUESTS=1`; explicitly
+enables the durable one-shot Partners API POST for captures 107/108 and newer
+eligible `created_new` captures; disabled by default). Each POST carries the
+numeric I24 lead ID as stable `remote_id`; a fallback message is always sent.
 optional `CHROME_PATH` (e.g. Edge on Windows), `CHROME_PROXY`.

@@ -37,6 +37,7 @@ from easybroker.supa import (
     fetch_pending_attend,
     finish_attend_attempt,
     list_pending_attend,
+    create_pending_easybroker_requests,
     reconcile_i24_easybroker_requests,
 )
 
@@ -197,17 +198,24 @@ async def async_main(args: argparse.Namespace) -> int:
             # Default: poll + attend each pending EB lead.
             gate = os.environ.get("EB_MARK_ATTENDED", "").strip() == "1"
             reconcile_failed = False
+            creation_failed = False
             if settings.v3_inbox_enabled:
-                # V3 ingestion/correlation is durable and idempotent. The
-                # external EasyBroker mutations remain behind the existing
-                # explicit gate, preserving the V2 safe-mode behavior.
+                # V3 ingestion/correlation is durable and idempotent. Request
+                # creation has its own gate; note/Atendida remain behind EB_MARK_ATTENDED.
                 reconcile_failed = await reconcile_i24_easybroker_requests(settings) is None
+                if settings.easybroker_create_requests:
+                    try:
+                        creations = await create_pending_easybroker_requests(settings)
+                        logger.info("EasyBroker V3 request creations processed: {}", len(creations))
+                    except Exception as exc:
+                        creation_failed = True
+                        logger.warning("EasyBroker V3 request creation failed: {}", exc)
                 if not gate:
                     print("EasyBroker V3 inbox reconciled; EB_MARK_ATTENDED!=1 — effect worker paused.")
-                    return 1 if reconcile_failed else 0
+                    return 1 if (reconcile_failed or creation_failed) else 0
                 completed, effects_failed = await _run_v3_effect_worker(settings, page)
                 print(f"V3 EasyBroker effects completed: {completed}; failures: {int(effects_failed)}")
-                return 1 if (reconcile_failed or effects_failed) else 0
+                return 1 if (reconcile_failed or creation_failed or effects_failed) else 0
             if gate:
                 reconcile_failed = await reconcile_i24_easybroker_requests(settings) is None
             leads = (await fetch_pending_attend(settings) if gate

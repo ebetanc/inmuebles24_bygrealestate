@@ -18,8 +18,10 @@ class EBSettings:
     email: str
     password: str = field(repr=False)  # never printed in logs or tracebacks
 
-    # Read-only API key used to correlate I24 leads with exact Buzón requests.
+    # Account API key for GET reconciliation. Creation uses the separate Partners key.
     api_key: str = field(default="", repr=False)
+    partner_api_key: str = field(default="", repr=False)
+    partner_country_code: str = "MX"
 
     # Supabase (poll for assigned EB leads needing the Atendida + note actions)
     supabase_url: str = ""
@@ -27,6 +29,8 @@ class EBSettings:
 
     # V3 request-level inbox is opt-in until its migration is applied.
     v3_inbox_enabled: bool = False
+    # POST creation requires its separate explicit gate; it is off by default.
+    easybroker_create_requests: bool = False
     account_key: str = "default"
 
     @classmethod
@@ -47,12 +51,19 @@ class EBSettings:
                 f"Add EASYBROKER_EMAIL and EASYBROKER_PASSWORD to .env."
             )
 
+        partner_country_code = os.environ.get("EASYBROKER_PARTNER_COUNTRY_CODE", "MX").strip().upper()
+        if partner_country_code not in {"MX", "CL", "DO", "AR", "CR", "PE"}:
+            raise ValueError("EASYBROKER_PARTNER_COUNTRY_CODE is not supported by EasyBroker Partners")
+
         return cls(
             email=email,
             password=password,
             api_key=os.environ.get("EASYBROKER_API_KEY", "").strip(),
+            partner_api_key=os.environ.get("EASYBROKER_PARTNER_API_KEY", "").strip(),
+            partner_country_code=partner_country_code,
             supabase_url=os.environ.get("SUPABASE_URL", "").strip(),
             supabase_service_key=os.environ.get("SUPABASE_SERVICE_KEY", "").strip(),
             v3_inbox_enabled=os.environ.get("EASYBROKER_V3_INBOX", "").strip().lower() in {"1", "true", "yes"},
+            easybroker_create_requests=os.environ.get("EASYBROKER_CREATE_REQUESTS", "").strip().lower() in {"1", "true", "yes"},
             account_key=os.environ.get("EASYBROKER_ACCOUNT_KEY", "default").strip() or "default",
         )

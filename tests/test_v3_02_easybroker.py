@@ -2,13 +2,26 @@
 
 from datetime import datetime, timezone
 
-from easybroker.supa import _checkpoint_due, normalize_e164, sanitize_contact_request
+from easybroker.supa import (
+    _checkpoint_due,
+    normalize_e164,
+    normalize_easybroker_phone_mx,
+    sanitize_contact_request,
+)
 
 
 def test_phone_requires_explicit_country_code():
     assert normalize_e164("55 1111 2222") is None
     assert normalize_e164("55 1111 2222", "52") == "+525511112222"
     assert normalize_e164("+52 55 1111 2222") == "+525511112222"
+
+
+def test_easybroker_mx_phone_variants_are_normalized_without_ambiguous_guesses():
+    assert normalize_easybroker_phone_mx("55 1111 2222") == "+525511112222"
+    assert normalize_easybroker_phone_mx("52 55 1111 2222") == "+525511112222"
+    assert normalize_easybroker_phone_mx("+52 55 1111 2222") == "+525511112222"
+    assert normalize_easybroker_phone_mx("12345678") is None
+    assert normalize_easybroker_phone_mx("123456789012345678901") is None
 
 
 def test_sanitized_request_separates_person_and_request_fields():

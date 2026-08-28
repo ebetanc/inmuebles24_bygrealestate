@@ -17,6 +17,7 @@ import re
 
 
 CONTACT_REQUESTS_URL = "https://api.easybroker.com/v1/contact_requests"
+PARTNER_CONTACT_REQUESTS_URL = "https://api.easybroker.com/v1/integration_partners/contact_requests"
 
 
 def normalize_email(value: object) -> str | None:
@@ -36,13 +37,26 @@ def normalize_e164(value: object, country_code: object = None) -> str | None:
     return digits if re.fullmatch(r"\+[1-9][0-9]{7,14}", digits) else None
 
 
+def normalize_easybroker_phone_mx(value: object) -> str | None:
+    """Normalize EasyBroker's Mexico phone variants without guessing."""
+    raw = str(value or "").strip()
+    if raw.startswith("+"):
+        return normalize_e164(raw)
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 10:
+        return f"+52{digits}"
+    if len(digits) == 12 and digits.startswith("52"):
+        return f"+{digits}"
+    return None
+
+
 def sanitize_contact_request(row: dict) -> dict | None:
     """Return allowlisted request fields; never forward the raw provider row."""
     normalized = _normalize_contact_request(row)
     if normalized is None:
         return None
     email = normalize_email(row.get("email"))
-    phone = normalize_e164(row.get("phone_e164") or row.get("phone"), row.get("country_code"))
+    phone = normalize_easybroker_phone_mx(row.get("phone_e164") or row.get("phone"))
     evidence = {
         "eb_request_id": normalized["id"],
         "property_public_id": normalized["property_id"] or None,
@@ -69,6 +83,300 @@ def _headers(key: str) -> dict:
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
     }
+
+
+def _creation_name(claim: dict) -> str | None:
+    context = claim.get("offer_context")
+    if not isinstance(context, dict):
+        return None
+    value = context.get("name") or context.get("lead_name")
+    return str(value).strip() or None
+
+
+def _creation_payload(claim: dict) -> dict:
+    """Build the documented EasyBroker POST body from allowlisted fields."""
+    context = claim.get("offer_context")
+    context = context if isinstance(context, dict) else {}
+    lead_id = str(claim.get("i24_lead_id") or "").strip()
+    # Partners API remote_id is the stable I24 identity, never a random attempt id.
+    remote_id = int(lead_id) if lead_id.isdigit() else ""
+    message = str(context.get("message_preview") or "").strip()[:500]
+    payload = {
+        "remote_id": remote_id,
+        "name": _creation_name(claim),
+        "phone": claim.get("e164_phone"),
+        "email": claim.get("normalized_email"),
+        "property_id": str(claim.get("property_public_id") or "").strip().upper(),
+        "message": message or "Nuevo lead de Inmuebles24.",
+    }
+    return {key: value for key, value in payload.items() if value not in (None, "")}
+
+
+def _creation_match(claim: dict, row: dict) -> bool:
+    """Match one existing provider request without trusting names or raw rows."""
+    normalized = row if row.get("eb_request_id") else sanitize_contact_request(row)
+    if not normalized:
+        return False
+    if claim.get("remote_request_id") is not None:
+        try:
+            if int(normalized["eb_request_id"]) != int(claim["remote_request_id"]):
+                return False
+        except (KeyError, TypeError, ValueError):
+            return False
+    if str(normalized.get("property_public_id") or "").upper() != str(
+        claim.get("property_public_id") or ""
+    ).upper():
+        return False
+    expected_email = normalize_email(claim.get("normalized_email"))
+    expected_phone = normalize_e164(claim.get("e164_phone"))
+    actual_email = normalized.get("normalized_email")
+    actual_phone = normalized.get("e164_phone")
+    if not ((expected_email and expected_email == actual_email)
+            or (expected_phone and expected_phone == actual_phone)):
+        return False
+    if expected_email and actual_email and expected_email != actual_email:
+        return False
+    if expected_phone and actual_phone and expected_phone != actual_phone:
+        return False
+    try:
+        happened = datetime.fromisoformat(str(normalized["happened_at"]).replace("Z", "+00:00"))
+        start = datetime.fromisoformat(str(claim["correlation_window_start_at"]).replace("Z", "+00:00"))
+        horizon = datetime.fromisoformat(str(claim["correlation_horizon_at"]).replace("Z", "+00:00"))
+        if not (start <= happened <= horizon):
+            return False
+    except (KeyError, TypeError, ValueError):
+        return False
+    return True
+
+
+async def claim_v3_easybroker_request_creations(settings, *, limit: int = 20) -> list[dict]:
+    endpoint = f"{settings.supabase_url.rstrip('/')}/rest/v1/rpc/claim_v3_easybroker_request_creations"
+    payload = {"p_limit": limit, "p_now": datetime.now(timezone.utc).isoformat(),
+               "p_lease_duration": "00:02:00"}
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(endpoint, headers=_headers(settings.supabase_service_key), json=payload)
+        response.raise_for_status()
+        result = response.json()
+    return result if isinstance(result, list) else []
+
+
+async def reserve_v3_easybroker_request_creation(
+    settings, *, capture_event_id: int, lease_token: str, manual_retry: bool = False,
+) -> bool:
+    endpoint = f"{settings.supabase_url.rstrip('/')}/rest/v1/rpc/reserve_v3_easybroker_request_creation"
+    payload = {"p_capture_event_id": capture_event_id, "p_lease_token": lease_token,
+               "p_now": datetime.now(timezone.utc).isoformat(),
+               "p_manual_retry": manual_retry}
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(endpoint, headers=_headers(settings.supabase_service_key), json=payload)
+        response.raise_for_status()
+        result = response.json()
+    return isinstance(result, dict) and result.get("ok") is True and result.get("post_allowed") is True
+
+
+async def authorize_v3_easybroker_request_retry(
+    settings, *, capture_event_id: int, authorized_by: str, reason: str,
+) -> dict:
+    """Authorize one exact retry after an operator confirmed provider absence."""
+    endpoint = f"{settings.supabase_url.rstrip('/')}/rest/v1/rpc/authorize_v3_easybroker_request_retry"
+    payload = {"p_capture_event_id": capture_event_id, "p_authorized_by": authorized_by,
+               "p_reason": reason, "p_now": datetime.now(timezone.utc).isoformat()}
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(endpoint, headers=_headers(settings.supabase_service_key), json=payload)
+        response.raise_for_status()
+        result = response.json()
+    return result if isinstance(result, dict) else {"ok": False}
+
+
+async def finish_v3_easybroker_request_creation(
+    settings, *, capture_event_id: int, lease_token: str, state: str,
+    remote_request_id: int | None = None, evidence: dict | None = None,
+    error: str | None = None, preexisting: bool = False,
+) -> dict:
+    if state not in {"created", "recovery", "manual_review"}:
+        raise ValueError("invalid EasyBroker creation state")
+    endpoint = f"{settings.supabase_url.rstrip('/')}/rest/v1/rpc/finish_v3_easybroker_request_creation"
+    payload = {
+        "p_capture_event_id": capture_event_id,
+        "p_lease_token": lease_token,
+        "p_state": state,
+        "p_remote_request_id": remote_request_id,
+        "p_evidence": evidence or {},
+        "p_error": error,
+        "p_preexisting": preexisting,
+        "p_now": datetime.now(timezone.utc).isoformat(),
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(endpoint, headers=_headers(settings.supabase_service_key), json=payload)
+        response.raise_for_status()
+        result = response.json()
+    return result if isinstance(result, dict) else {"ok": False}
+
+
+async def post_v3_easybroker_contact_request(settings, claim: dict) -> dict:
+    """Perform exactly one provider POST; callers classify status failures.
+
+    Contract: https://dev.easybroker.com/docs/contact-request
+    Creation uses the Partners endpoint; account API remains read-only reconciliation.
+    """
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            PARTNER_CONTACT_REQUESTS_URL,
+            headers={"X-Authorization": settings.partner_api_key,
+                     "Country-Code": settings.partner_country_code,
+                     "Content-Type": "application/json"},
+            json=_creation_payload(claim),
+        )
+        status = response.status_code
+        try:
+            body = response.json()
+        except ValueError:
+            body = {}
+        body = body if isinstance(body, dict) else {}
+        response_meta = {
+            "provider_content_length": len(response.content),
+            "provider_body_keys": sorted(str(key)[:64] for key in body)[:20],
+        }
+        if status >= 400:
+            return {"kind": "ambiguous" if status in {408, 409, 429} or status >= 500 else "definitive",
+                    "status_code": status, **response_meta}
+        nested = []
+        for key in ("contact_request", "data"):
+            value = body.get(key)
+            if isinstance(value, dict):
+                nested.append(value)
+        raw_id = body.get("id") or body.get("contact_request_id")
+        if raw_id is None:
+            for candidate in nested:
+                raw_id = candidate.get("id") or candidate.get("contact_request_id")
+                if raw_id is not None:
+                    break
+        try:
+            request_id = int(str(raw_id))
+        except (TypeError, ValueError):
+            request_id = None
+        if request_id is None or request_id < 1:
+            return {"kind": "ambiguous", "status_code": status, **response_meta}
+        return {"kind": "created", "status_code": status,
+                "remote_request_id": request_id, **response_meta}
+
+
+async def create_pending_easybroker_requests(
+    settings, *, limit: int = 20,
+    manual_retry_capture_ids: frozenset[int] = frozenset(),
+) -> list[dict]:
+    """Create eligible captures; retries require an exact operator allowlist."""
+    if (not getattr(settings, "easybroker_create_requests", False)
+            or not getattr(settings, "partner_api_key", "")
+            or not getattr(settings, "partner_country_code", "")
+            or not settings.supabase_url
+            or not settings.supabase_service_key):
+        return []
+    claims = await claim_v3_easybroker_request_creations(settings, limit=limit)
+    if not claims:
+        return []
+    existing = await fetch_contact_requests(settings)
+    outcomes: list[dict] = []
+    for claim in claims:
+        capture_id = int(claim["capture_event_id"])
+        manual_retry = capture_id in manual_retry_capture_ids
+        token = str(claim["lease_token"])
+        matches = [row for row in existing if _creation_match(claim, row)]
+        if len(matches) > 1:
+            saved = await finish_v3_easybroker_request_creation(
+                settings, capture_event_id=capture_id, lease_token=token,
+                state="manual_review", error="multiple_existing_requests",
+            )
+            outcomes.append({"capture_event_id": capture_id, "state": "manual_review", "saved": bool(saved.get("ok"))})
+            continue
+        if len(matches) == 1:
+            request_id = int(matches[0]["eb_request_id"])
+            try:
+                ingested = await ingest_contact_request_batch(
+                    settings, [matches[0]], account_key=getattr(settings, "account_key", "default")
+                )
+                correlation = await correlate_easybroker_request(
+                    settings, request_id=request_id, capture_event_id=capture_id,
+                    opportunity_id=claim.get("opportunity_id"),
+                    idempotency_key=f"v3:creation:existing:{capture_id}:{request_id}",
+                    evidence={"source": "preexisting_contact_request"},
+                )
+            except Exception as exc:
+                ingested, correlation = {"ok": False}, {"ok": False, "state": "error"}
+                logger.warning("EasyBroker preexisting correlation failed for {}: {}", capture_id, exc)
+            confirmed = (
+                isinstance(ingested, dict) and ingested.get("ok") is True
+                and isinstance(correlation, dict) and correlation.get("ok") is True
+                and correlation.get("state") in {"linked", "already_linked"}
+            )
+            if not confirmed:
+                saved = await finish_v3_easybroker_request_creation(
+                    settings, capture_event_id=capture_id, lease_token=token,
+                    state="recovery", remote_request_id=request_id,
+                    evidence={"preexisting": True, "correlation_state": correlation.get("state")},
+                    error="preexisting_correlation_not_confirmed",
+                    preexisting=False,
+                )
+                outcomes.append({"capture_event_id": capture_id, "state": "recovery", "saved": bool(saved.get("ok"))})
+                continue
+            saved = await finish_v3_easybroker_request_creation(
+                settings, capture_event_id=capture_id, lease_token=token,
+                state="created", remote_request_id=request_id,
+                evidence={"preexisting": True, "eb_request_id": request_id,
+                          "correlation_state": correlation["state"]},
+                preexisting=True,
+            )
+            outcomes.append({"capture_event_id": capture_id, "state": "preexisting", "saved": bool(saved.get("ok"))})
+            continue
+        if not claim.get("post_allowed", True) and not manual_retry:
+            if _creation_horizon_expired(claim):
+                state, error = "manual_review", "correlation_horizon_expired"
+            else:
+                state, error = "recovery", "post_skipped_pending_get"
+            saved = await finish_v3_easybroker_request_creation(
+                settings, capture_event_id=capture_id, lease_token=token,
+                state=state, remote_request_id=claim.get("remote_request_id"),
+                evidence={"post_skipped": True}, error=error,
+            )
+            outcomes.append({"capture_event_id": capture_id, "state": state, "saved": bool(saved.get("ok"))})
+            continue
+        if not await reserve_v3_easybroker_request_creation(
+            settings, capture_event_id=capture_id, lease_token=token,
+            manual_retry=manual_retry,
+        ):
+            outcomes.append({"capture_event_id": capture_id, "state": "recovery"})
+            continue
+        try:
+            result = await post_v3_easybroker_contact_request(settings, claim)
+        except httpx.RequestError:
+            result = {"kind": "ambiguous", "status_code": None}
+        if result["kind"] == "definitive":
+            state, error = "manual_review", f"provider_http_{result['status_code']}"
+        else:
+            # A POST response is never proof that the request is in the GET
+            # feed; persist recovery and let the next pass verify, ingest and
+            # correlate before the ledger can become created.
+            state, error = "recovery", "post_requires_posterior_get"
+        evidence = {"provider_status": result.get("status_code"), "post_once": True}
+        evidence["provider_content_length"] = result.get("provider_content_length")
+        evidence["provider_body_keys"] = result.get("provider_body_keys") or []
+        if result.get("remote_request_id"):
+            evidence["eb_request_id"] = result["remote_request_id"]
+        saved = await finish_v3_easybroker_request_creation(
+            settings, capture_event_id=capture_id, lease_token=token, state=state,
+            remote_request_id=result.get("remote_request_id"), evidence=evidence,
+            error=error,
+        )
+        outcomes.append({"capture_event_id": capture_id, "state": state, "saved": bool(saved.get("ok"))})
+    return outcomes
+
+
+def _creation_horizon_expired(claim: dict) -> bool:
+    try:
+        horizon = datetime.fromisoformat(str(claim["correlation_horizon_at"]).replace("Z", "+00:00"))
+    except (KeyError, TypeError, ValueError):
+        return False
+    return datetime.now(timezone.utc) >= horizon
 
 
 def _normalize_contact_request(row: dict) -> dict | None:
