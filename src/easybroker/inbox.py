@@ -118,6 +118,61 @@ async def find_request_by_id(page: Page, request_id: int | str) -> bool:
     return rendered and bool(re.search(rf"/conversations/{re.escape(value)}(?:[/?#]|$)", page.url))
 
 
+_FIND_PROPERTY_HREFS_JS = """
+(propertyId) => {
+    const target = (propertyId || '').trim().toUpperCase();
+    const matches = [];
+    for (const a of document.querySelectorAll('a')) {
+        const href = a.getAttribute('href') || '';
+        if (!/conversations\\/\\d+/.test(href)) continue;
+        const text = (a.innerText || '').toUpperCase();
+        if (!text.includes(target)) continue;
+        if (!matches.includes(href)) matches.push(href);
+    }
+    return matches;
+}
+"""
+
+
+async def find_request_by_property_and_identity(
+    page: Page, property_id: str, phone: str = "", email: str = "",
+) -> bool:
+    """Open the only recent Buzón row matching property and lead identity.
+
+    Contact-request IDs returned by EasyBroker's public API are not Buzón
+    conversation IDs. New API-created requests do expose the property public ID
+    in the recent Buzón row, so resolve that row and verify the phone on its
+    detail page. EasyBroker may show a linked contact's phone, so either exact
+    email or exact phone is sufficient after the property match. Ambiguous or
+    missing matches fail closed.
+    """
+    property_value = str(property_id or "").strip().upper()
+    target_phone = _norm_phone(phone)
+    target_email = str(email or "").strip().lower()
+    if not property_value or not (target_phone or target_email):
+        return False
+
+    hrefs = await page.evaluate(_FIND_PROPERTY_HREFS_JS, property_value)
+    verified: list[str] = []
+    for href in hrefs:
+        if not await _open_conv_href(page, href):
+            continue
+        body = await page.locator("body").inner_text()
+        phone_match = bool(target_phone and target_phone in re.sub(r"\D", "", body))
+        email_match = bool(target_email and target_email in body.lower())
+        if phone_match or email_match:
+            verified.append(href)
+
+    if len(verified) != 1:
+        logger.error(
+            "Expected one recent Buzón row for property {}, verified {}",
+            property_value,
+            len(verified),
+        )
+        return False
+    return await _open_conv_href(page, verified[0])
+
+
 # The action-bar controls are <a>/<span> (not <button>) and the status options
 # live in a hidden "Cambiar estatus" dropdown that only renders visible after the
 # trigger is clicked. We tag the precise target in JS, then click it with a real
@@ -294,6 +349,7 @@ async def note_exists(page: Page, note_text: str) -> bool:
 
 async def attend_lead(
     page: Page, *, request_id: int | str | None = None, phone: str = "",
+    email: str = "", property_id: str = "",
     agent_name: str, note_text: str | None = None, note_done: bool = False,
     status_done: bool = False, allow_phone_fallback: bool = False,
     allow_legacy_note: bool = True,
@@ -321,7 +377,11 @@ async def attend_lead(
         logger.error("Buzón did not render — skipping lead {} this run", phone)
         return result
     found = False
-    if request_id is not None:
+    if property_id:
+        found = await find_request_by_property_and_identity(page, property_id, phone, email)
+        if found:
+            result["match_method"] = "property+identity"
+    elif request_id is not None:
         found = await find_request_by_id(page, request_id)
         if found:
             result["match_method"] = "request_id"

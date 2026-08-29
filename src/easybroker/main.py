@@ -34,6 +34,7 @@ from easybroker.inbox import attend_lead, dump_buzon
 from easybroker.supa import (
     claim_v3_easybroker_effects,
     finish_v3_easybroker_effect,
+    fetch_contact_requests,
     fetch_pending_attend,
     finish_attend_attempt,
     list_pending_attend,
@@ -55,6 +56,10 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
     performs Atendida, so status can never outrun durable note evidence.
     """
     try:
+        provider_requests = {
+            int(row["eb_request_id"]): row
+            for row in await fetch_contact_requests(settings)
+        }
         claims = await claim_v3_easybroker_effects(settings, limit=limit)
     except Exception as exc:
         logger.warning("EasyBroker V3 effect claim failed: {}", exc)
@@ -67,23 +72,40 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
         responsible = str(claim.get("responsible_first_name") or "").strip()
         lease_token = str(claim["lease_token"])
         note_text = f"RESPONSABLE: {responsible}"
+        provider_request = provider_requests.get(request_id) or {}
+        property_id = str(provider_request.get("property_public_id") or "")
+        phone = str(provider_request.get("e164_phone") or "")
+        email = str(provider_request.get("normalized_email") or "")
+        identity_ok = bool(property_id and (phone or email))
+        missing_identity = {
+            "found": False,
+            "match_method": None,
+            "status_ok": False,
+            "note_ok": False,
+            "status_changed": False,
+            "note_changed": False,
+        }
 
         if claim.get("note_due"):
             result = await attend_lead(
                 page,
                 request_id=request_id,
+                property_id=property_id,
+                phone=phone,
+                email=email,
                 agent_name=responsible,
                 note_text=note_text,
                 note_done=False,
                 status_done=True,
                 allow_legacy_note=False,
-            )
+            ) if identity_ok else missing_identity
             note_ok = bool(result.get("found") and result.get("note_ok"))
             evidence = {
                 "eb_request_id": str(request_id),
                 "note": note_text,
                 "note_written": bool(result.get("note_changed")),
                 "reconciled_existing": bool(note_ok and not result.get("note_changed")),
+                "match_method": result.get("match_method"),
             }
             try:
                 saved = await finish_v3_easybroker_effect(
@@ -105,17 +127,21 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
             result = await attend_lead(
                 page,
                 request_id=request_id,
+                property_id=property_id,
+                phone=phone,
+                email=email,
                 agent_name=responsible,
                 note_text=note_text,
                 note_done=True,
                 status_done=False,
                 allow_legacy_note=False,
-            )
+            ) if identity_ok else missing_identity
             status_ok = bool(result.get("found") and result.get("status_ok"))
             evidence = {
                 "eb_request_id": str(request_id),
                 "status": "Atendida",
                 "status_changed": bool(result.get("status_changed")),
+                "match_method": result.get("match_method"),
             }
             try:
                 saved = await finish_v3_easybroker_effect(

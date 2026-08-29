@@ -15,6 +15,10 @@ FORWARD_MIGRATION = ROOT / "supabase" / "migrations" / "20260828104617_fix_v3_ea
 EVIDENCE_MERGE_MIGRATION = ROOT / "supabase" / "migrations" / "20260828180500_fix_v3_easybroker_creation_evidence_merge.sql"
 MANUAL_RETRY_MIGRATION = ROOT / "supabase" / "migrations" / "20260828190000_add_manual_easybroker_retry_gate.sql"
 MANUAL_RETRY_CONSTRAINT_FIX = ROOT / "supabase" / "migrations" / "20260828191500_fix_manual_retry_post_count_constraint.sql"
+AGENT_GRANT_MIGRATION = ROOT / "supabase" / "migrations" / "20260829124733_grant_v3_easybroker_effect_agent_read.sql"
+AGENT_LOCK_FIX_MIGRATION = ROOT / "supabase" / "migrations" / "20260829125103_fix_v3_easybroker_effect_agent_lock.sql"
+ACCOUNT_API_RETRY_MIGRATION = ROOT / "supabase" / "migrations" / "20260829134500_allow_account_api_retry_for_legacy_attempts.sql"
+ACCOUNT_API_AUDIT_FIX = ROOT / "supabase" / "migrations" / "20260829134900_fix_account_api_retry_audit_constraint.sql"
 
 
 def test_creation_gate_is_off_by_default_and_explicit(monkeypatch):
@@ -35,30 +39,74 @@ def test_creation_payload_is_allowlisted():
         },
     })
     assert payload == {
-        "remote_id": 107,
         "name": "Lead", "phone": "+525511112222", "email": "a@b.test",
-        "property_id": "EB-ABCD1", "message": "Hola",
+        "property_id": "EB-ABCD1", "message": "Hola", "source": "inmuebles24.com",
     }
 
 
-def test_creation_payload_requires_stable_numeric_remote_id_and_message_fallback():
+def test_creation_payload_has_required_source_and_message_fallback():
     payload = supa._creation_payload({
         "i24_lead_id": "108", "property_public_id": "EB-X",
         "offer_context": {"name": "Lead"},
     })
-    assert payload["remote_id"] == 108
+    assert "remote_id" not in payload
+    assert payload["source"] == "inmuebles24.com"
     assert payload["message"] == "Nuevo lead de Inmuebles24."
 
 
-def test_creation_gate_fails_closed_without_partner_key(monkeypatch):
+def test_creation_gate_fails_closed_without_account_key(monkeypatch):
     settings = SimpleNamespace(easybroker_create_requests=True, supabase_url="https://supa",
-                               supabase_service_key="key", api_key="account",
-                               partner_api_key="", partner_country_code="MX")
-    # No network calls are permitted when the dedicated Partners key is absent.
+                               supabase_service_key="key", api_key="")
+    # No network calls are permitted when the account key is absent.
     monkeypatch.setattr(supa, "claim_v3_easybroker_request_creations",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("claim must not run")))
     import asyncio
     assert asyncio.run(supa.create_pending_easybroker_requests(settings)) == []
+
+
+@pytest.mark.asyncio
+async def test_account_post_uses_account_endpoint_and_key(monkeypatch):
+    calls = []
+
+    class Response:
+        status_code = 200
+        content = b'{"status":"successful"}'
+
+        @staticmethod
+        def json():
+            return {"status": "successful"}
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return Response()
+
+    monkeypatch.setattr(supa.httpx, "AsyncClient", Client)
+    settings = SimpleNamespace(api_key="account-key")
+    claim = {
+        "property_public_id": "EB-ABCD1",
+        "normalized_email": "a@b.test",
+        "offer_context": {"name": "Lead"},
+    }
+
+    result = await supa.post_v3_easybroker_contact_request(settings, claim)
+
+    assert calls[0][0] == "https://api.easybroker.com/v1/contact_requests"
+    assert calls[0][1]["headers"] == {
+        "X-Authorization": "account-key", "Content-Type": "application/json",
+    }
+    assert calls[0][1]["json"]["source"] == "inmuebles24.com"
+    assert result["kind"] == "ambiguous"
+    assert result["status_code"] == 200
 
 
 def test_creation_match_rejects_contradictory_identity_and_outside_horizon():
@@ -162,6 +210,35 @@ def test_manual_retry_drops_the_original_truncated_one_attempt_constraint():
     assert "post_attempt_count <= 2" in forward
 
 
+def test_effect_agent_lookup_is_service_only_and_read_only():
+    grant_sql = AGENT_GRANT_MIGRATION.read_text(encoding="utf-8").lower()
+    fix_sql = AGENT_LOCK_FIX_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "grant select on table public.agents to service_role" in grant_sql
+    assert "grant update" not in grant_sql
+    assert "security invoker" in fix_sql
+    assert "from public.agents a" in fix_sql
+    assert "for share" not in fix_sql
+    assert "from public, anon, authenticated, service_role" in fix_sql
+    assert "to service_role" in fix_sql
+
+
+def test_legacy_retry_is_audited_and_restricted_to_107_108():
+    sql = ACCOUNT_API_RETRY_MIGRATION.read_text(encoding="utf-8").lower()
+    audit_sql = ACCOUNT_API_AUDIT_FIX.read_text(encoding="utf-8").lower()
+    assert "p_capture_event_id not in (107, 108)" in sql
+    assert "post_attempt_count between 0 and 3" in sql
+    assert "post_attempt_count <> 2" in sql
+    assert "account_api_retry_authorized_at" in sql
+    assert "account_api_retry_consumed_at" in sql
+    assert "security invoker" in sql
+    assert "from public, anon, authenticated, service_role" in sql
+    assert "to service_role" in sql
+    assert "drop constraint if exists easybroker_creation_manual_retry_audit" in audit_sql
+    assert "post_attempt_count = 3" in audit_sql
+    assert "capture_event_id in (107, 108)" in audit_sql
+    assert "account_api_retry_consumed_at is not null" in audit_sql
+
+
 @pytest.mark.asyncio
 async def test_preexisting_request_skips_post(monkeypatch):
     settings = SimpleNamespace(easybroker_create_requests=True, supabase_url="https://supa",
@@ -176,6 +253,7 @@ async def test_preexisting_request_skips_post(monkeypatch):
     monkeypatch.setattr(supa, "fetch_contact_requests", lambda *a, **k: _async([supa.sanitize_contact_request(row)]))
     monkeypatch.setattr(supa, "ingest_contact_request_batch", lambda *a, **k: _async({"ok": True}))
     monkeypatch.setattr(supa, "correlate_easybroker_request", lambda *a, **k: _async({"ok": True, "state": "linked"}))
+    monkeypatch.setattr(supa, "enqueue_v3_easybroker_effect", lambda *a, **k: _async({"ok": True, "state": "pending"}))
     monkeypatch.setattr(supa, "finish_v3_easybroker_request_creation", lambda *a, **k: _async({"ok": True}))
     post = False
     async def fail_post(*args, **kwargs):
@@ -186,6 +264,33 @@ async def test_preexisting_request_skips_post(monkeypatch):
     result = await supa.create_pending_easybroker_requests(settings)
     assert result[0]["state"] == "preexisting"
     assert post is False
+
+
+@pytest.mark.asyncio
+async def test_exact_link_without_effect_enqueue_stays_recoverable(monkeypatch):
+    settings = SimpleNamespace(easybroker_create_requests=True, supabase_url="https://supa",
+                               supabase_service_key="key", api_key="eb", account_key="default")
+    claim = {"capture_event_id": 107, "opportunity_id": 588, "lease_token": "lease",
+             "property_public_id": "EB-ABCD1", "normalized_email": "a@b.test",
+             "e164_phone": "+525511112222", "correlation_window_start_at": "2026-08-28T10:00:00Z",
+             "correlation_horizon_at": "2026-08-29T10:00:00Z", "offer_context": {"name": "Lead"}}
+    row = {"id": 40506164, "property_id": "EB-ABCD1", "email": "a@b.test",
+           "phone_e164": "+525511112222", "happened_at": "2026-08-28T11:00:00Z"}
+    monkeypatch.setattr(supa, "claim_v3_easybroker_request_creations", lambda *a, **k: _async([claim]))
+    monkeypatch.setattr(supa, "fetch_contact_requests", lambda *a, **k: _async([supa.sanitize_contact_request(row)]))
+    monkeypatch.setattr(supa, "ingest_contact_request_batch", lambda *a, **k: _async({"ok": True}))
+    monkeypatch.setattr(supa, "correlate_easybroker_request", lambda *a, **k: _async({"ok": True, "state": "linked"}))
+    monkeypatch.setattr(supa, "enqueue_v3_easybroker_effect", lambda *a, **k: _async({"ok": False, "state": "awaiting"}))
+    calls = []
+
+    async def finish(*args, **kwargs):
+        calls.append(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(supa, "finish_v3_easybroker_request_creation", finish)
+    result = await supa.create_pending_easybroker_requests(settings)
+    assert result[0]["state"] == "recovery"
+    assert calls[0]["error"] == "preexisting_correlation_or_effect_not_confirmed"
 
 
 @pytest.mark.asyncio
@@ -318,7 +423,7 @@ async def test_recovery_zero_match_releases_lease_without_post(monkeypatch):
     claim = {"capture_event_id": 108, "lease_token": "lease", "post_allowed": False,
              "property_public_id": "EB-ABCD1", "normalized_email": "a@b.test",
              "e164_phone": "+525511112222", "correlation_window_start_at": "2026-08-28T10:00:00Z",
-             "correlation_horizon_at": "2026-08-29T10:00:00Z", "offer_context": {"name": "Lead"}}
+             "correlation_horizon_at": "2099-08-29T10:00:00Z", "offer_context": {"name": "Lead"}}
     monkeypatch.setattr(supa, "claim_v3_easybroker_request_creations", lambda *a, **k: _async([claim]))
     monkeypatch.setattr(supa, "fetch_contact_requests", lambda *a, **k: _async([]))
     monkeypatch.setattr(supa, "reserve_v3_easybroker_request_creation", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no reserve in recovery")))

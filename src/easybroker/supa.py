@@ -17,7 +17,6 @@ import re
 
 
 CONTACT_REQUESTS_URL = "https://api.easybroker.com/v1/contact_requests"
-PARTNER_CONTACT_REQUESTS_URL = "https://api.easybroker.com/v1/integration_partners/contact_requests"
 
 
 def normalize_email(value: object) -> str | None:
@@ -97,17 +96,14 @@ def _creation_payload(claim: dict) -> dict:
     """Build the documented EasyBroker POST body from allowlisted fields."""
     context = claim.get("offer_context")
     context = context if isinstance(context, dict) else {}
-    lead_id = str(claim.get("i24_lead_id") or "").strip()
-    # Partners API remote_id is the stable I24 identity, never a random attempt id.
-    remote_id = int(lead_id) if lead_id.isdigit() else ""
     message = str(context.get("message_preview") or "").strip()[:500]
     payload = {
-        "remote_id": remote_id,
         "name": _creation_name(claim),
         "phone": claim.get("e164_phone"),
         "email": claim.get("normalized_email"),
         "property_id": str(claim.get("property_public_id") or "").strip().upper(),
         "message": message or "Nuevo lead de Inmuebles24.",
+        "source": "inmuebles24.com",
     }
     return {key: value for key, value in payload.items() if value not in (None, "")}
 
@@ -216,14 +212,14 @@ async def finish_v3_easybroker_request_creation(
 async def post_v3_easybroker_contact_request(settings, claim: dict) -> dict:
     """Perform exactly one provider POST; callers classify status failures.
 
-    Contract: https://dev.easybroker.com/docs/contact-request
-    Creation uses the Partners endpoint; account API remains read-only reconciliation.
+    Contract: https://dev.easybroker.com/reference/post_contact-requests
+    The account API returns 200/status=successful without a request id, so the
+    durable GET reconciliation remains the only proof of creation.
     """
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.post(
-            PARTNER_CONTACT_REQUESTS_URL,
-            headers={"X-Authorization": settings.partner_api_key,
-                     "Country-Code": settings.partner_country_code,
+            CONTACT_REQUESTS_URL,
+            headers={"X-Authorization": settings.api_key,
                      "Content-Type": "application/json"},
             json=_creation_payload(claim),
         )
@@ -267,8 +263,7 @@ async def create_pending_easybroker_requests(
 ) -> list[dict]:
     """Create eligible captures; retries require an exact operator allowlist."""
     if (not getattr(settings, "easybroker_create_requests", False)
-            or not getattr(settings, "partner_api_key", "")
-            or not getattr(settings, "partner_country_code", "")
+            or not getattr(settings, "api_key", "")
             or not settings.supabase_url
             or not settings.supabase_service_key):
         return []
@@ -309,12 +304,22 @@ async def create_pending_easybroker_requests(
                 and isinstance(correlation, dict) and correlation.get("ok") is True
                 and correlation.get("state") in {"linked", "already_linked"}
             )
+            effect = {"ok": False, "state": "not_enqueued"}
+            if confirmed:
+                try:
+                    effect = await enqueue_v3_easybroker_effect(
+                        settings, request_id=request_id,
+                    )
+                except Exception as exc:
+                    logger.warning("EasyBroker effect enqueue failed for {}: {}", request_id, exc)
+            confirmed = confirmed and effect.get("ok") is True
             if not confirmed:
                 saved = await finish_v3_easybroker_request_creation(
                     settings, capture_event_id=capture_id, lease_token=token,
                     state="recovery", remote_request_id=request_id,
-                    evidence={"preexisting": True, "correlation_state": correlation.get("state")},
-                    error="preexisting_correlation_not_confirmed",
+                    evidence={"preexisting": True, "correlation_state": correlation.get("state"),
+                              "effect_state": effect.get("state")},
+                    error="preexisting_correlation_or_effect_not_confirmed",
                     preexisting=False,
                 )
                 outcomes.append({"capture_event_id": capture_id, "state": "recovery", "saved": bool(saved.get("ok"))})
@@ -323,7 +328,8 @@ async def create_pending_easybroker_requests(
                 settings, capture_event_id=capture_id, lease_token=token,
                 state="created", remote_request_id=request_id,
                 evidence={"preexisting": True, "eb_request_id": request_id,
-                          "correlation_state": correlation["state"]},
+                          "correlation_state": correlation["state"],
+                          "effect_state": effect.get("state")},
                 preexisting=True,
             )
             outcomes.append({"capture_event_id": capture_id, "state": "preexisting", "saved": bool(saved.get("ok"))})
@@ -585,6 +591,22 @@ async def claim_v3_easybroker_effects(settings, *, limit: int = 20) -> list[dict
         response.raise_for_status()
         result = response.json()
     return result if isinstance(result, list) else []
+
+
+async def enqueue_v3_easybroker_effect(
+    settings, *, request_id: int, now: datetime | None = None,
+) -> dict:
+    """Idempotently enqueue note/Atendida after an exact durable link."""
+    endpoint = f"{settings.supabase_url.rstrip('/')}/rest/v1/rpc/enqueue_v3_easybroker_effect"
+    payload = {
+        "p_eb_request_id": request_id,
+        "p_now": (now or datetime.now(timezone.utc)).isoformat(),
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(endpoint, headers=_headers(settings.supabase_service_key), json=payload)
+        response.raise_for_status()
+        result = response.json()
+    return result if isinstance(result, dict) else {"ok": False}
 
 
 async def finish_v3_easybroker_effect(

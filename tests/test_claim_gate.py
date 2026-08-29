@@ -322,6 +322,112 @@ def test_easybroker_note_retry_reconciles_after_crash_without_duplicate(monkeypa
     assert second["note_changed"] is True  # asks main to reconcile durable evidence
 
 
+def test_easybroker_api_request_resolves_buzon_by_property_and_phone(monkeypatch):
+    class Body:
+        def __init__(self, page):
+            self.page = page
+
+        async def inner_text(self):
+            return self.page.bodies[self.page.current]
+
+    class Page:
+        def __init__(self):
+            self.current = ""
+            self.bodies = {
+                "/agent/conversations/1": "Teléfono 55 0000 0000",
+                "/agent/conversations/2": "Teléfono +52 55 1111 2222 Email lead@example.com",
+            }
+
+        async def evaluate(self, script, value):
+            assert value == "EB-WT7488"
+            return list(self.bodies)
+
+        def locator(self, selector):
+            assert selector == "body"
+            return Body(self)
+
+    page = Page()
+
+    async def open_href(current_page, href):
+        current_page.current = href
+        return True
+
+    monkeypatch.setattr(inbox, "_open_conv_href", open_href)
+    assert asyncio.run(inbox.find_request_by_property_and_identity(
+        page, "eb-wt7488", "+525599569566", "lead@example.com"
+    )) is True
+    assert page.current == "/agent/conversations/2"
+
+
+def test_easybroker_property_phone_resolution_fails_closed_when_ambiguous(monkeypatch):
+    class Body:
+        async def inner_text(self):
+            return "+52 55 9956 9566"
+
+    class Page:
+        async def evaluate(self, script, value):
+            return ["/agent/conversations/1", "/agent/conversations/2"]
+
+        def locator(self, selector):
+            return Body()
+
+    async def open_href(page, href):
+        return True
+
+    monkeypatch.setattr(inbox, "_open_conv_href", open_href)
+    assert asyncio.run(inbox.find_request_by_property_and_identity(
+        Page(), "EB-WT7488", "+525599569566", "lead@example.com"
+    )) is False
+
+
+def test_v3_worker_maps_api_request_to_exact_property_and_phone(monkeypatch):
+    captured = {}
+
+    async def provider_rows(settings):
+        return [{
+            "eb_request_id": 40526079,
+            "property_public_id": "EB-WT7488",
+            "e164_phone": "+525599569566",
+            "normalized_email": "lead@example.com",
+        }]
+
+    async def claims(settings, limit):
+        return [{
+            "eb_request_id": 40526079,
+            "responsible_first_name": "Sandy",
+            "lease_token": "lease",
+            "note_due": True,
+            "attended_due": False,
+        }]
+
+    async def attend(page, **kwargs):
+        captured.update(kwargs)
+        return {
+            "found": True,
+            "match_method": "property+identity",
+            "status_ok": True,
+            "note_ok": True,
+            "status_changed": False,
+            "note_changed": True,
+        }
+
+    async def finish(settings, **kwargs):
+        captured["evidence"] = kwargs["evidence"]
+        return {"ok": True}
+
+    monkeypatch.setattr(eb_main, "fetch_contact_requests", provider_rows)
+    monkeypatch.setattr(eb_main, "claim_v3_easybroker_effects", claims)
+    monkeypatch.setattr(eb_main, "attend_lead", attend)
+    monkeypatch.setattr(eb_main, "finish_v3_easybroker_effect", finish)
+
+    completed, failed = asyncio.run(eb_main._run_v3_effect_worker(object(), object()))
+    assert (completed, failed) == (0, False)
+    assert captured["property_id"] == "EB-WT7488"
+    assert captured["phone"] == "+525599569566"
+    assert captured["email"] == "lead@example.com"
+    assert captured["evidence"]["match_method"] == "property+identity"
+
+
 def test_easybroker_legacy_responsible_note_is_not_duplicated(monkeypatch):
     calls = []
 

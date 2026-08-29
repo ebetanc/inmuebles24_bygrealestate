@@ -8,7 +8,10 @@ is GET/POST only, no status mutation, no notes endpoint):
 2. Add a **timeline note** naming the assigned agent (`Agregar nota`).
 
 For each lead with a final responsible agent, the bot opens the exact Buzón
-request, writes one `RESPONSABLE: <agente>` note, and sets it to Atendida.
+request, writes one `RESPONSABLE: <agente>` note, and sets it to Atendida. The
+public API request ID is not a Buzón conversation ID, so V3 resolves the recent
+row by exact property ID and then requires exactly one matching email or phone
+on the detail page. Missing or ambiguous identity fails closed.
 
 ## How it picks work
 
@@ -69,12 +72,12 @@ port `9222`). The persistent profile keeps the EB session logged in between runs
 ## Env
 
 `EASYBROKER_EMAIL`, `EASYBROKER_PASSWORD` (UI login), `EASYBROKER_API_KEY`
-(account API GET reconciliation), `EASYBROKER_PARTNER_API_KEY` (Partners API
-creation; no fallback to the account key), `EASYBROKER_PARTNER_COUNTRY_CODE=MX`
-(two-letter country code),
+(account API POST creation and GET reconciliation),
 `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `EB_MARK_ATTENDED=1`,
 `EASYBROKER_V3_INBOX=1`, and `EASYBROKER_CREATE_REQUESTS=1` (POST creation only when `EASYBROKER_CREATE_REQUESTS=1`; explicitly
-enables the durable one-shot Partners API POST for captures 107/108 and newer
-eligible `created_new` captures; disabled by default). Each POST carries the
-numeric I24 lead ID as stable `remote_id`; a fallback message is always sent.
+enables the durable one-shot account API POST for captures 107/108 and newer
+eligible `created_new` captures; disabled by default). A fallback message and
+the required source `inmuebles24.com` are always sent. After a posterior GET
+proves the request and its immutable I24 link, note/Atendida is enqueued
+idempotently; the creation ledger remains recoverable if that enqueue fails.
 optional `CHROME_PATH` (e.g. Edge on Windows), `CHROME_PROXY`.
