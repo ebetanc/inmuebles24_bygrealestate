@@ -1,4 +1,5 @@
 """Local contract tests for the one-shot I24 -> EasyBroker bridge."""
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -475,6 +476,107 @@ def test_creation_and_effect_gates_are_independent_and_documented():
     assert "Request\n                # creation has its own gate" in main
     assert "POST creation only when `EASYBROKER_CREATE_REQUESTS=1`" in readme
     assert "EB_MARK_ATTENDED=1" in readme
+
+
+def test_first_creation_claim_anchors_bounded_window_without_infinite_extension():
+    migration = (
+        ROOT
+        / "supabase"
+        / "migrations"
+        / "20260901181000_anchor_easybroker_creation_window_to_claim.sql"
+    ).read_text(encoding="utf-8").lower()
+
+    assert "easybroker_creation_claim_window_v1" in migration
+    assert "and l.post_attempt_count=0" in migration
+    assert "p_now+interval '24 hours'" in migration
+    assert "p_now-interval '5 minutes'" in migration
+    assert "returning e.capture_event_id, e.correlation_window_start_at" in migration
+    assert "coalesce(r.correlation_horizon_at,e.correlation_horizon_at)" in migration
+
+
+def test_creation_window_is_timezone_aware_ordered_and_fail_closed():
+    valid = {
+        "correlation_window_start_at": "2026-08-31T14:17:10Z",
+        "correlation_horizon_at": "2026-09-01T14:17:10+00:00",
+    }
+    window = supa._creation_window(valid)
+    assert window is not None
+    assert window[0] < window[1]
+    assert window[0].tzinfo is not None
+    assert supa._creation_window({}) is None
+    assert supa._creation_window({
+        "correlation_window_start_at": "2026-09-02T00:00:00Z",
+        "correlation_horizon_at": "2026-09-01T00:00:00Z",
+    }) is None
+
+
+@pytest.mark.asyncio
+async def test_creation_fetch_covers_oldest_claim_window_and_invalid_claim_never_posts(monkeypatch):
+    settings = SimpleNamespace(
+        easybroker_create_requests=True,
+        supabase_url="https://supa",
+        supabase_service_key="key",
+        api_key="eb",
+        partner_api_key="partner",
+        partner_country_code="MX",
+        account_key="default",
+    )
+    claims = [
+        {
+            "capture_event_id": 108,
+            "lease_token": "valid",
+            "property_public_id": "EB-ABCD1",
+            "normalized_email": "a@b.test",
+            "correlation_window_start_at": "2026-08-30T10:00:00Z",
+            "correlation_horizon_at": "2099-08-31T10:00:00Z",
+            "post_allowed": False,
+            "offer_context": {"name": "Lead"},
+        },
+        {
+            "capture_event_id": 109,
+            "lease_token": "invalid",
+            "property_public_id": "EB-ABCD2",
+            "normalized_email": "c@d.test",
+            "correlation_window_start_at": "bad-date",
+            "correlation_horizon_at": "2099-08-31T10:00:00Z",
+            "offer_context": {"name": "Lead"},
+        },
+    ]
+    monkeypatch.setattr(
+        supa, "claim_v3_easybroker_request_creations", lambda *a, **k: _async(claims)
+    )
+    fetch_calls = []
+
+    async def fetch(*args, **kwargs):
+        fetch_calls.append(kwargs)
+        return []
+
+    monkeypatch.setattr(supa, "fetch_contact_requests", fetch)
+    monkeypatch.setattr(
+        supa,
+        "reserve_v3_easybroker_request_creation",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no POST reserve expected")),
+    )
+    monkeypatch.setattr(
+        supa,
+        "post_v3_easybroker_contact_request",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no POST expected")),
+    )
+    finished = []
+
+    async def finish(*args, **kwargs):
+        finished.append(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(supa, "finish_v3_easybroker_request_creation", finish)
+
+    result = await supa.create_pending_easybroker_requests(settings)
+
+    assert fetch_calls[0]["happened_after"] == datetime(
+        2026, 8, 30, 10, 0, tzinfo=timezone.utc
+    )
+    assert [row["state"] for row in result] == ["recovery", "manual_review"]
+    assert finished[1]["error"] == "invalid_correlation_window"
 
 
 async def _async(value):

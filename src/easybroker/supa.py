@@ -145,6 +145,24 @@ def _creation_match(claim: dict, row: dict) -> bool:
     return True
 
 
+def _creation_window(claim: dict) -> tuple[datetime, datetime] | None:
+    """Return one trustworthy UTC correlation window, or fail closed."""
+    try:
+        start = datetime.fromisoformat(
+            str(claim["correlation_window_start_at"]).replace("Z", "+00:00")
+        )
+        horizon = datetime.fromisoformat(
+            str(claim["correlation_horizon_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+    if start.tzinfo is None or horizon.tzinfo is None:
+        return None
+    start = start.astimezone(timezone.utc)
+    horizon = horizon.astimezone(timezone.utc)
+    return (start, horizon) if start <= horizon else None
+
+
 async def claim_v3_easybroker_request_creations(settings, *, limit: int = 20) -> list[dict]:
     endpoint = f"{settings.supabase_url.rstrip('/')}/rest/v1/rpc/claim_v3_easybroker_request_creations"
     payload = {"p_limit": limit, "p_now": datetime.now(timezone.utc).isoformat(),
@@ -270,12 +288,35 @@ async def create_pending_easybroker_requests(
     claims = await claim_v3_easybroker_request_creations(settings, limit=limit)
     if not claims:
         return []
-    existing = await fetch_contact_requests(settings)
+    windows = {
+        int(claim["capture_event_id"]): _creation_window(claim)
+        for claim in claims
+    }
+    valid_starts = [window[0] for window in windows.values() if window is not None]
+    existing = await fetch_contact_requests(
+        settings,
+        happened_after=min(valid_starts) if valid_starts else None,
+    )
     outcomes: list[dict] = []
     for claim in claims:
         capture_id = int(claim["capture_event_id"])
         manual_retry = capture_id in manual_retry_capture_ids
         token = str(claim["lease_token"])
+        if windows[capture_id] is None:
+            saved = await finish_v3_easybroker_request_creation(
+                settings,
+                capture_event_id=capture_id,
+                lease_token=token,
+                state="manual_review",
+                evidence={"post_skipped": True, "invalid_correlation_window": True},
+                error="invalid_correlation_window",
+            )
+            outcomes.append({
+                "capture_event_id": capture_id,
+                "state": "manual_review",
+                "saved": bool(saved.get("ok")),
+            })
+            continue
         matches = [row for row in existing if _creation_match(claim, row)]
         if len(matches) > 1:
             saved = await finish_v3_easybroker_request_creation(
