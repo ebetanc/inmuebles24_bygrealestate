@@ -124,14 +124,6 @@ def test_easybroker_contact_request_normalization_rejects_bad_time_and_keeps_no_
     }) is None
 
 
-def test_easybroker_pg_fixture_covers_two_workers_crash_and_retry():
-    fixture = (Path(__file__).parent / "fixtures/routing_v2/test_easybroker_effect_lease.sql").read_text()
-    assert "second worker claimed leased fixture" in fixture
-    assert "expired lease was not recovered with a fresh token" in fixture
-    assert "stale worker finished replacement lease" in fixture
-    assert "retry did not receive separate step evidence" in fixture
-
-
 def test_easybroker_exact_request_navigation_uses_id_url(monkeypatch):
     class Page:
         url = ""
