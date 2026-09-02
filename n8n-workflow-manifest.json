@@ -6,61 +6,233 @@
       "directory": "whatsapp-agent/workflows",
       "coverage": "partial",
       "files": {
-        "live_8dgDDhv7LjQ2knFu.json":{"role":"retired","reason":"old live snapshot"},
-        "live_CYbIxSodtjGEQwMp.json":{"role":"retired","reason":"old live snapshot"},
-        "live_dNHF4X222hpgPmug.json":{"role":"retired","reason":"old live snapshot"},
-        "live_H05wtjYe2vuWhWHb.json":{"role":"retired","reason":"old live snapshot"},
-        "live_N8VlrvYjZ2tTHOne.json":{"role":"retired","reason":"old live snapshot"},
-        "live_rSjLUtQZ3UhbD96i.json":{"role":"retired","reason":"old live snapshot"},
-        "live_tTzUL2qFbzqS7K1E.json":{"role":"retired","reason":"old live snapshot"},
-        "WF1_inbound_router.json":{"role":"template","reason":"portable template"},
-        "WF10_scraper_intake.json":{"role":"template","reason":"portable template"},
-        "WF12_owner_resolver.json":{"role":"template","reason":"portable template"},
-        "WF13_directed_notify.json":{"role":"template","reason":"portable template"},
-        "WF14_followup_sweeper.json":{"role":"template","reason":"portable template"},
-        "WF15_followup_reply.json":{"role":"template","reason":"portable template"},
-        "WF16_weekly_report.json":{"role":"template","reason":"portable template"},
-        "WF17_weekly_email_report.json":{"role":"template","reason":"portable template"},
-        "WF20_watchdog.json":{"role":"template","reason":"portable template"},
-        "WF21_error_handler.json":{"role":"template","reason":"portable template"},
-        "WF22_delivery_status.json":{"role":"template","reason":"portable template"},
-        "WF23_delivery_timeout_sweeper.json":{"role":"template","reason":"portable template"},
-        "WF2_lead_intake.json":{"role":"template","reason":"portable template"},
-        "WF3a_auction_launcher.json":{"role":"template","reason":"portable template"},
-        "WF3b_claim_handler.json":{"role":"template","reason":"portable template"},
-        "WF3c_expiry_sweeper.json":{"role":"template","reason":"portable template"},
-        "WF4_ai_conversation.json":{"role":"template","reason":"portable template"},
-        "WF5_human_handoff.json":{"role":"template","reason":"portable template"},
-        "WF6_guard_schedule.json":{"role":"template","reason":"portable template"},
-        "WF7_morning_report.json":{"role":"template","reason":"portable template"},
-        "WF8_easybroker_polling.json":{"role":"template","reason":"portable template"}
+        "live_8dgDDhv7LjQ2knFu.json": {
+          "role": "retired",
+          "reason": "old live snapshot"
+        },
+        "live_CYbIxSodtjGEQwMp.json": {
+          "role": "retired",
+          "reason": "old live snapshot"
+        },
+        "live_dNHF4X222hpgPmug.json": {
+          "role": "retired",
+          "reason": "old live snapshot"
+        },
+        "live_H05wtjYe2vuWhWHb.json": {
+          "role": "retired",
+          "reason": "old live snapshot"
+        },
+        "live_N8VlrvYjZ2tTHOne.json": {
+          "role": "retired",
+          "reason": "old live snapshot"
+        },
+        "live_rSjLUtQZ3UhbD96i.json": {
+          "role": "retired",
+          "reason": "old live snapshot"
+        },
+        "live_tTzUL2qFbzqS7K1E.json": {
+          "role": "retired",
+          "reason": "old live snapshot"
+        },
+        "WF1_inbound_router.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF10_scraper_intake.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF12_owner_resolver.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF13_directed_notify.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF17_weekly_email_report.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF20_watchdog.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF21_error_handler.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF22_delivery_status.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF23_delivery_timeout_sweeper.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF3b_claim_handler.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF3c_expiry_sweeper.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF6_guard_schedule.json": {
+          "role": "template",
+          "reason": "portable template"
+        },
+        "WF7_morning_report.json": {
+          "role": "template",
+          "reason": "portable template"
+        }
+      }
+    },
+    {
+      "directory": "whatsapp-agent/workflows/legacy",
+      "coverage": "partial",
+      "files": {
+        "WF2_lead_intake.json": {
+          "role": "retired",
+          "reason": "pre-V3 template, kept for reference"
+        },
+        "WF3a_auction_launcher.json": {
+          "role": "retired",
+          "reason": "pre-V3 template, kept for reference"
+        },
+        "WF4_ai_conversation.json": {
+          "role": "retired",
+          "reason": "pre-V3 template, kept for reference"
+        },
+        "WF5_human_handoff.json": {
+          "role": "retired",
+          "reason": "pre-V3 template, kept for reference"
+        },
+        "WF8_easybroker_polling.json": {
+          "role": "retired",
+          "reason": "pre-V3 template, kept for reference"
+        },
+        "WF14_followup_sweeper.json": {
+          "role": "retired",
+          "reason": "pre-V3 template, kept for reference"
+        },
+        "WF15_followup_reply.json": {
+          "role": "retired",
+          "reason": "pre-V3 template, kept for reference"
+        },
+        "WF16_weekly_report.json": {
+          "role": "retired",
+          "reason": "pre-V3 template, kept for reference"
+        }
       }
     },
     {
       "directory": "wa-rework/out",
       "coverage": "partial",
       "files": {
-        "04aQhTOiXlDmN9bK.json":{"role":"retired","workflow":"WF3a - Auction Launcher (Evolution)","reason":"stale settings; superseded by n8n-export"},
-        "2nB5HkGii7ftzosn.json":{"role":"retired","workflow":"WF18 - EB Owner Sync","reason":"stale settings; superseded by n8n-export"},
-        "Bo2YbbUpmBzRbhDa.json":{"role":"retired","workflow":"WF13 - Directed Owner Notify (Cloud API)","reason":"stale settings; superseded by n8n-export"},
-        "JM2HxJxl53k4zlki.json":{"role":"retired","workflow":"WF3b - Claim Handler (Evolution)","reason":"stale node and settings; superseded by n8n-export"},
-        "K8Hzk2fCYjZHWNKi.json":{"role":"retired","workflow":"WF14 - Follow-Up Sweeper (Evolution)","reason":"stale settings; superseded by n8n-export"},
-        "LHQukWVhcmSfPwQb.json":{"role":"retired","workflow":"WF6 - Guard Schedule Sync (Supabase)","reason":"stale settings; superseded by n8n-export"},
-        "Mu3YTTH8IgtaH7Ml.json":{"role":"retired","workflow":"WF8b - EasyBroker Lead Intake","reason":"stale settings and staticData; superseded by n8n-export"},
-        "Obr38705ZZYS3FB8.json":{"role":"retired","workflow":"WF10 - Scraper Lead Intake","reason":"stale settings; superseded by n8n-export"},
-        "pYGcyX1ur24dQVew.json":{"role":"retired","workflow":"WF5 - Human Handoff (Evolution)","reason":"stale settings; superseded by n8n-export"},
-        "snF6Sr9CBJIevMVD.json":{"role":"retired","workflow":"WF1 - Inbound Router (Evolution)","reason":"stale settings; superseded by n8n-export"},
-        "T9hj26uXtPUR69Xh.json":{"role":"retired","workflow":"WF16 - Weekly Gerente Report (Evolution)","reason":"stale settings; superseded by n8n-export"},
-        "tnvPoAmVZ0zqGzOs.json":{"role":"retired","workflow":"WF4 - AI Conversation (Evolution + OpenRouter)","reason":"stale settings; superseded by n8n-export"},
-        "UNIKqyAvIUAZkNIs.json":{"role":"retired","workflow":"WF3c - Auction Expiry Sweeper (Tiered)","reason":"stale nodes and settings; superseded by n8n-export"},
-        "w7yJr7naWoxPq6Pw.json":{"role":"retired","workflow":"WF12 - Owner Resolver (EB owner table)","reason":"stale settings; superseded by n8n-export"},
-        "xzBG0GIsHCUd44DC.json":{"role":"retired","workflow":"WF7 - Morning Report & Night Queue Processing","reason":"stale node and settings; superseded by n8n-export"},
-        "ZI5mD6269xSZhltN.json":{"role":"snapshot","workflow":"WF8 - EasyBroker Contact Polling","reason":"ID export"},
-        "zOHmTODH4QSqALnp.json":{"role":"retired","workflow":"WF19 - Lead Router (Owner First)","reason":"stale settings; superseded by n8n-export"},
-        "ZUO5otqPzu9VYv8Z.json":{"role":"retired","workflow":"WF2 - Lead Intake (Evolution)","reason":"stale node and settings; superseded by n8n-export"},
-        "Zwp2aENlqLQwF3Ry.json":{"role":"retired","workflow":"WF15 - Follow-Up Reply Handler (Evolution)","reason":"stale settings; superseded by n8n-export"},
-        "WF13_owner_notify_cloud.json":{"role":"template","reason":"staged variant; live API is authoritative"},
-        "wa-meta-verify.json":{"role":"template","reason":"verification helper"}
+        "04aQhTOiXlDmN9bK.json": {
+          "role": "retired",
+          "workflow": "WF3a - Auction Launcher (Evolution)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "2nB5HkGii7ftzosn.json": {
+          "role": "retired",
+          "workflow": "WF18 - EB Owner Sync",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "Bo2YbbUpmBzRbhDa.json": {
+          "role": "retired",
+          "workflow": "WF13 - Directed Owner Notify (Cloud API)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "JM2HxJxl53k4zlki.json": {
+          "role": "retired",
+          "workflow": "WF3b - Claim Handler (Evolution)",
+          "reason": "stale node and settings; superseded by n8n-export"
+        },
+        "K8Hzk2fCYjZHWNKi.json": {
+          "role": "retired",
+          "workflow": "WF14 - Follow-Up Sweeper (Evolution)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "LHQukWVhcmSfPwQb.json": {
+          "role": "retired",
+          "workflow": "WF6 - Guard Schedule Sync (Supabase)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "Mu3YTTH8IgtaH7Ml.json": {
+          "role": "retired",
+          "workflow": "WF8b - EasyBroker Lead Intake",
+          "reason": "stale settings and staticData; superseded by n8n-export"
+        },
+        "Obr38705ZZYS3FB8.json": {
+          "role": "retired",
+          "workflow": "WF10 - Scraper Lead Intake",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "pYGcyX1ur24dQVew.json": {
+          "role": "retired",
+          "workflow": "WF5 - Human Handoff (Evolution)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "snF6Sr9CBJIevMVD.json": {
+          "role": "retired",
+          "workflow": "WF1 - Inbound Router (Evolution)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "T9hj26uXtPUR69Xh.json": {
+          "role": "retired",
+          "workflow": "WF16 - Weekly Gerente Report (Evolution)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "tnvPoAmVZ0zqGzOs.json": {
+          "role": "retired",
+          "workflow": "WF4 - AI Conversation (Evolution + OpenRouter)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "UNIKqyAvIUAZkNIs.json": {
+          "role": "retired",
+          "workflow": "WF3c - Auction Expiry Sweeper (Tiered)",
+          "reason": "stale nodes and settings; superseded by n8n-export"
+        },
+        "w7yJr7naWoxPq6Pw.json": {
+          "role": "retired",
+          "workflow": "WF12 - Owner Resolver (EB owner table)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "xzBG0GIsHCUd44DC.json": {
+          "role": "retired",
+          "workflow": "WF7 - Morning Report & Night Queue Processing",
+          "reason": "stale node and settings; superseded by n8n-export"
+        },
+        "ZI5mD6269xSZhltN.json": {
+          "role": "snapshot",
+          "workflow": "WF8 - EasyBroker Contact Polling",
+          "reason": "ID export"
+        },
+        "zOHmTODH4QSqALnp.json": {
+          "role": "retired",
+          "workflow": "WF19 - Lead Router (Owner First)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "ZUO5otqPzu9VYv8Z.json": {
+          "role": "retired",
+          "workflow": "WF2 - Lead Intake (Evolution)",
+          "reason": "stale node and settings; superseded by n8n-export"
+        },
+        "Zwp2aENlqLQwF3Ry.json": {
+          "role": "retired",
+          "workflow": "WF15 - Follow-Up Reply Handler (Evolution)",
+          "reason": "stale settings; superseded by n8n-export"
+        },
+        "WF13_owner_notify_cloud.json": {
+          "role": "template",
+          "reason": "staged variant; live API is authoritative"
+        },
+        "wa-meta-verify.json": {
+          "role": "template",
+          "reason": "verification helper"
+        }
       }
     }
   ]
