@@ -40,3 +40,7 @@ videos/
 **/.cdp-profile/
 n8n-export/*_SMOKE_TEST__temp__*.json
 /flujo-leads.html
+
+# Codex scratch (vendored deps, caches)
+.codex-tmp/
+supabase/.temp/
