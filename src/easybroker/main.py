@@ -35,9 +35,6 @@ from easybroker.supa import (
     claim_v3_easybroker_effects,
     finish_v3_easybroker_effect,
     fetch_contact_requests,
-    fetch_pending_attend,
-    finish_attend_attempt,
-    list_pending_attend,
     create_pending_easybroker_requests,
     reconcile_i24_easybroker_requests,
 )
@@ -254,62 +251,11 @@ async def async_main(args: argparse.Namespace) -> int:
                 completed, effects_failed = await _run_v3_effect_worker(settings, page)
                 print(f"V3 EasyBroker effects completed: {completed}; failures: {int(effects_failed)}")
                 return 1 if (reconcile_failed or creation_failed or effects_failed) else 0
-            if gate:
-                reconcile_failed = await reconcile_i24_easybroker_requests(settings) is None
-            leads = (await fetch_pending_attend(settings) if gate
-                     else await list_pending_attend(settings))
-            if not leads:
-                print("No EB leads pending Atendida + note.")
-                return 1 if reconcile_failed else 0
-            if not gate:
-                print(f"{len(leads)} EB lead(s) pending, but EB_MARK_ATTENDED!=1 — dry listing only:")
-                for l in leads:
-                    print(
-                        f"  conversation={l.get('conversation_id')} "
-                        f"request={l.get('eb_contact_id')} -> {l.get('agent_name')}"
-                    )
-                return 0
-
-            attended = 0
-            for l in leads:
-                res = await attend_lead(
-                    page, request_id=l["eb_contact_id"], phone=l["lead_phone"],
-                    agent_name=l["agent_name"], note_done=l["eb_note_added"],
-                    status_done=l["eb_marked_attended"],
-                    note_text=f"RESPONSABLE: {l['agent_name']}",
-                )
-                error_code = res.get("error_code")
-                if not error_code:
-                    if not res["found"]:
-                        error_code = "request_not_found"
-                    elif not res["note_ok"]:
-                        error_code = "note_failed"
-                    elif not res["status_ok"]:
-                        error_code = "status_failed"
-                evidence_ok = await finish_attend_attempt(
-                    settings, l["conversation_id"], l["lease_token"],
-                    note_ok=res["note_ok"], status_ok=res["status_ok"],
-                    error_code=error_code,
-                )
-                if res["status_ok"] and res["note_ok"] and evidence_ok:
-                    attended += 1
-                elif not evidence_ok:
-                    logger.warning(
-                        "EasyBroker lease expired or evidence persistence failed for {}",
-                        l["conversation_id"],
-                    )
-                elif not res["found"]:
-                    logger.warning(
-                        "EasyBroker request {} not found; preserving pending evidence for retry",
-                        l.get("eb_contact_id"),
-                    )
-                else:
-                    logger.warning(
-                        "Conversation {} not fully attended: found={} note_ok={} status_ok={}",
-                        l.get("conversation_id"), res["found"], res["note_ok"], res["status_ok"],
-                    )
-            print(f"Attended {attended}/{len(leads)} EB lead(s)")
-            return 1 if reconcile_failed else 0
+            # The pre-V3 attend path is gone; EASYBROKER_V3_INBOX=1 is the only
+            # supported mode. Fail loudly instead of silently doing nothing.
+            print("EASYBROKER_V3_INBOX is not enabled — no attend path available.",
+                  file=sys.stderr)
+            return 1
 
         except AuthenticationError as e:
             print(f"AUTH FAILED: {e}", file=sys.stderr)

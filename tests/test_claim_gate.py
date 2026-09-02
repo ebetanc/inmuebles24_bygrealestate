@@ -9,8 +9,6 @@ from easybroker import main as eb_main
 from easybroker.main import async_main as easybroker_main
 from easybroker.supa import (
     _normalize_contact_request,
-    fetch_pending_attend,
-    finish_attend_attempt,
     reconcile_i24_easybroker_requests,
 )
 from inmobiliaria24.scraper import _capture_i24_status_evidence, mark_lead_contacted
@@ -62,12 +60,6 @@ def test_i24_success_revalidates_assignment_and_audits_drift():
     assert "case when v_effective_success then 'i24_contacted' else 'i24_contact_attempt' end" in compact
 
 
-def test_easybroker_pending_rows_include_exact_request_and_step_flags():
-    source = inspect.getsource(fetch_pending_attend)
-    assert "rpc/claim_easybroker_attend_effects" in source
-    assert 'json={"p_limit": 20}' in source
-
-
 def test_final_sandy_alert_assigns_only_still_unassigned_conversation():
     sql = (Path(__file__).parents[1] / "whatsapp-agent/migrations/0045_finalize_easybroker_manager_assignment.sql").read_text()
     compact = " ".join(sql.lower().split())
@@ -96,7 +88,7 @@ def test_i24_easybroker_link_requires_one_property_identity_time_match():
     )
     assert "reconcile_easybroker_contact_requests" in source
     assert main_source.index("reconcile_i24_easybroker_requests(settings)") < main_source.index(
-        "fetch_pending_attend(settings)"
+        "_run_v3_effect_worker(settings, page)"
     )
     assert "upper(nullif(btrim(c.property_public_id), '')) = r.property_id" in compact
     assert "where possible_matches.email_matches or possible_matches.phone_matches" in compact
@@ -130,27 +122,6 @@ def test_easybroker_contact_request_normalization_rejects_bad_time_and_keeps_no_
         "email": "lead@example.com",
         "happened_at": "2026-02-31T12:34:56Z",
     }) is None
-
-
-def test_easybroker_effect_uses_atomic_lease_before_ui_and_token_bound_finish():
-    main_source = inspect.getsource(easybroker_main)
-    finish_source = inspect.getsource(finish_attend_attempt)
-    sql = (Path(__file__).parents[1] / "whatsapp-agent/migrations/0033_easybroker_attend_effect_lease.sql").read_text()
-    compact = " ".join(sql.lower().split())
-
-    claim = main_source.index("fetch_pending_attend(settings)")
-    portal = main_source.index("res = await attend_lead(", claim)
-    finish = main_source.index("evidence_ok = await finish_attend_attempt(", portal)
-    assert claim < portal < finish
-    assert 'l["lease_token"]' in main_source
-    assert "rpc/finish_easybroker_attend_effect" in finish_source
-    assert '"p_lease_token": lease_token' in finish_source
-    assert "for update of c skip locked" in compact
-    assert "eb_effect_lease_expires_at" in compact
-    assert "v_conversation.eb_effect_lease_token is distinct from p_lease_token" in compact
-    assert "v_conversation.eb_effect_lease_expires_at <= p_now" in compact
-    assert "revoke all on function public.claim_easybroker_attend_effects" in compact
-    assert "to service_role" in compact
 
 
 def test_easybroker_pg_fixture_covers_two_workers_crash_and_retry():
@@ -730,7 +701,7 @@ def test_once_cli_wires_request_id_into_attend_lead(monkeypatch):
     assert os.environ["EB_MARK_ATTENDED"] == "1"
 
 
-def test_default_poll_and_once_paths_never_enable_phone_fallback(monkeypatch):
+def test_once_path_never_enables_phone_fallback(monkeypatch):
     monkeypatch.setenv("EASYBROKER_EMAIL", "bot@example.com")
     monkeypatch.setenv("EASYBROKER_PASSWORD", "secret")
     monkeypatch.setattr(eb_main, "launch_chrome", _fake_launch_chrome)
@@ -748,36 +719,12 @@ def test_default_poll_and_once_paths_never_enable_phone_fallback(monkeypatch):
 
     monkeypatch.setattr(eb_main, "attend_lead", fake_attend_lead)
 
-    # --once path
     monkeypatch.delenv("EB_MARK_ATTENDED", raising=False)
     monkeypatch.setattr(sys, "argv", ["easybroker", "--once", "999"])
     once_args = eb_main._parse_args()
     assert asyncio.run(eb_main.async_main(once_args)) == 0
 
-    # default poll path (gate forced on)
-    monkeypatch.setenv("EB_MARK_ATTENDED", "1")
-
-    async def fake_fetch_pending_attend(settings):
-        return [{
-            "eb_contact_id": 222, "lead_phone": "5551112222", "agent_name": "Ana",
-            "eb_note_added": False, "eb_marked_attended": False,
-            "conversation_id": "conv-1", "lease_token": "tok-1",
-        }]
-
-    async def fake_finish_attend_attempt(settings, conversation_id, lease_token, **kwargs):
-        return True
-
-    async def fake_reconcile(settings):
-        return 0
-
-    monkeypatch.setattr(eb_main, "fetch_pending_attend", fake_fetch_pending_attend)
-    monkeypatch.setattr(eb_main, "finish_attend_attempt", fake_finish_attend_attempt)
-    monkeypatch.setattr(eb_main, "reconcile_i24_easybroker_requests", fake_reconcile)
-    monkeypatch.setattr(sys, "argv", ["easybroker"])
-    default_args = eb_main._parse_args()
-    assert asyncio.run(eb_main.async_main(default_args)) == 0
-
-    assert len(captured_kwargs) == 2  # one from --once, one from the default poll loop
+    assert len(captured_kwargs) == 1
     for kwargs in captured_kwargs:
         assert kwargs.get("allow_phone_fallback", False) is False
 
