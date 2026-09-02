@@ -84,7 +84,7 @@ pi = ssh("esteban@100.88.225.103",
          "systemctl is-active inmobiliaria24.timer easybroker.timer | paste -sd' '; "
          f"C=$(date -d '-{MINUTES} min' '+%Y-%m-%d %H:%M'); "
          "for f in eb_run.log run.log; do sudo -n tail -c 80000 /opt/inmobiliaria24/logs/$f 2>/dev/null"
-         " | grep -a 'ERROR\\|WARNING' | awk -v c=\"$C\" 'substr($0,1,16)>=c' | tail -5 | sed \"s/^/$f: /\"; done")
+         " | grep -a 'ERROR\\|EasyBroker V3 .* failed' | awk -v c=\"$C\" 'substr($0,1,16)>=c' | tail -5 | sed \"s/^/$f: /\"; done")
 print("== pi:", pi)
 if not pi.startswith("active active"):
     alerts.append(f"Pi timers/ssh: {pi[:120]}")
