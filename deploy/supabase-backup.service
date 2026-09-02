@@ -1,0 +1,13 @@
+[Unit]
+Description=Nightly read-only backup of Supabase Postgres (pg_dump)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/sh /root/ops/supabase-backup.sh
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

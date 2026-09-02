@@ -1,0 +1,10 @@
+[Unit]
+Description=Dispara el backup nocturno de Supabase (03:20 CDMX / 09:20 UTC)
+
+[Timer]
+OnCalendar=*-*-* 09:20:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
