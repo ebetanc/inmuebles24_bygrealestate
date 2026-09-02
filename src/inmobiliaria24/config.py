@@ -19,9 +19,6 @@ class Settings:
     webhook_url: str = ""
     webhook_token: str = field(default="", repr=False)
 
-    # Lead Routing V3. Disabled by default so existing V2 deployments keep
-    # their behavior until the database and downstream workflows are ready.
-    lead_routing_v3_enabled: bool = False
     lead_routing_account_key: str = "default"
 
     # Monitoring — Telegram (errors only)
@@ -66,9 +63,6 @@ class Settings:
             ),
             webhook_url=webhook_url,
             webhook_token=webhook_token,
-            lead_routing_v3_enabled=os.environ.get(
-                "LEAD_ROUTING_V3_ENABLED", ""
-            ).strip().lower() in ("1", "true", "yes"),
             lead_routing_account_key=(
                 os.environ.get("LEAD_ROUTING_ACCOUNT_KEY")
                 or os.environ.get("EASYBROKER_ACCOUNT_KEY")

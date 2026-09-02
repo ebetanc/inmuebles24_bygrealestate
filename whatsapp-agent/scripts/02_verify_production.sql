@@ -84,7 +84,7 @@ FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
   AND p.proname IN (
-    'is_daytime', 'get_on_shift_agents', 'mark_assigned', 'resolve_agent_from_tags'
+    'is_daytime', 'get_on_shift_agents', 'resolve_agent_from_tags'
   )
 ORDER BY p.proname, arguments;
 
@@ -126,15 +126,6 @@ JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public'
   AND c.relname IN ('lead_routing_opportunities', 'lead_routing_events')
 ORDER BY c.relname;
-
-SELECT p.proname,
-  pg_get_function_identity_arguments(p.oid) AS arguments,
-  p.prosecdef
-FROM pg_proc p
-JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = 'public'
-  AND p.proname IN ('mark_offer_delivered', 'mark_offer_delivery_failed')
-ORDER BY p.proname, arguments;
 
 SELECT trigger_name, event_manipulation, action_timing, action_statement
 FROM information_schema.triggers
@@ -202,21 +193,9 @@ SELECT
     AS service_role_can_use_event_sequence;
 
 SELECT
-  NOT has_function_privilege(
-    'service_role', 'public.mark_offer_delivered(bigint,text,jsonb)', 'EXECUTE'
-  ) AS service_role_cannot_bypass_delivery_attempt,
-  NOT has_function_privilege(
-    'service_role', 'public.mark_offer_delivery_failed(bigint,text,jsonb)', 'EXECUTE'
-  ) AS service_role_cannot_bypass_delivery_failure_attempt,
   has_function_privilege(
     'service_role', 'public.record_delivery_callback(text,text,timestamptz,jsonb)', 'EXECUTE'
-  ) AS service_role_can_record_delivery_callback,
-  NOT has_function_privilege(
-    'anon', 'public.mark_offer_delivered(bigint,text,jsonb)', 'EXECUTE'
-  ) AS anon_cannot_mark_delivered,
-  NOT has_function_privilege(
-    'authenticated', 'public.mark_offer_delivery_failed(bigint,text,jsonb)', 'EXECUTE'
-  ) AS authenticated_cannot_mark_delivery_failed;
+  ) AS service_role_can_record_delivery_callback;
 
 -- 7d. Delivery outbox/inbox least privilege (LRV2-008)
 SELECT '7d. ROUTING V2 DELIVERY SECURITY' AS check_name;
@@ -247,7 +226,6 @@ SELECT
 
 SELECT
   has_function_privilege('service_role','public.create_delivery_attempt(bigint,text,text,text,text)','EXECUTE')
-    AND has_function_privilege('service_role','public.bind_delivery_message(bigint,text,text)','EXECUTE')
     AND has_function_privilege('service_role','public.fail_unbound_delivery_attempt(bigint,text,text)','EXECUTE')
     AND has_function_privilege('service_role','public.record_delivery_callback(text,text,timestamptz,jsonb)','EXECUTE')
     AND has_function_privilege('service_role','public.claim_pending_guard_deliveries(integer)','EXECUTE')

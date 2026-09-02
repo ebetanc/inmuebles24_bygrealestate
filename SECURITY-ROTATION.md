@@ -155,9 +155,10 @@ esa — por eso la recomendación es revocar las 6, no solo una.
 
 1. `https://n8n.srv856940.hstgr.cloud` → Settings → n8n API (o API Keys) →
    busca cada uno de los 6 labels de la tabla → Revoke/Delete en cada una.
-2. Si algún script local (`deploy_owner_first.py`,
-   `whatsapp-agent/scripts/deploy_node.py`, `deploy_wf10_c2.py`,
-   `update_wf2.py`) necesita seguir usando la API de n8n, genera **una key
+2. `deploy_owner_first.py` y `deploy_wf10_c2.py` ya no existen (PR #4). Si
+   algún script local (`whatsapp-agent/scripts/deploy_node.py`,
+   `whatsapp-agent/scripts/update_wf2.py`) necesita seguir usando la API de
+   n8n, genera **una key
    nueva** con scopes acotados si la versión de n8n lo permite (esta instancia
    ya tiene columna `scopes`/`audience`, así que sí soporta API keys con
    permisos limitados — úsalo en vez de repetir el patrón de key

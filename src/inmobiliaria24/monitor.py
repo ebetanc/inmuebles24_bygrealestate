@@ -159,40 +159,6 @@ async def check_stale_runs(
 
 
 # ---------------------------------------------------------------------------
-# Routing v2 safe mode (LRV2-013 circuit breaker)
-# ---------------------------------------------------------------------------
-
-
-async def check_routing_safe_mode(
-    bot_token: str,
-    chat_id: str,
-    status: str,
-    *,
-    reason: str | None = None,
-    entered_at: str | None = None,
-) -> bool:
-    """Alert when lead routing v2 is in safe mode (circuit breaker tripped).
-
-    `status`/`reason`/`entered_at` come from the durable
-    `routing_safe_mode_state` row (via the `get_routing_safe_mode()` RPC —
-    see `whatsapp-agent/migrations/0028_routing_safe_mode.sql`). This function
-    only alerts; it never trips or exits safe mode itself. Returns True if an
-    alert was sent.
-    """
-    if status != "safe_mode":
-        return False
-
-    msg = (
-        "🚨 <b>Lead Routing — Modo Seguro Activo</b>\n\n"
-        f"<b>Motivo:</b> {reason or 'desconocido'}\n"
-        f"<b>Desde:</b> {entered_at or 'desconocido'}\n\n"
-        "Owner operativo: manager. Casos nuevos van directo a guardia.\n"
-        "Salida solo manual tras health check verde."
-    )
-    return await send_telegram_alert(bot_token, chat_id, msg)
-
-
-# ---------------------------------------------------------------------------
 # Daily summary
 # ---------------------------------------------------------------------------
 

@@ -9,7 +9,6 @@ import httpx
 import pytest
 
 from inmobiliaria24.monitor import (
-    check_routing_safe_mode,
     check_stale_runs,
     check_webhook_health,
     send_daily_summary,
@@ -155,34 +154,6 @@ def test_webhook_health_connection_error(_mock_telegram) -> None:
     call_args = _mock_telegram.post.call_args
     payload = call_args.kwargs.get("json") or call_args[1].get("json")
     assert "unreachable" in payload["text"]
-
-
-# ---------------------------------------------------------------------------
-# Routing v2 safe mode (LRV2-013)
-# ---------------------------------------------------------------------------
-
-
-def test_routing_safe_mode_alerts_when_active(_mock_telegram) -> None:
-    """Alert fires with reason/entered_at when routing is in safe mode."""
-    sent = asyncio.run(
-        check_routing_safe_mode(
-            "tok", "chat", "safe_mode",
-            reason="delivery_failed", entered_at="2026-08-13T09:04:00+00:00",
-        )
-    )
-    assert sent is True
-    call_args = _mock_telegram.post.call_args
-    payload = call_args.kwargs.get("json") or call_args[1].get("json")
-    assert "Modo Seguro" in payload["text"]
-    assert "delivery_failed" in payload["text"]
-    assert "2026-08-13T09:04:00+00:00" in payload["text"]
-
-
-def test_routing_safe_mode_skips_when_normal(_mock_telegram) -> None:
-    """No alert when routing status is normal."""
-    sent = asyncio.run(check_routing_safe_mode("tok", "chat", "normal"))
-    assert sent is False
-    _mock_telegram.post.assert_not_called()
 
 
 def test_webhook_health_no_telegram_config() -> None:

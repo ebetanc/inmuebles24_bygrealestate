@@ -55,7 +55,7 @@ FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
   AND p.proname IN (
-    'is_daytime', 'get_on_shift_agents', 'mark_assigned', 'resolve_agent_from_tags'
+    'is_daytime', 'get_on_shift_agents', 'resolve_agent_from_tags'
   )
 ORDER BY p.proname, arguments;
 
