@@ -1,6 +1,0 @@
-[Unit]
-Description=Guarded single retry of inmobiliaria24.service after a failure
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/inmobiliaria24-retry-guard
