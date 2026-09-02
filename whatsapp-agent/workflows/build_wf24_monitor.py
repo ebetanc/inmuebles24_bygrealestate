@@ -31,12 +31,12 @@ active AS (
 ),
 leads AS (
   SELECT o.opportunity_id, o.state, o.routing_tier, o.property_id, o.assigned_agent_id, ag.name AS assigned_name, ag.role AS assigned_role,
-    o.created_at, o.assigned_at, o.expires_at, o.v3_night_queued_at, o.v3_night_released_at,
-    COALESCE(NULLIF(c.lead_name,''), e.offer_context->>'lead_name') AS lead_name,
-    COALESCE(NULLIF(c.lead_phone,''), o.e164_phone) AS lead_phone,
-    COALESCE(e.offer_context->>'property_title', c.current_property) AS property_title,
+    o.created_at, o.assigned_at, o.accepted_at, o.expires_at, o.v3_night_queued_at, o.v3_night_released_at,
+    COALESCE(NULLIF(c.lead_name,''), NULLIF(e.offer_context->>'name',''), e.offer_context->>'lead_name') AS lead_name,
+    COALESCE(NULLIF(c.lead_phone,''), o.e164_phone, e.offer_context->>'phone') AS lead_phone,
+    COALESCE(e.offer_context->>'property_title', NULLIF(concat_ws(' · ', e.offer_context->>'property', e.offer_context->>'address'),''), c.current_property) AS property_title,
     e.route_dispatch_status, e.contactado_status,
-    (SELECT json_agg(json_build_object('tier',a.routing_tier,'kind',a.delivery_kind,'to',COALESCE(ta.name,a.target_agent_id),'status',a.status,
+    (SELECT json_agg(json_build_object('tier',a.routing_tier,'kind',a.delivery_kind,'to',COALESCE(ta.name,a.target_agent_id),'to_id',a.target_agent_id,'status',a.status,
         'requested_at',a.requested_at,'sent_at',a.provider_accepted_at,'delivered_at',a.delivered_at,'claimed_at',a.claimed_at,'failed_at',a.failed_at) ORDER BY a.requested_at)
      FROM public.lead_routing_delivery_attempts a LEFT JOIN public.agents ta ON ta.agent_id=a.target_agent_id WHERE a.opportunity_id=o.opportunity_id) AS attempts,
     (SELECT json_agg(json_build_object('type',ev.event_type,'actor',COALESCE(ea.name,ev.actor_id),'at',ev.occurred_at,'reason',COALESCE(ev.metadata->>'reason','')) ORDER BY ev.occurred_at)
@@ -93,13 +93,17 @@ const cards = leads.map(l => {
   const contacted = events.find(e => e.type === 'i24_contacted');
   lines.push(`Detectado ${hhmm(detected ? detected.at : l.created_at)} · Contactado en Inmuebles24 ${contacted ? OK + ' ' + hhmm(contacted.at) : (l.contactado_status === 'verified' ? OK : WAIT)}`);
   if (l.v3_night_queued_at) lines.push(`Cola nocturna ${hhmm(l.v3_night_queued_at)} ${dmy(l.v3_night_queued_at)} → liberado ${l.v3_night_released_at ? OK + ' ' + hhmm(l.v3_night_released_at) : WAIT + ' pendiente 08:05'}`);
+  // NOTE: attempts.claimed_at is the sender's lease (WF13/WF23), NOT the human click.
+  // The human click is opportunity.accepted_at, on the offer addressed to the assigned agent.
   let claimed = null;
   for (const a of attempts) {
     if (a.kind === 'offer') {
       let st;
-      if (a.claimed_at) { st = `${OK} <b>Tomó ${esc(a.to)}</b> ${hhmm(a.claimed_at)} (${mins(a.delivered_at || a.sent_at || a.requested_at, a.claimed_at)} min tras entrega)`; claimed = a; }
+      const isClaim = !!l.accepted_at && a.to_id === l.assigned_agent_id;
+      if (isClaim) { st = `${OK} <b>Tomó ${esc(a.to)}</b> ${hhmm(l.accepted_at)} (${mins(a.delivered_at || a.sent_at || a.requested_at, l.accepted_at)} min tras entrega)`; claimed = a; }
       else if (a.status === 'expired') st = `${BAD} venció sin respuesta`;
       else if (a.status === 'failed' || a.failed_at) { st = `${BAD} WhatsApp falló ${hhmm(a.failed_at)}`; problems.push('WhatsApp no llegó a ' + a.to); }
+      else if (a.delivered_at && l.assigned_agent_id) st = `${BAD} venció sin respuesta`;
       else if (a.delivered_at) st = `${WAIT} entregado, esperando Tomo (5 min)`;
       else if (a.sent_at) { st = `${WAIT} enviado, sin confirmación de entrega`; if (mins(a.sent_at, row.until) > 3) problems.push('Sin "entregado" de Meta para ' + a.to); }
       else { st = `${WAIT} pedido, aún no enviado`; if (mins(a.requested_at, row.until) > 3) problems.push('Oferta a ' + a.to + ' pedida hace ' + mins(a.requested_at, row.until) + ' min sin enviar'); }
