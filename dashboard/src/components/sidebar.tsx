@@ -9,6 +9,7 @@ const navSections = [
     items: [
       { href: "/", label: "Vista General", icon: "overview" },
       { href: "/leads", label: "Leads en Vivo", icon: "leads" },
+      { href: "/leads-v3", label: "Leads V3", icon: "leads" },
       { href: "/agentes", label: "Agentes", icon: "agents" },
       { href: "/subastas", label: "Subastas", icon: "auctions" },
     ],

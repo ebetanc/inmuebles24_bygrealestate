@@ -126,6 +126,46 @@ export interface RoutingV2KPIs {
   unassigned_cases_in_window: number;
 }
 
+// Mirrors public.v3_leads_dashboard (read-only view, migration 20260902120000).
+export interface V3Lead {
+  opportunity_id: number;
+  created_at: string;
+  lead_name: string | null;
+  lead_phone: string | null;
+  property_id: string | null;
+  property_title: string | null;
+  easybroker_url: string | null;
+  state: string;
+  routing_tier: string | null;
+  assigned_agent_id: string | null;
+  assigned_name: string | null;
+  assigned_role: string | null;
+  assigned_at: string | null;
+  assignment_method: "claim" | "sandy_fallback" | null;
+  minutes_to_claim: number | null;
+  owner_offer_delivered_at: string | null;
+  guard_offer_delivered_at: string | null;
+  sandy_notice_delivered_at: string | null;
+  eb_note_ok: boolean | null;
+  eb_note_at: string | null;
+  eb_attended_ok: boolean | null;
+  eb_attended_at: string | null;
+  night_queued_at: string | null;
+  night_released_at: string | null;
+  dispatch_status: string | null;
+  has_problem: boolean;
+  problem_reason: string | null;
+}
+
+export interface V3KPIs {
+  total: number;
+  claimed: number;
+  sandy: number;
+  open: number;
+  withProblem: number;
+  avgMinutesToClaim: number | null;
+}
+
 export interface KPIs {
   totalLeadsToday: number;
   totalLeadsWeek: number;
