@@ -1,5 +1,5 @@
 import { createSupabaseServer } from "./supabase";
-import type { Agent, Conversation, Auction, NightQueueItem, KPIs, ScrapeRun, SLABreach, RoutingV2OpsRow, RoutingV2KPIs } from "./types";
+import type { Agent, Conversation, Auction, NightQueueItem, KPIs, ScrapeRun, SLABreach, RoutingV2OpsRow, RoutingV2KPIs, V3Lead, V3KPIs } from "./types";
 import { mxStartOfToday, mxToday } from "./datetime";
 
 const db = () => createSupabaseServer();
@@ -226,6 +226,38 @@ export async function getRoutingV2KPIs(daysBack = 7): Promise<RoutingV2KPIs> {
   const supabase = db();
   const { data } = await supabase.rpc("get_routing_v2_kpis", { p_days_back: daysBack });
   return data as RoutingV2KPIs;
+}
+
+// Lead Routing V3 observability. Single source: the read-only DB view
+// v3_leads_dashboard (migration 20260902120000) — same joins as the WF24
+// monitor email, so dashboard and email can never disagree.
+export async function getV3Leads({ since }: { since?: Date } = {}): Promise<V3Lead[]> {
+  const supabase = db();
+  const from = since ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const { data } = await supabase
+    .from("v3_leads_dashboard")
+    .select("*")
+    .gte("created_at", from.toISOString())
+    .order("created_at", { ascending: false })
+    .limit(200);
+  return (data || []) as V3Lead[];
+}
+
+export async function getV3Kpis(): Promise<V3KPIs> {
+  const rows = await getV3Leads({ since: mxStartOfToday() });
+  const claimTimes = rows
+    .map((r) => r.minutes_to_claim)
+    .filter((m): m is number => typeof m === "number");
+  return {
+    total: rows.length,
+    claimed: rows.filter((r) => r.assignment_method === "claim").length,
+    sandy: rows.filter((r) => r.assignment_method === "sandy_fallback").length,
+    open: rows.filter((r) => r.assigned_agent_id === null).length,
+    withProblem: rows.filter((r) => r.has_problem).length,
+    avgMinutesToClaim: claimTimes.length
+      ? Math.round(claimTimes.reduce((a, b) => a + b, 0) / claimTimes.length)
+      : null,
+  };
 }
 
 export async function getMonthSchedule(year: number, month: number) {
