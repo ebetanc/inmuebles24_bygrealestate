@@ -21,6 +21,9 @@
 --     an intentional backward-compatible shim for older WF3c exports
 --     (0045_finalize_easybroker_manager_assignment.sql:262). Drop only once no
 --     stale WF3c export can be re-imported.
+--   generate_tomo_code()
+--     same hazard: n8n-export/backup-20260716-guard-direct/WF13_backup.json
+--     still embeds it and WF13 is live. Drop once that backup is gone.
 --
 -- Before applying, note that whatsapp-agent/scripts/02_verify_production.sql
 -- asserts the existence/privileges of mark_assigned, mark_offer_delivered,
@@ -51,8 +54,6 @@ DROP FUNCTION IF EXISTS public.replay_v3_meta_webhook_event(bigint, timestamptz)
 -- V1 / V2 orphans
 -- --------------------------------------------------------------------------
 
--- whatsapp-agent/migrations/0007_medium_fixes.sql
-DROP FUNCTION IF EXISTS public.generate_tomo_code();
 
 -- whatsapp-agent/migrations/0004_evolution.sql
 DROP FUNCTION IF EXISTS public.evolution_phone(text);
