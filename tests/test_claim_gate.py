@@ -13,53 +13,13 @@ from easybroker.supa import (
     finish_attend_attempt,
     reconcile_i24_easybroker_requests,
 )
-from inmobiliaria24.main import async_main
 from inmobiliaria24.scraper import _capture_i24_status_evidence, mark_lead_contacted
-from inmobiliaria24.supa import (
-    claim_pending_i24_contacts,
-    fetch_pending_i24_notes,
-    finish_i24_contact_attempt,
-    validate_i24_contact_attempt,
-)
-
-
-def test_portal_side_effect_queries_require_a_genuine_claim():
-    gate = "or=(claimed_via.is.null,claimed_via.neq.escalation,first_response_at.not.is.null)"
-    assert gate in inspect.getsource(fetch_pending_i24_notes)
-    sql = (Path(__file__).parents[1] / "whatsapp-agent/migrations/0033_easybroker_attend_effect_lease.sql").read_text()
-    assert "c.claimed_via IS NULL OR c.claimed_via <> 'escalation' OR c.first_response_at IS NOT NULL" in sql
-    final_sql = (Path(__file__).parents[1] / "whatsapp-agent/migrations/0045_finalize_easybroker_manager_assignment.sql").read_text()
-    assert "OR c.assignment_method = 'manager_escalation'" in final_sql
-
-
-def test_i24_contact_queue_uses_atomic_durable_lease():
-    source = inspect.getsource(claim_pending_i24_contacts)
-
-    assert 'rpc/claim_i24_contact_effects' in source
-    assert '"p_limit": limit' in source
-
-
-def test_i24_contact_side_effect_uses_lease_then_retries_after_crash():
-    source = inspect.getsource(async_main)
-
-    claim = source.index("for contact in await claim_pending_i24_contacts()")
-    portal_mutation = source.index("contacted = await mark_lead_contacted")
-    result = source.index("await finish_i24_contact_attempt", portal_mutation)
-    validate = source.index("await validate_i24_contact_attempt", claim)
-    assert claim < validate < portal_mutation < result
-    assert "assignment_changed_before_portal" in source
-    assert 'contact["i24_lead_id"]' in source
-    assert 'contact["lease_token"]' in source
 
 
 def test_i24_contact_evidence_is_idempotent_and_pii_safe():
-    recorder = inspect.getsource(finish_i24_contact_attempt)
     marker = inspect.getsource(mark_lead_contacted)
     screenshot = inspect.getsource(_capture_i24_status_evidence)
 
-    assert 'rpc/finish_i24_contact_effect' in recorder
-    assert '"p_lease_token": lease_token' in recorder
-    assert "rpc/validate_i24_contact_effect" in inspect.getsource(validate_i24_contact_attempt)
     assert "full_page=True" not in marker
     assert "sha256" in screenshot
     assert ".locator(" in screenshot

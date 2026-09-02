@@ -364,88 +364,26 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                         except Exception as e:
                             logger.warning("INSPECT_ON_PENDIENTE dump failed: {}", e)
 
-                v3_enabled = bool(getattr(settings, "lead_routing_v3_enabled", False))
-                if v3_enabled:
-                    # V3 durable intake is the first state transition. No
-                    # webhook or portal effect runs before every lead has an
-                    # idempotent capture result.
-                    from inmobiliaria24.supa import v3_intake_lead
+                # V3 durable intake is the first state transition. No
+                # webhook or portal effect runs before every lead has an
+                # idempotent capture result.
+                from inmobiliaria24.supa import v3_intake_lead
 
-                    for lead in all_leads:
-                        lead_id = str(lead.get("lead_id") or "").strip()
-                        if not lead_id:
-                            continue
-                        try:
-                            await v3_intake_lead(settings, lead)
-                        except Exception as exc:
-                            logger.warning("V3 intake failed for lead {}: {}", lead_id, exc)
-
-                    await _run_v3_contactado(page, all_leads)
-                    # The route queue is durable and contains the full lead
-                    # context. It remains the source of truth after Contactado
-                    # removes a lead from the next portal scrape.
-                    new_leads = await _run_v3_route_dispatch(settings, store)
-                    new_count = len(new_leads)
-                else:
-                    # V2 compatibility path. Kept behind the explicit V3 flag.
-                    new_leads = store.filter_new(all_leads)
-                    new_count = len(new_leads)
-                    if new_leads:
-                        await send_to_webhook(
-                            new_leads,
-                            webhook_url=settings.webhook_url,
-                            webhook_token=settings.webhook_token,
-                        )
-                        store.mark_seen(new_leads)
-                    else:
-                        logger.info("No new leads to send — all already pushed")
-
-                # V2 portal side effect. V3 has already completed its per-capture
-                # Contactado gate above and must never use the legacy RPC.
-                if not v3_enabled and os.environ.get("MARK_CONTACTED", "").strip().lower() in ("1", "true", "yes"):
-                    from inmobiliaria24.supa import (
-                        claim_pending_i24_contacts,
-                        finish_i24_contact_attempt,
-                        validate_i24_contact_attempt,
-                    )
-
-                    for contact in await claim_pending_i24_contacts():
-                        try:
-                            opportunity_id = int(contact["opportunity_id"])
-                            lease_token = str(contact["lease_token"])
-                            if not await validate_i24_contact_attempt(opportunity_id, lease_token):
-                                await finish_i24_contact_attempt(
-                                    opportunity_id, lease_token, success=False,
-                                    error_code="assignment_changed_before_portal",
-                                )
-                                logger.warning("Skipping stale i24 Contactado lease for opportunity {}", opportunity_id)
-                                continue
-                            evidence: dict = {}
-                            contacted = await mark_lead_contacted(
-                                page,
-                                {"lead_id": contact["i24_lead_id"]},
-                                evidence=evidence,
-                            )
-                            await finish_i24_contact_attempt(
-                                opportunity_id,
-                                lease_token,
-                                success=contacted,
-                                error_code=evidence.get("error_code"),
-                                screenshot_path=evidence.get("screenshot_path"),
-                            )
-                        except Exception as e:
-                            logger.warning("i24 Contactado task failed safely: {}", str(e))
-
-                # V2-only: V3 never writes an advisor note in Inmuebles24.
-                if not v3_enabled:
+                for lead in all_leads:
+                    lead_id = str(lead.get("lead_id") or "").strip()
+                    if not lead_id:
+                        continue
                     try:
-                        from inmobiliaria24.notes import write_pending_for_page
+                        await v3_intake_lead(settings, lead)
+                    except Exception as exc:
+                        logger.warning("V3 intake failed for lead {}: {}", lead_id, exc)
 
-                        notes_written = await write_pending_for_page(page)
-                        if notes_written:
-                            logger.info("Wrote {} i24 advisor note(s)", notes_written)
-                    except Exception as e:
-                        logger.warning("i24 note pass failed: {}", str(e))
+                await _run_v3_contactado(page, all_leads)
+                # The route queue is durable and contains the full lead
+                # context. It remains the source of truth after Contactado
+                # removes a lead from the next portal scrape.
+                new_leads = await _run_v3_route_dispatch(settings, store)
+                new_count = len(new_leads)
 
                 print(f"Scraped {total} Pendiente leads, {new_count} new")
                 for lead in new_leads:

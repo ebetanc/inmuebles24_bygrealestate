@@ -269,8 +269,10 @@ def test_v3_route_dispatch_blocks_incomplete_easybroker_property(monkeypatch):
 def test_v3_main_orders_intake_contactado_then_webhook_and_skips_i24_notes():
     source = inspect.getsource(main.async_main)
     assert source.index("v3_intake_lead") < source.index("_run_v3_contactado")
-    assert source.index("_run_v3_contactado") < source.index("send_to_webhook", source.index("_run_v3_contactado"))
     assert source.index("_run_v3_contactado") < source.index("_run_v3_route_dispatch")
-    v3_block = source[source.index("if v3_enabled:"):source.index("else:", source.index("if v3_enabled:"))]
-    assert "write_pending_for_page" not in v3_block
-    assert '"contactado_status": "verified"' in inspect.getsource(main._run_v3_route_dispatch)
+    # V3 is the only path: no legacy advisor-note or webhook fan-out survives here.
+    assert "write_pending_for_page" not in source
+    assert "send_to_webhook" not in source
+    dispatch = inspect.getsource(main._run_v3_route_dispatch)
+    assert dispatch.index("send_to_webhook") > 0
+    assert '"contactado_status": "verified"' in dispatch
