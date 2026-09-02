@@ -36,6 +36,11 @@ Reglas de operación:
   `root-n8n-1`: `docker exec root-n8n-1 n8n export:workflow --id=<ID> --output=/tmp/x.json`,
   `import:workflow --input=` (el JSON **debe** traer `id`), y como el import desactiva,
   siempre `publish:workflow --id=` + `docker restart root-n8n-1`.
+  **Los JSON del repo traen credenciales placeholder** (`REPLACE_WITH_POSTGRES_CREDENTIAL_ID`):
+  nunca importes el JSON del repo tal cual; parte del export vivo y aplica solo el cambio.
+- En la tabla `execution_entity` de n8n, las filas `running` con `deletedAt` NO son ejecuciones
+  colgadas: son ejecuciones exitosas soft-deleted (`saveDataSuccessExecution: none`) esperando
+  al pruner. Antes de declarar "cuelgue", mira `deletedAt` y el consumo de memoria.
 - **Nunca modifiques producción sin exportar primero el workflow vivo y compararlo
   contra `whatsapp-agent/workflows/`.** Producción puede haber divergido del repo.
   `scripts/n8n_control.py` hace el diff/dry-run offline.
