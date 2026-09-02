@@ -1,0 +1,315 @@
+{
+  "id": "WF24V3MonitorDia",
+  "name": "WF24 - V3 Monitor Diario (Email)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/30 8-20 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Cada 30 min (08-20 CDMX)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "45 20 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Fin del día 20:45",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "v3-monitor-0902-k7q2x9",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Prueba manual (webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        480
+      ],
+      "webhookId": "a7c1d2e3-0902-4a30-8b6d-0000000wf024"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "mode",
+              "value": "window",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Modo ventana",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a2",
+              "name": "mode",
+              "value": "day",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Modo día",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SET LOCAL statement_timeout = '20s';\nWITH p AS (\n  SELECT CASE WHEN $1 = 'day'\n    THEN (date_trunc('day', now() AT TIME ZONE 'America/Mexico_City')) AT TIME ZONE 'America/Mexico_City'\n    ELSE now() - interval '31 minutes' END AS since\n),\nactive AS (\n  SELECT DISTINCT o.opportunity_id\n  FROM public.lead_routing_opportunities o, p\n  WHERE o.v3_enabled AND (\n    o.created_at >= p.since OR o.updated_at >= p.since\n    OR EXISTS (SELECT 1 FROM public.lead_routing_delivery_attempts a WHERE a.opportunity_id=o.opportunity_id\n               AND GREATEST(a.requested_at, COALESCE(a.delivered_at,a.requested_at), COALESCE(a.claimed_at,a.requested_at), COALESCE(a.failed_at,a.requested_at)) >= p.since)\n    OR EXISTS (SELECT 1 FROM public.lead_routing_events ev WHERE ev.opportunity_id=o.opportunity_id AND ev.occurred_at >= p.since)\n    OR EXISTS (SELECT 1 FROM public.easybroker_i24_request_links l JOIN public.easybroker_effect_attempts fx ON fx.eb_request_id=l.eb_request_id\n               WHERE l.opportunity_id=o.opportunity_id AND fx.finished_at >= p.since)\n  )\n),\nleads AS (\n  SELECT o.opportunity_id, o.state, o.routing_tier, o.property_id, o.assigned_agent_id, ag.name AS assigned_name, ag.role AS assigned_role,\n    o.created_at, o.assigned_at, o.expires_at, o.v3_night_queued_at, o.v3_night_released_at,\n    COALESCE(NULLIF(c.lead_name,''), e.offer_context->>'lead_name') AS lead_name,\n    COALESCE(NULLIF(c.lead_phone,''), o.e164_phone) AS lead_phone,\n    COALESCE(e.offer_context->>'property_title', c.current_property) AS property_title,\n    e.route_dispatch_status, e.contactado_status,\n    (SELECT json_agg(json_build_object('tier',a.routing_tier,'kind',a.delivery_kind,'to',COALESCE(ta.name,a.target_agent_id),'status',a.status,\n        'requested_at',a.requested_at,'sent_at',a.provider_accepted_at,'delivered_at',a.delivered_at,'claimed_at',a.claimed_at,'failed_at',a.failed_at) ORDER BY a.requested_at)\n     FROM public.lead_routing_delivery_attempts a LEFT JOIN public.agents ta ON ta.agent_id=a.target_agent_id WHERE a.opportunity_id=o.opportunity_id) AS attempts,\n    (SELECT json_agg(json_build_object('type',ev.event_type,'actor',COALESCE(ea.name,ev.actor_id),'at',ev.occurred_at,'reason',COALESCE(ev.metadata->>'reason','')) ORDER BY ev.occurred_at)\n     FROM public.lead_routing_events ev LEFT JOIN public.agents ea ON ea.agent_id=ev.actor_id\n     WHERE ev.opportunity_id=o.opportunity_id AND ev.event_type IN ('detected','i24_contacted','route_dispatched','delivery_requested','delivery_confirmed','accepted','claim_accepted','escalated','manager_assigned','missing_owner_data','route_dispatch_manual_review','route_dispatch_failed','night_queue_activated','assigned_notice_delivered','unassigned_alerted')) AS events,\n    (SELECT json_agg(json_build_object('kind',fx.effect_kind,'ok',fx.ok,'at',fx.finished_at,'status',fx.evidence->>'status','eb_request_id',fx.eb_request_id) ORDER BY fx.finished_at)\n     FROM public.easybroker_i24_request_links l JOIN public.easybroker_effect_attempts fx ON fx.eb_request_id=l.eb_request_id WHERE l.opportunity_id=o.opportunity_id) AS eb_effects\n  FROM active x\n  JOIN public.lead_routing_opportunities o ON o.opportunity_id=x.opportunity_id\n  LEFT JOIN public.agents ag ON ag.agent_id=o.assigned_agent_id\n  LEFT JOIN public.conversations c ON c.conversation_id=o.conversation_id\n  LEFT JOIN LATERAL (SELECT offer_context, route_dispatch_status, contactado_status FROM public.i24_capture_events e WHERE e.opportunity_id=o.opportunity_id ORDER BY capture_event_id DESC LIMIT 1) e ON true\n  ORDER BY o.opportunity_id\n),\nhealth AS (\n  SELECT (SELECT max(completed_at) FROM public.scrape_logs WHERE status='ok') AS scraper_last_ok,\n    (SELECT count(*) FROM public.lead_routing_delivery_attempts WHERE delivery_kind='offer' AND status='requested' AND requested_at < now()-interval '3 minutes') AS stuck_requested,\n    (SELECT count(*) FROM public.lead_routing_opportunities WHERE assigned_agent_id IS NULL AND current_delivery_attempt_id IS NOT NULL AND expires_at IS NOT NULL AND expires_at < now()-interval '90 seconds') AS stuck_expired,\n    (SELECT count(*) FROM public.lead_routing_opportunities WHERE state='queued_night') AS queued_night,\n    (SELECT count(*) FROM public.i24_capture_events WHERE route_dispatch_status='manual_review' AND happened_at >= (SELECT since FROM p)) AS manual_review_new\n)\nSELECT $1 AS mode, (SELECT since FROM p) AS since, now() AS until,\n  COALESCE((SELECT json_agg(l) FROM leads l), '[]'::json) AS leads,\n  (SELECT row_to_json(h) FROM health h) AS health;",
+        "options": {
+          "queryReplacement": "={{ [$json.mode] }}",
+          "connectionTimeout": 15
+        }
+      },
+      "name": "Leer actividad V3",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst row = $input.first().json;\nconst leads = Array.isArray(row.leads) ? row.leads : [];\nconst h = row.health || {};\nconst mode = row.mode;\nconst TZ = 'America/Mexico_City';\nconst hhmm = (v) => v ? new Date(v).toLocaleTimeString('es-MX', {timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false}) : '—';\nconst dmy = (v) => v ? new Date(v).toLocaleDateString('es-MX', {timeZone: TZ, day: '2-digit', month: 'short'}) : '';\nconst mins = (a, b) => (a && b) ? Math.round((new Date(b) - new Date(a)) / 60000) : null;\nconst esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));\nconst OK = '<span style=\"color:#157A73;font-weight:700\">&#10004;</span>';\nconst BAD = '<span style=\"color:#C8483B;font-weight:700\">&#10008;</span>';\nconst WAIT = '<span style=\"color:#B7791F;font-weight:700\">&#8987;</span>';\nconst tierName = (t) => ({owner:'propietario', primary_guard:'guardia', backup_guard:'guardia', sandy:'Sandy'}[t] || t || '');\n\nlet alerts = [];\nconst scraperAge = h.scraper_last_ok ? mins(h.scraper_last_ok, row.until) : null;\nif (scraperAge === null || scraperAge > 40) alerts.push('Scraper sin corrida OK hace ' + (scraperAge ?? '?') + ' min');\nif (Number(h.stuck_requested) > 0) alerts.push(h.stuck_requested + ' oferta(s) pedidas hace >3 min sin enviar (¿WF23/WF13 caído?)');\nif (Number(h.stuck_expired) > 0) alerts.push(h.stuck_expired + ' oferta(s) vencidas sin escalar (¿WF23 apagado?)');\nif (Number(h.manual_review_new) > 0) alerts.push(h.manual_review_new + ' solicitud(es) nuevas cayeron en revisión manual (sin ID EasyBroker)');\n\nlet nClaim = 0, nSandy = 0, nOpen = 0, nEbOk = 0, nProblem = 0;\nconst cards = leads.map(l => {\n  const attempts = l.attempts || [], events = l.events || [], effects = l.eb_effects || [];\n  const lines = [];\n  const problems = [];\n  const detected = events.find(e => e.type === 'detected');\n  const contacted = events.find(e => e.type === 'i24_contacted');\n  lines.push(`Detectado ${hhmm(detected ? detected.at : l.created_at)} · Contactado en Inmuebles24 ${contacted ? OK + ' ' + hhmm(contacted.at) : (l.contactado_status === 'verified' ? OK : WAIT)}`);\n  if (l.v3_night_queued_at) lines.push(`Cola nocturna ${hhmm(l.v3_night_queued_at)} ${dmy(l.v3_night_queued_at)} → liberado ${l.v3_night_released_at ? OK + ' ' + hhmm(l.v3_night_released_at) : WAIT + ' pendiente 08:05'}`);\n  let claimed = null;\n  for (const a of attempts) {\n    if (a.kind === 'offer') {\n      let st;\n      if (a.claimed_at) { st = `${OK} <b>Tomó ${esc(a.to)}</b> ${hhmm(a.claimed_at)} (${mins(a.delivered_at || a.sent_at || a.requested_at, a.claimed_at)} min tras entrega)`; claimed = a; }\n      else if (a.status === 'expired') st = `${BAD} venció sin respuesta`;\n      else if (a.status === 'failed' || a.failed_at) { st = `${BAD} WhatsApp falló ${hhmm(a.failed_at)}`; problems.push('WhatsApp no llegó a ' + a.to); }\n      else if (a.delivered_at) st = `${WAIT} entregado, esperando Tomo (5 min)`;\n      else if (a.sent_at) { st = `${WAIT} enviado, sin confirmación de entrega`; if (mins(a.sent_at, row.until) > 3) problems.push('Sin \"entregado\" de Meta para ' + a.to); }\n      else { st = `${WAIT} pedido, aún no enviado`; if (mins(a.requested_at, row.until) > 3) problems.push('Oferta a ' + a.to + ' pedida hace ' + mins(a.requested_at, row.until) + ' min sin enviar'); }\n      lines.push(`WhatsApp a <b>${esc(a.to)}</b> (${tierName(a.tier)}): enviado ${hhmm(a.sent_at || a.requested_at)} · entregado ${a.delivered_at ? OK + ' ' + hhmm(a.delivered_at) : '—'} · ${st}`);\n    } else if (a.kind === 'assigned_notice') {\n      lines.push(`Aviso de asignación a <b>${esc(a.to)}</b>: ${a.delivered_at ? OK + ' entregado ' + hhmm(a.delivered_at) : (a.failed_at ? BAD + ' falló' : WAIT + ' ' + a.status)}`);\n    }\n  }\n  const sandyEv = events.find(e => e.type === 'manager_assigned');\n  if (l.assigned_agent_id) {\n    if (claimed) nClaim++; else if (l.assigned_role === 'manager') nSandy++; else nClaim++;\n    const how = claimed ? 'tocó Tomo' : (sandyEv ? 'nadie tomó → responsable final' + (sandyEv.reason ? ' (' + esc(sandyEv.reason) + ')' : '') : 'asignación directa');\n    lines.push(`<b>Asignado a ${esc(l.assigned_name || l.assigned_agent_id)}</b> ${hhmm(l.assigned_at)} · ${how}`);\n  } else {\n    nOpen++;\n    lines.push(`${WAIT} Sin responsable todavía · estado <code>${esc(l.state)}</code>${l.routing_tier ? ' · turno de ' + tierName(l.routing_tier) : ''}`);\n    if (l.route_dispatch_status === 'manual_review') problems.push('Solicitud en revisión manual (sin propiedad EasyBroker): nadie la va a recibir');\n    if (l.expires_at && mins(l.expires_at, row.until) > 2) problems.push('Oferta vencida hace ' + mins(l.expires_at, row.until) + ' min sin escalar');\n  }\n  const note = effects.filter(f => f.kind === 'note'), att = effects.filter(f => f.kind === 'attended');\n  const noteOk = note.some(f => f.ok), attOk = att.some(f => f.ok);\n  if (effects.length) {\n    if (noteOk && attOk) nEbOk++;\n    lines.push(`EasyBroker: nota RESPONSABLE ${noteOk ? OK + ' ' + hhmm(note.find(f => f.ok).at) : (note.length ? BAD + ' falló' : WAIT)} · Atendida ${attOk ? OK + ' ' + hhmm(att.find(f => f.ok).at) : (att.length ? BAD + ' falló' : WAIT)}`);\n    if (note.length && !noteOk) problems.push('Nota en EasyBroker falló');\n    if (att.length && !attOk) problems.push('Marcar Atendida en EasyBroker falló');\n  } else if (l.assigned_agent_id) {\n    const age = mins(l.assigned_at, row.until);\n    lines.push(`EasyBroker: ${age > 20 ? BAD + ' sin nota ' + age + ' min después de asignar' : WAIT + ' nota pendiente (worker cada 1 min)'}`);\n    if (age > 20 && /^EB-/i.test(l.property_id || '')) problems.push('Sin nota en EasyBroker ' + age + ' min después de asignar');\n  }\n  if (problems.length) nProblem++;\n  const title = `#${l.opportunity_id} · ${esc(l.lead_name || 'Sin nombre')} · ${esc(l.lead_phone || '')} · ${esc(l.property_id || 'sin ID EB')}${l.property_title ? ' · ' + esc(l.property_title) : ''}`;\n  return `<div style=\"border:1px solid ${problems.length ? '#C8483B' : '#D3DBE2'};border-left:6px solid ${problems.length ? '#C8483B' : (l.assigned_agent_id ? '#157A73' : '#E09A1B')};border-radius:6px;padding:12px 14px;margin:10px 0\">\n<div style=\"font-weight:700;font-size:15px;margin-bottom:6px\">${title}</div>\n${problems.length ? '<div style=\"color:#C8483B;font-weight:700;margin-bottom:6px\">&#9888; ' + problems.map(esc).join(' · ') + '</div>' : ''}\n<div style=\"font-size:13px;line-height:1.6\">${lines.join('<br>')}</div></div>`;\n});\n\nconst label = mode === 'day' ? 'Reporte del día' : `Ventana ${hhmm(row.since)}–${hhmm(row.until)}`;\nconst dayStr = new Date(row.until).toLocaleDateString('es-MX', {timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long'});\nconst summary = `${leads.length} lead(s) con actividad · ${nClaim} tomado(s) por asesor/guardia · ${nSandy} a Sandy · ${nOpen} en oferta · ${nEbOk} con nota+Atendida en EasyBroker · ${nProblem} con problema`;\nconst healthHtml = `<div style=\"font-size:13px;color:#5D6C79\">Scraper último OK ${hhmm(h.scraper_last_ok)} (hace ${scraperAge ?? '?'} min) · en cola nocturna ${h.queued_night} · ofertas atoradas ${h.stuck_requested} · vencidas sin escalar ${h.stuck_expired}</div>`;\nconst html = `<div style=\"font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:760px;color:#16232E\">\n<div style=\"font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#5D6C79\">Inmobiliaria24 · BYG · Lead Routing V3</div>\n<h2 style=\"margin:4px 0 8px\">${label} · ${dayStr}</h2>\n${alerts.length ? '<div style=\"background:#F8E1DD;border:1px solid #C8483B;color:#7A2A22;padding:10px 12px;border-radius:6px;font-weight:700\">&#9888; ' + alerts.map(esc).join('<br>&#9888; ') + '</div>' : '<div style=\"background:#DCEFEC;border:1px solid #157A73;color:#0F4F4A;padding:8px 12px;border-radius:6px\">&#10004; Motores sanos: scraper, envíos y reloj de escalación</div>'}\n<p style=\"font-size:14px\"><b>${summary}</b></p>\n${healthHtml}\n${leads.length ? cards.join('') : '<p style=\"color:#5D6C79\">Sin leads con actividad en esta ventana.</p>'}\n<p style=\"font-size:11px;color:#5D6C79;margin-top:18px\">Hechos leídos directamente de Supabase (oportunidades, intentos de entrega, eventos, efectos EasyBroker). Horas en CDMX. Generado por WF24.</p></div>`;\nconst subject = `[V3] ${mode === 'day' ? 'Reporte del día' : hhmm(row.until)} · ${leads.length} leads · ${nClaim + nSandy} asignados${nProblem ? ' · ' + nProblem + ' con problema' : ''}${alerts.length ? ' · ALERTA' : ''}`;\nconst send = mode === 'day' || leads.length > 0 || alerts.length > 0;\nreturn [{ json: { send, subject, html, mode, n_leads: leads.length, n_problem: nProblem, alerts } }];\n"
+      },
+      "name": "Armar correo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.send }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "¿Enviar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "esteban.betanc@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "name": "Enviar correo (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        60
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Hx7tXWjVzyLEwMnJ",
+          "name": "Gmail ESTEBAN"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {},
+      "name": "Sin actividad",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Cada 30 min (08-20 CDMX)": {
+      "main": [
+        [
+          {
+            "node": "Modo ventana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fin del día 20:45": {
+      "main": [
+        [
+          {
+            "node": "Modo día",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prueba manual (webhook)": {
+      "main": [
+        [
+          {
+            "node": "Modo día",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modo ventana": {
+      "main": [
+        [
+          {
+            "node": "Leer actividad V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modo día": {
+      "main": [
+        [
+          {
+            "node": "Leer actividad V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer actividad V3": {
+      "main": [
+        [
+          {
+            "node": "Armar correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar correo": {
+      "main": [
+        [
+          {
+            "node": "¿Enviar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Enviar?": {
+      "main": [
+        [
+          {
+            "node": "Enviar correo (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sin actividad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Mexico_City",
+    "errorWorkflow": "He95yJflKVspGFyb",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 90
+  },
+  "staticData": null,
+  "pinData": {},
+  "tags": []
+}
