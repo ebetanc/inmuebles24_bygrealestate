@@ -209,7 +209,7 @@ Copia `.env.example` a `.env`. Las claves que importan hoy en el Pi:
 - Leads **sin ID de propiedad de EasyBroker** caen en `manual_review` en silencio.
   No hay WhatsApp posible porque las plantillas exigen la URL pública de EB.
 - **Secretos nunca rotados.** Ver `SECURITY-ROTATION.md`.
-- **Sin respaldos de Supabase** todavía (en curso).
+- **Respaldo de Supabase**: `pg_dump` diario 03:20 CDMX desde el VPS (`deploy/supabase-backup.timer`, retención 14 días, ver `docs/ops/supabase-backup.md`). Restauración aún no ensayada.
 - **WF17** (reporte semanal) sigue leyendo tablas V1.
 - El **dashboard es ciego a V3**: lee tablas V1/V2 (se está corrigiendo en una rama).
 - El host de n8n se traba a diario alrededor de la 01:05 CDMX.
