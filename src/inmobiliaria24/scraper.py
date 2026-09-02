@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import random
 import re
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 from loguru import logger
@@ -134,61 +135,131 @@ async def _navigate_spa(
     raise last_err  # type: ignore[misc]
 
 
-_EXTRACT_PROPERTY_PUBLIC_ID_MAP_JS = r"""
-() => {
-    const root = document.getElementById('root');
-    if (!root) return [];
-    const pairs = [];
-    for (const el of root.querySelectorAll('div')) {
-        const text = el.innerText || '';
-        if (text.length < 10 || text.length > 2500) continue;
-        const ids = [...new Set(text.match(/\b\d{8,10}\b/g) || [])];
-        const codes = [...new Set(
-            (text.match(/EB-[A-Z0-9]{4,}/gi) || []).map(value => value.toUpperCase())
-        )];
-        if (ids.length === 1 && codes.length === 1) {
-            pairs.push({listing_id: ids[0], property_public_id: codes[0]});
-        }
-    }
-    return pairs;
+_POSTINGS_API_PATH = "/avisos-api/panel/api/v2/postings"
+_MAX_PROPERTY_MAP_PAGES = 100
+_FETCH_PROPERTY_POSTINGS_PAGE_JS = r"""
+async ({url, headers}) => {
+    const response = await fetch(url, {credentials: 'include', headers, method: 'GET'});
+    let payload = null;
+    try { payload = await response.json(); } catch (_) {}
+    return {status: response.status, payload};
 }
 """
+
+
+def _property_postings_page_url(url: str, page_number: int) -> str:
+    parsed = urlsplit(url)
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    replaced = False
+    updated = []
+    for key, value in query:
+        if key == "page":
+            value = str(page_number)
+            replaced = True
+        updated.append((key, value))
+    if not replaced:
+        updated.append(("page", str(page_number)))
+    return urlunsplit(parsed._replace(query=urlencode(updated)))
 
 
 async def extract_property_public_id_map(
     page: Page, *, conflicts_out: set[str] | None = None
 ) -> dict[str, str]:
-    """Read the live Mis avisos listing-id -> EasyBroker-code mapping."""
-    await _navigate_spa(page, AVISOS_URL)
-    try:
-        await page.wait_for_function(
-            """() => /EB-[A-Z0-9]{4,}/i.test(
-                document.getElementById('root')?.innerText || ''
-            )""",
-            timeout=20_000,
-        )
-    except Exception:
-        logger.warning("Mis avisos rendered without any EB property codes")
+    """Read every authenticated Mis avisos API page into an exact mapping."""
+    first_page_pattern = re.compile(r"(?:[?&])page=1(?:&|$)")
+    async with page.expect_response(
+        lambda response: (
+            _POSTINGS_API_PATH in response.url
+            and response.status == 200
+            and first_page_pattern.search(response.url) is not None
+        ),
+        timeout=30_000,
+    ) as response_info:
+        await _navigate_spa(page, AVISOS_URL)
+    first_response = await response_info.value
+    request = first_response.request
+    if request.method != "GET":
+        raise RuntimeError(f"Unexpected Mis avisos API method: {request.method}")
+    first_payload = await first_response.json()
+    if not isinstance(first_payload, dict):
+        raise RuntimeError("Mis avisos API returned a non-object payload")
 
-    rows: list[dict] = await page.evaluate(_EXTRACT_PROPERTY_PUBLIC_ID_MAP_JS)
+    try:
+        total = int(first_payload["numberOfPostings"])
+        query = dict(parse_qsl(urlsplit(first_response.url).query, keep_blank_values=True))
+        limit = int(query["limit"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("Mis avisos API pagination metadata is invalid") from exc
+    if total < 0 or limit < 1:
+        raise RuntimeError("Mis avisos API pagination metadata is out of range")
+    total_pages = max(1, (total + limit - 1) // limit)
+    if total_pages > _MAX_PROPERTY_MAP_PAGES:
+        raise RuntimeError(
+            f"Mis avisos API requires {total_pages} pages; safety limit is {_MAX_PROPERTY_MAP_PAGES}"
+        )
+
+    all_headers = await request.all_headers()
+    replay_headers = {
+        key: value
+        for key, value in all_headers.items()
+        if key.lower() in {"accept", "authorization", "content-type", "sessionid"}
+        or key.lower().startswith("x-")
+    }
+    if total_pages > 1 and not any(key.lower() == "sessionid" for key in replay_headers):
+        raise RuntimeError("Mis avisos API sessionid header is unavailable for pagination")
+
     mapping: dict[str, str] = {}
-    conflicts: set[str] = set()
-    for row in rows:
-        listing_id = str(row.get("listing_id") or "").strip()
-        public_id = str(row.get("property_public_id") or "").strip().upper()
-        if not listing_id.isdigit() or not re.fullmatch(r"EB-[A-Z0-9]{4,}", public_id):
-            continue
-        if listing_id in mapping and mapping[listing_id] != public_id:
-            conflicts.add(listing_id)
-            continue
-        mapping[listing_id] = public_id
-    for listing_id in conflicts:
-        mapping.pop(listing_id, None)
-    if conflicts_out is not None:
-        conflicts_out.update(conflicts)
-    if conflicts:
-        logger.warning("Discarded {} conflicting property mappings", len(conflicts))
-    logger.info("Loaded {} Inmuebles24 -> EasyBroker property mappings", len(mapping))
+    seen_listing_ids: set[str] = set()
+    missing_codes = 0
+    payload = first_payload
+    for page_number in range(1, total_pages + 1):
+        if page_number > 1:
+            fetched = await page.evaluate(
+                _FETCH_PROPERTY_POSTINGS_PAGE_JS,
+                {
+                    "url": _property_postings_page_url(first_response.url, page_number),
+                    "headers": replay_headers,
+                },
+            )
+            if not isinstance(fetched, dict) or fetched.get("status") != 200:
+                status = fetched.get("status") if isinstance(fetched, dict) else None
+                raise RuntimeError(f"Mis avisos API page {page_number} failed with status {status}")
+            payload = fetched.get("payload")
+        if not isinstance(payload, dict) or int(payload.get("numberOfPostings", -1)) != total:
+            raise RuntimeError(f"Mis avisos API total changed while reading page {page_number}")
+        postings = payload.get("postings")
+        expected_rows = min(limit, total - ((page_number - 1) * limit))
+        if not isinstance(postings, list) or len(postings) != expected_rows:
+            actual_rows = len(postings) if isinstance(postings, list) else None
+            raise RuntimeError(
+                f"Mis avisos API page {page_number} returned {actual_rows} rows; expected {expected_rows}"
+            )
+        for posting in postings:
+            if not isinstance(posting, dict):
+                raise RuntimeError(f"Mis avisos API page {page_number} contains a non-object posting")
+            listing_id = str(posting.get("postingId") or "").strip()
+            if not listing_id.isdigit():
+                raise RuntimeError(f"Mis avisos API page {page_number} contains an invalid postingId")
+            if listing_id in seen_listing_ids:
+                raise RuntimeError(f"Mis avisos API repeated postingId {listing_id} across pages")
+            seen_listing_ids.add(listing_id)
+            public_id = str(posting.get("internalCode") or "").strip().upper()
+            if not re.fullmatch(r"EB-[A-Z0-9]{4,}", public_id):
+                missing_codes += 1
+                continue
+            mapping[listing_id] = public_id
+
+    if len(seen_listing_ids) != total:
+        raise RuntimeError(
+            f"Mis avisos API yielded {len(seen_listing_ids)} unique postings; expected {total}"
+        )
+    if missing_codes:
+        logger.warning("Skipped {} Mis avisos postings without a valid EB internalCode", missing_codes)
+    logger.info(
+        "Loaded {} Inmuebles24 -> EasyBroker property mappings across {} pages",
+        len(mapping),
+        total_pages,
+    )
     return mapping
 
 

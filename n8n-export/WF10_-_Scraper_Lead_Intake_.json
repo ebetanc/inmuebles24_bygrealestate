@@ -12,7 +12,7 @@
         "httpMethod": "POST",
         "path": "scraper-leads",
         "authentication": "headerAuth",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
@@ -551,7 +551,8 @@
         100
       ],
       "id": "f1000000-0000-4000-8000-000000000017",
-      "name": "Notify Owner (WF13)"
+      "name": "Notify Owner (WF13)",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -569,6 +570,7 @@
       ],
       "id": "f1000000-0000-4000-8000-000000000018",
       "name": "Route Missing Owner Data",
+      "alwaysOutputData": true,
       "credentials": {
         "postgres": {
           "id": "dEHKygi1neTNvPtH",
@@ -793,6 +795,155 @@
         -1160,
         -40
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "wf10-v3-created-new-condition",
+              "leftValue": "={{ $json.disposition }}",
+              "rightValue": "created_new",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf10-v3-created-new-if",
+      "name": "Created New V3?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -920,
+        -40
+      ],
+      "notes": "Only created_new may enter owner resolution/fallback. Duplicate and returning-assigned captures are handled by the V3 disposition RPC."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT public.v3_route_ready_opportunity($1::bigint,$2::bigint,ARRAY[]::text[],NOW()) AS result;",
+        "options": {
+          "queryReplacement": "={{ [$json.opportunity_id, $json.capture_event_id] }}"
+        }
+      },
+      "id": "wf10-v3-handle-non-new",
+      "name": "Handle V3 Non-New Disposition",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -680,
+        40
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      },
+      "notes": "active_duplicate becomes a durable no_action; returning_assigned enqueues one idempotent assigned notice. Neither can open a guard fallback."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT EXISTS (\n  SELECT 1\n  FROM public.lead_routing_opportunities o\n  JOIN public.i24_capture_events c\n    ON c.opportunity_id = o.opportunity_id\n  WHERE o.opportunity_id = $1::bigint\n    AND c.capture_event_id = $2::bigint\n    AND o.v3_enabled\n    AND (\n      (\n        c.disposition = 'active_duplicate'\n        AND EXISTS (\n          SELECT 1\n          FROM public.lead_routing_events dedup\n          WHERE dedup.opportunity_id = o.opportunity_id\n            AND dedup.event_type = 'deduplicated'\n            AND dedup.metadata->>'capture_event_id' = c.capture_event_id::text\n        )\n      )\n      OR (\n        c.disposition = 'returning_assigned'\n        AND o.assigned_agent_id IS NOT NULL\n        AND EXISTS (\n          SELECT 1\n          FROM public.lead_routing_delivery_attempts notice\n          WHERE notice.opportunity_id = o.opportunity_id\n            AND notice.capture_event_id = c.capture_event_id\n            AND notice.delivery_kind = 'assigned_notice'\n        )\n      )\n      OR (\n        c.disposition = 'created_new'\n        AND o.state IN (\n          'delivery_requested','guard_delivery_pending','delivered',\n          'owner_open','primary_guard_open','backup_guard_open',\n          'assigned','unassigned_alerted','closed_won','closed_lost'\n        )\n        AND (\n          o.assigned_agent_id IS NOT NULL\n          OR EXISTS (\n            SELECT 1\n            FROM public.lead_routing_delivery_attempts a\n            WHERE a.opportunity_id = o.opportunity_id\n              AND a.capture_event_id = c.capture_event_id\n              AND a.delivery_kind = 'offer'\n              AND NULLIF(a.provider_message_id,'') IS NOT NULL\n              AND a.provider_accepted_at IS NOT NULL\n              AND a.bound_at IS NOT NULL\n              AND a.status IN ('sent','delivered')\n          )\n          OR EXISTS (\n            SELECT 1\n            FROM public.lead_routing_events ev\n            WHERE ev.opportunity_id = o.opportunity_id\n              AND ev.event_type = 'missing_owner_data'\n              AND ev.idempotency_key LIKE 'wf10:missing-owner:' || o.opportunity_id::text || ':%'\n          )\n        )\n      )\n    )\n) AS accepted, $1::bigint AS opportunity_id, $2::bigint AS capture_event_id;",
+        "options": {
+          "queryReplacement": "={{ [$('Restore V3 Dispatch Context').first().json.opportunity_id, $('Restore V3 Dispatch Context').first().json.capture_event_id] }}"
+        }
+      },
+      "id": "wf10-v3-verify-dispatch-durable",
+      "name": "Verify V3 Dispatch Durable",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3260,
+        190
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      },
+      "notes": "A 2xx for a created-new offer requires the exact capture to have a bound, provider-accepted WAMID in sent/delivered state; assignment and missing-owner outcomes remain separate durable exits."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "wf10-v3-dispatch-durable-condition",
+              "leftValue": "={{ $json.accepted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf10-v3-dispatch-durable-if",
+      "name": "V3 Dispatch Durable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3500,
+        190
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { accepted: true, capture_event_id: $json.capture_event_id, opportunity_id: $json.opportunity_id } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf10-v3-respond-dispatch-accepted",
+      "name": "Respond V3 Dispatch Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3740,
+        100
+      ],
+      "notes": "Acknowledge only after the database evidence gate accepts the exact capture/opportunity pair."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { accepted: false, error: 'route_dispatch_effect_not_durable', capture_event_id: $json.capture_event_id, opportunity_id: $json.opportunity_id } }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "wf10-v3-respond-dispatch-rejected",
+      "name": "Respond V3 Dispatch Not Durable",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3740,
+        280
+      ],
+      "notes": "Explicit non-2xx keeps the route lease retryable when no durable downstream effect exists."
     }
   ],
   "connections": {
@@ -822,7 +973,36 @@
       "main": [
         [
           {
+            "node": "Created New V3?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Created New V3?": {
+      "main": [
+        [
+          {
             "node": "Resolve Owner (WF12)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle V3 Non-New Disposition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle V3 Non-New Disposition": {
+      "main": [
+        [
+          {
+            "node": "Verify V3 Dispatch Durable",
             "type": "main",
             "index": 0
           }
@@ -1098,6 +1278,57 @@
         ]
       ]
     },
+    "Notify Owner (WF13)": {
+      "main": [
+        [
+          {
+            "node": "Verify V3 Dispatch Durable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "End (Owner Fallback)": {
+      "main": [
+        [
+          {
+            "node": "Verify V3 Dispatch Durable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify V3 Dispatch Durable": {
+      "main": [
+        [
+          {
+            "node": "V3 Dispatch Durable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "V3 Dispatch Durable?": {
+      "main": [
+        [
+          {
+            "node": "Respond V3 Dispatch Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond V3 Dispatch Not Durable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Create Night Conversation": {
       "main": [
         [
@@ -1153,7 +1384,7 @@
   "meta": null,
   "pinData": {},
   "versionId": "0b17783f-8d0c-4aaa-9a56-df8da8293fc1",
-  "activeVersionId": "0b17783f-8d0c-4aaa-9a56-df8da8293fc1",
+  "activeVersionId": null,
   "versionCounter": 107,
   "triggerCount": 1,
   "tags": [],
@@ -1176,7 +1407,7 @@
       }
     }
   ],
-  "activeVersion": {
+  "historicalActiveVersion": {
     "settings": {
       "saveDataErrorExecution": "all",
       "saveDataSuccessExecution": "none",

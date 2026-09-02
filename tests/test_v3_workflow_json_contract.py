@@ -128,19 +128,43 @@ def test_wf13_is_owner_or_primary_and_uses_v3_offer():
         positions = [body.index(f"$json.{field}") for field in ordered_fields]
         assert positions == sorted(positions)
         assert "No disponible" not in body[positions[-1]:body.find("}\n        ]", positions[-1])]
+        request_query = node(workflow, "Request V3 Route")["parameters"]["query"]
         route_query = node(workflow, "Route Ready V3")["parameters"]["query"]
-        assert "existing AS (" in route_query
-        assert "$13::bigint IS NOT NULL" in route_query
+        route_replacements = node(workflow, "Route Ready V3")["parameters"]["options"]["queryReplacement"]
+        assert workflow["connections"]["Build Owner Offer"]["main"][0][0]["node"] == "Request V3 Route"
+        assert workflow["connections"]["Request V3 Route"]["main"][0][0]["node"] == "Route Ready V3"
+        assert "v3_route_ready_opportunity" in request_query
+        assert "$4::bigint IS NOT NULL" in request_query
+        assert "a.lease_token=$5" in request_query
+        assert "$4::bigint IS NULL" in request_query
+        assert "JOIN public.lead_routing_delivery_attempts a ON a.attempt_id=(r.route->>'attempt_id')" not in request_query
+        assert "v3_route_ready_opportunity" not in route_query
+        assert "$1::jsonb->>'attempt_id'" in route_query
+        assert "existing_delivery_requested" in route_query
         assert "a.lease_token=$14" in route_query
-        assert "$13::bigint IS NULL" in route_query
         assert "enriched_capture AS (UPDATE public.i24_capture_events" in route_query
         assert "enriched_opportunity AS (UPDATE public.lead_routing_opportunities" in route_query
         assert "'easybroker_url',NULLIF($12::text,'')" in route_query
         assert "offer_context=COALESCE(c0.offer_context,'{}'::jsonb)" in route_query
         assert "v3_offer_context=COALESCE(o1.v3_offer_context,'{}'::jsonb)" in route_query
-        assert "c0.opportunity_id=$1::bigint" in route_query
+        assert "c0.opportunity_id=$2::bigint" in route_query
+        assert "c0.capture_event_id=$3::bigint" in route_query
         assert "FROM selected s" in route_query
         assert "JOIN public.agents" not in route_query
+        assert "JSON.stringify($json.route || {})" in route_replacements
+        assert "$('Build Owner Offer').first().json" in route_replacements
+        assert "$('Build Owner Offer').item.json" not in route_replacements
+
+
+def test_wf10_created_new_offer_ack_requires_bound_provider_acceptance():
+    for path in PAIRS["WF10"]:
+        query = node(load(path), "Verify V3 Dispatch Durable")["parameters"]["query"]
+        assert "a.delivery_kind = 'offer'" in query
+        assert "NULLIF(a.provider_message_id,'') IS NOT NULL" in query
+        assert "a.provider_accepted_at IS NOT NULL" in query
+        assert "a.bound_at IS NOT NULL" in query
+        assert "a.status IN ('sent','delivered')" in query
+        assert "a.delivery_kind IN ('offer','assigned_notice')" not in query
 
 
 def test_wf13_and_wf23_process_buttonless_assigned_notices_durably():
@@ -158,6 +182,13 @@ def test_wf13_and_wf23_process_buttonless_assigned_notices_durably():
         assert "v3_record_provider_accepted" in node(
             workflow, "Bind Assigned Provider Message"
         )["parameters"]["query"]
+        assigned_branches = workflow["connections"]["Is Assigned Notice?"]["main"]
+        assert assigned_branches[0][0]["node"] == "Validate Assigned Notice"
+        assert assigned_branches[1][0]["node"] == "Build Owner Offer"
+        assert workflow["connections"]["Send Assigned Notice"]["main"][1][0]["node"] == "Release Assigned Notice Failure"
+        accepted_branches = workflow["connections"]["Assigned Provider Accepted?"]["main"]
+        assert accepted_branches[0][0]["node"] == "Bind Assigned Provider Message"
+        assert accepted_branches[1][0]["node"] == "Release Assigned Notice Failure"
     for path in PAIRS["WF23"]:
         workflow = load(path)
         assert "claim_v3_assigned_notices" in node(
@@ -174,17 +205,33 @@ def test_wf1_has_typed_trigger_and_v3_context_parser():
         parser = node(workflow, "Parse Evolution Payload")["parameters"]["jsCode"]
         classifier = node(workflow, "Classify & Route")["parameters"]["jsCode"]
         assert "context_id" in parser and "message_type" in parser
+        assert "webhook_event_id: item.webhook_event_id || null" in parser
         assert "claim:v3" in classifier and "v2_drain" in classifier
+        assert "const v3ClaimMatch = String(parsed.interactive_id || '')" in classifier
+        assert r"/^claim:v3:(\d+):(\d+)$/" in classifier
+        assert "webhook_event_id: Number(parsed.webhook_event_id)" in classifier
+        assert classifier.index("const v3ClaimMatch") < classifier.index("reason: 'duplicate_message'")
 
 
 def test_wf3b_routes_v3_to_exact_claim_rpc_and_keeps_v2_drain():
     for path in PAIRS["WF3b"]:
         workflow = load(path)
-        gate = node(workflow, "Is Routing V2 Claim?")["parameters"]["conditions"]["conditions"][0]["leftValue"]
+        condition = node(workflow, "Is Routing V2 Claim?")["parameters"]["conditions"]["conditions"][0]
+        gate = condition["leftValue"]
         assert "v2_drain" in gate
+        assert condition["rightValue"] == "v2_drain"
+        assert condition["operator"] == {"type": "string", "operation": "equals"}
+        assert workflow["connections"]["Is Routing V2 Claim?"]["main"][1][0]["node"] == "Claim V3 Delivery"
         claim = node(workflow, "Claim V3 Delivery")
-        assert "claim_v3_delivery" in claim["parameters"]["query"]
-        assert all(token in claim["parameters"]["options"]["queryReplacement"] for token in ("opportunity_id", "attempt_id", "capture_event_id", "agent_phone"))
+        assert "claim_v3_delivery_from_webhook($1::bigint)" in claim["parameters"]["query"]
+        assert "now()" not in claim["parameters"]["query"].lower()
+        assert "webhook_event_id" in claim["parameters"]["options"]["queryReplacement"]
+        assert claim["credentials"]["postgres"]["id"]
+        result_builder = node(workflow, "Build V3 Claim Result")["parameters"]["jsCode"]
+        assert "claimed: 'Prospecto asignado. Ya puedes atenderlo.'" in result_builder
+        send = node(workflow, "Send Routing V2 Claim Result")
+        assert send["continueOnFail"] is False
+        assert send["retryOnFail"] is True and send["maxTries"] == 3
         assert "V3 Claim RPC Not Installed" not in {n["name"] for n in workflow["nodes"]}
 
 
@@ -244,29 +291,91 @@ def test_wf22_processing_failures_have_explicit_500_response_paths():
 
 
 def test_n8n_exports_do_not_embed_stale_active_versions():
-    for _, mirror in (PAIRS["WF22"], PAIRS["WF23"]):
+    for _, mirror in (PAIRS["WF1"], PAIRS["WF3b"], PAIRS["WF22"], PAIRS["WF23"]):
         assert load(mirror).get("activeVersion") is None
+
+
+def test_repaired_workflow_mirrors_match_canonical_parameters_and_connections():
+    for canonical_path, mirror_path in (
+        PAIRS["WF1"],
+        PAIRS["WF3b"],
+        PAIRS["WF10"],
+        PAIRS["WF13"],
+    ):
+        canonical = load(canonical_path)
+        mirror = load(mirror_path)
+        canonical_parameters = {
+            item["name"]: item.get("parameters") for item in canonical["nodes"]
+        }
+        mirror_parameters = {
+            item["name"]: item.get("parameters") for item in mirror["nodes"]
+        }
+        assert mirror_parameters == canonical_parameters
+        assert mirror["connections"] == canonical["connections"]
 
 
 def test_wf23_is_the_30_second_two_minute_dispatcher():
     for path in PAIRS["WF23"]:
         workflow = load(path)
+        if "active" in workflow:
+            assert workflow["active"] is False
         schedules = [n for n in workflow["nodes"] if n["type"] == "n8n-nodes-base.scheduleTrigger"]
         assert len(schedules) == 1
         assert schedules[0]["parameters"]["rule"]["interval"][0]["expression"] == "*/30 * * * * *"
-        timeout_query = node(workflow, "Sweep Delivery Timeouts")["parameters"]["query"]
+        assert workflow["settings"]["executionTimeout"] == 20
+        timeout_node = node(workflow, "Sweep Delivery Timeouts")
+        assert timeout_node["parameters"]["options"] == {"connectionTimeout": 8}
+        timeout_query = timeout_node["parameters"]["query"]
+        assert timeout_query.startswith("SET LOCAL statement_timeout = '8s';")
+        assert "SELECT * FROM public.v3_claim_delivery_attempts" in timeout_query
+        assert timeout_node.get("retryOnFail") is not True
         assert "INTERVAL '2 minutes'" in timeout_query
         assert "o.assigned_agent_id IS NULL" in timeout_query
         assert "o.current_delivery_attempt_id=a.attempt_id" in timeout_query
         assert "o.routing_tier=a.routing_tier" in timeout_query
         assert "a.status='delivered'" in timeout_query
         assert "INTERVAL '5 minutes'" in timeout_query
-        assert "easybroker_url" in timeout_query
-        assert "easybroker" in timeout_query
-        assigned_query = node(workflow, "Claim Assigned Notices")["parameters"]["query"]
+        # Contract 5.2: a lead without an EasyBroker URL must still expire and reach guard/Sandy.
+        assert "easybroker_url" not in timeout_query
+        assigned_node = node(workflow, "Claim Assigned Notices")
+        assert assigned_node["parameters"]["options"] == {"connectionTimeout": 8}
+        assigned_query = assigned_node["parameters"]["query"]
+        assert assigned_query.startswith("SET LOCAL statement_timeout = '8s';")
+        assert "SELECT * FROM public.claim_v3_assigned_notices" in assigned_query
+        assert assigned_node.get("retryOnFail") is not True
         assert "easybroker_url" in assigned_query
         assert "easybroker" in assigned_query
-        assert node(workflow, "Call WF3c Transition")["mode"] == "each"
+        assert workflow["connections"]["Sweep Delivery Timeouts"]["main"][0][0]["node"] == "Has Timeout Candidate?"
+        assert workflow["connections"]["Has Timeout Candidate?"]["main"][0][0]["node"] == "Call WF3c Transition"
+        assert workflow["connections"]["Claim Assigned Notices"]["main"][0][0]["node"] == "Has Assigned Notice?"
+        assert workflow["connections"]["Has Assigned Notice?"]["main"][0][0]["node"] == "Call WF13 Assigned Notice"
+        assert node(workflow, "Call WF3c Transition")["parameters"]["mode"] == "each"
+        assert node(workflow, "Call WF13 Assigned Notice")["parameters"]["mode"] == "each"
+
+
+def test_wf20_watchdog_database_checks_are_bounded():
+    payload = load("n8n-export/BYG_WF20_Watchdog_.json")
+    assert isinstance(payload, list) and len(payload) == 1
+    workflow = payload[0]
+    assert workflow["id"] == "pYV88ntxI0Lc4NCB"
+    assert workflow["settings"]["executionTimeout"] == 30
+
+    expected = {
+        "Check scraper health",
+        "Revisar Fallos de Routing",
+        "Revisar Casos Sin Asignar",
+    }
+    postgres = {
+        item["name"]: item
+        for item in workflow["nodes"]
+        if item["name"] in expected
+    }
+    assert set(postgres) == expected
+    for item in postgres.values():
+        parameters = item["parameters"]
+        assert parameters["options"]["connectionTimeout"] == 8
+        assert parameters["query"].startswith("SET LOCAL statement_timeout = '8s'; ")
+        assert item.get("retryOnFail") is not True
 
 
 def test_wf3c_has_no_schedule_and_only_execute_trigger():

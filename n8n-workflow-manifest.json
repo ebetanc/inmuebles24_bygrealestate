@@ -20,6 +20,7 @@
         "WF14_followup_sweeper.json":{"role":"template","reason":"portable template"},
         "WF15_followup_reply.json":{"role":"template","reason":"portable template"},
         "WF16_weekly_report.json":{"role":"template","reason":"portable template"},
+        "WF17_weekly_email_report.json":{"role":"template","reason":"portable template"},
         "WF20_watchdog.json":{"role":"template","reason":"portable template"},
         "WF21_error_handler.json":{"role":"template","reason":"portable template"},
         "WF22_delivery_status.json":{"role":"template","reason":"portable template"},

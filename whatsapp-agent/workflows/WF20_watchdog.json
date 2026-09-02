@@ -30,14 +30,14 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH i24 AS (\n  SELECT max(completed_at) AS last_ok\n  FROM scrape_logs\n  WHERE status='ok' AND (metadata->>'source'='inmuebles24' OR metadata->>'source' IS NULL)\n),\neb AS (\n  SELECT max(completed_at) AS last_ok\n  FROM scrape_logs\n  WHERE status='ok' AND metadata->>'source'='easybroker'\n),\nerrs AS (\n  SELECT count(*) AS n\n  FROM scrape_logs\n  WHERE status IN ('error','auth_error') AND completed_at > now() - interval '1 hour'\n)\nSELECT\n  i24.last_ok AS i24_last_ok,\n  EXTRACT(EPOCH FROM (now() - i24.last_ok))/60 AS i24_minutes_since,\n  eb.last_ok AS eb_last_ok,\n  EXTRACT(EPOCH FROM (now() - eb.last_ok))/60 AS eb_minutes_since,\n  errs.n AS recent_error_count,\n  ((now() AT TIME ZONE 'America/Mexico_City')::time BETWEEN time '08:45' AND time '20:45') AS i24_active_window\nFROM i24, eb, errs;",
-        "options": {}
+        "query": "SET LOCAL statement_timeout = '8s'; WITH i24 AS (\n  SELECT max(completed_at) AS last_ok\n  FROM scrape_logs\n  WHERE status='ok' AND (metadata->>'source'='inmuebles24' OR metadata->>'source' IS NULL)\n),\neb AS (\n  SELECT max(completed_at) AS last_ok\n  FROM scrape_logs\n  WHERE status='ok' AND metadata->>'source'='easybroker'\n),\nerrs AS (\n  SELECT count(*) AS n\n  FROM scrape_logs\n  WHERE status IN ('error','auth_error') AND completed_at > now() - interval '1 hour'\n)\nSELECT\n  i24.last_ok AS i24_last_ok,\n  EXTRACT(EPOCH FROM (now() - i24.last_ok))/60 AS i24_minutes_since,\n  eb.last_ok AS eb_last_ok,\n  EXTRACT(EPOCH FROM (now() - eb.last_ok))/60 AS eb_minutes_since,\n  errs.n AS recent_error_count,\n  ((now() AT TIME ZONE 'America/Mexico_City')::time BETWEEN time '08:45' AND time '20:45') AS i24_active_window\nFROM i24, eb, errs;",
+        "options": {"connectionTimeout": 8}
       },
       "id": "9a1b0c1e-1111-4a1a-8000-000000000002",
       "name": "Check scraper health",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [224, 0],
+      "position": [224, 16],
       "credentials": {
         "postgres": {
           "id": "dEHKygi1neTNvPtH",
@@ -130,23 +130,23 @@
         },
         "options": {}
       },
-      "id": "9a1b0c1e-1111-4a1a-8000-000000000008",
+      "id": "3c507182-faec-4012-b217-d85c8be4315a",
       "name": "Run scraper check?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [224, -160]
+      "position": [528, -432]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH recent_failures AS (\n  SELECT event_id, occurred_at,\n         COALESCE(metadata->>'reason', event_type) AS reason\n  FROM public.lead_routing_events\n  WHERE event_type IN ('delivery_failed', 'unassigned_alerted')\n    AND occurred_at > now() - interval '10 minutes'\n  ORDER BY occurred_at\n)\nSELECT r.event_id, r.occurred_at,\n       s.status, s.reason, s.entered_at, s.operational_owner, s.acknowledged, s.just_entered\nFROM recent_failures r,\nLATERAL public.report_routing_failure(r.reason, 'wf20:' || r.event_id, r.occurred_at) s;",
-        "options": {}
+        "query": "SET LOCAL statement_timeout = '8s'; WITH recent_failures AS (\n  SELECT event_id, occurred_at,\n         COALESCE(metadata->>'reason', event_type) AS reason\n  FROM public.lead_routing_events\n  WHERE event_type IN ('delivery_failed', 'unassigned_alerted')\n    AND occurred_at > now() - interval '10 minutes'\n  ORDER BY occurred_at\n)\nSELECT r.event_id, r.occurred_at,\n       s.status, s.reason, s.entered_at, s.operational_owner, s.acknowledged, s.just_entered\nFROM recent_failures r,\nLATERAL public.report_routing_failure(r.reason, 'wf20:' || r.event_id, r.occurred_at) s;",
+        "options": {"connectionTimeout": 8}
       },
-      "id": "9a1b0c1e-1111-4a1a-8000-000000000009",
+      "id": "c8e08a5a-4571-4f07-a067-c96779fd7beb",
       "name": "Revisar Fallos de Routing",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [224, 320],
+      "position": [528, 48],
       "credentials": {
         "postgres": {
           "id": "dEHKygi1neTNvPtH",
@@ -179,11 +179,11 @@
         },
         "options": {}
       },
-      "id": "9a1b0c1e-1111-4a1a-8000-00000000000b",
+      "id": "168f8754-7a67-4559-afc9-9fe0893b4c07",
       "name": "Modo Seguro Activo?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [448, 320]
+      "position": [752, 48]
     },
     {
       "parameters": {
@@ -192,11 +192,11 @@
         "message": "={{ 'Motivo: ' + $json.reason + '<br>Desde: ' + $json.entered_at + '<br>Owner operativo: ' + $json.operational_owner + '<br><br>Casos nuevos van directo a guardia. Salida solo manual tras health check verde.' }}",
         "options": {}
       },
-      "id": "9a1b0c1e-1111-4a1a-8000-00000000000c",
+      "id": "0cd796fa-b40f-41b1-bac2-8311ab34cf5b",
       "name": "Alertar Modo Seguro (Gmail)",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [672, 240],
+      "position": [976, -32],
       "credentials": {
         "gmailOAuth2": {
           "id": "Hx7tXWjVzyLEwMnJ",
@@ -207,14 +207,14 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH unassigned AS (\n  SELECT opportunity_id FROM public.routing_v2_ops_view WHERE is_unassigned\n)\nSELECT u.opportunity_id, a.alert_id, a.is_new, a.acknowledged\nFROM unassigned u,\nLATERAL public.record_unassigned_alert(u.opportunity_id, 'wf20-unassigned:' || u.opportunity_id::text) a;",
-        "options": {}
+        "query": "SET LOCAL statement_timeout = '8s'; WITH unassigned AS (\n  SELECT opportunity_id FROM public.routing_v2_ops_view WHERE is_unassigned\n)\nSELECT u.opportunity_id, a.alert_id, a.is_new, a.acknowledged\nFROM unassigned u,\nLATERAL public.record_unassigned_alert(u.opportunity_id, 'wf20-unassigned:' || u.opportunity_id::text) a;",
+        "options": {"connectionTimeout": 8}
       },
-      "id": "9a1b0c1e-1111-4a1a-8000-00000000000d",
+      "id": "3e7b7c5b-7372-4cb1-ba2b-99b5c859de0f",
       "name": "Revisar Casos Sin Asignar",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [224, 440],
+      "position": [528, 176],
       "credentials": {
         "postgres": {
           "id": "dEHKygi1neTNvPtH",
@@ -247,11 +247,11 @@
         },
         "options": {}
       },
-      "id": "9a1b0c1e-1111-4a1a-8000-00000000000f",
+      "id": "27862a8d-1c22-4458-8f53-9faf98dfc0fd",
       "name": "Caso Nuevo Sin Asignar?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [448, 440]
+      "position": [752, 176]
     },
     {
       "parameters": {
@@ -260,11 +260,11 @@
         "message": "={{ 'Oportunidad #' + $json.opportunity_id + ' quedo sin asignar tras agotar ejecutivo, guardia primaria y guardia respaldo.<br>Revisar en el panel operativo y reasignar manualmente.' }}",
         "options": {}
       },
-      "id": "9a1b0c1e-1111-4a1a-8000-000000000010",
+      "id": "9d8d54c0-ec53-494b-9954-ba96bd6358aa",
       "name": "Alertar Caso Sin Asignar (Gmail)",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [672, 440],
+      "position": [976, 176],
       "credentials": {
         "gmailOAuth2": {
           "id": "Hx7tXWjVzyLEwMnJ",

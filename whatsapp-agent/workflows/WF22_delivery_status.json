@@ -205,7 +205,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json || {};\nconst event = input.event || {};\nconst message_id = String(event.id || '');\nconst status = String(event.status || '').toLowerCase();\nif (!message_id || !['sent', 'delivered', 'read', 'failed'].includes(status)) return [{ json: { ...input, valid: false, reason: 'invalid_delivery_status' } }];\nconst ts = Number(event.timestamp);\nconst evidence = { status };\nif (Array.isArray(event.errors)) evidence.error_codes = event.errors.map(e => String(e.code || '')).filter(Boolean).slice(0, 5);\nreturn [{ json: { ...input, valid: true, message_id, status, provider_timestamp: Number.isFinite(ts) ? new Date(ts * 1000).toISOString() : null, evidence } }];"
+        "jsCode": "// One output item per claimed status event (Meta batches sent+delivered).\nreturn $input.all().map(({ json: input }) => {\n  const event = input.event || {};\n  const message_id = String(event.id || '');\n  const status = String(event.status || '').toLowerCase();\n  if (!message_id || !['sent', 'delivered', 'read', 'failed'].includes(status)) return { json: { ...input, valid: false, reason: 'invalid_delivery_status' } };\n  const ts = Number(event.timestamp);\n  const evidence = { status };\n  if (Array.isArray(event.errors)) evidence.error_codes = event.errors.map(e => String(e.code || '')).filter(Boolean).slice(0, 5);\n  return { json: { ...input, valid: true, message_id, status, provider_timestamp: Number.isFinite(ts) ? new Date(ts * 1000).toISOString() : null, evidence } };\n});"
       },
       "id": "wf22-parse-status",
       "name": "Parse Whitelisted Status",

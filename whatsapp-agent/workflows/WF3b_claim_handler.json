@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const trigger = $('When Called by WF1').first().json;\nconst raw = $input.first().json;\nconst claim = raw.result || raw;\nconst claim_status = claim.claim_status || claim.outcome || 'error';\nconst text = { accepted: 'Prospecto asignado. Ya puedes atenderlo.', already_assigned: 'Este prospecto ya fue asignado.', expired: 'La oferta ya vencio o pertenece a un turno anterior.', not_authorized: 'Esta oferta no estaba dirigida a tu usuario.', delivery_pending: 'La oferta aun no tiene entrega confirmada.', invalid_input: 'No fue posible validar el boton V3.' }[claim_status] || 'No fue posible procesar la aceptacion.';\nreturn [{ json: { number: trigger.agent_phone, text, claim_status, opportunity_id: claim.opportunity_id || trigger.opportunity_id } }];"
+        "jsCode": "const trigger = $('When Called by WF1').first().json;\nconst raw = $input.first().json;\nconst claim = raw.result || raw;\nconst claim_status = claim.claim_status || claim.outcome || 'error';\nconst text = { accepted: 'Prospecto asignado. Ya puedes atenderlo.', claimed: 'Prospecto asignado. Ya puedes atenderlo.', already_assigned: 'Este prospecto ya fue asignado.', expired: 'La oferta ya vencio o pertenece a un turno anterior.', not_authorized: 'Esta oferta no estaba dirigida a tu usuario.', delivery_pending: 'La oferta aun no tiene entrega confirmada.', invalid_input: 'No fue posible validar el boton V3.' }[claim_status] || 'No fue posible procesar la aceptacion.';\nreturn [{ json: { number: trigger.agent_phone, text, claim_status, opportunity_id: claim.opportunity_id || trigger.opportunity_id } }];"
       },
       "id": "wf3b-build-v3-result",
       "name": "Build V3 Claim Result",
@@ -42,8 +42,7 @@
               "rightValue": "v2_drain",
               "operator": {
                 "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
+                "operation": "equals"
               }
             }
           ],
@@ -127,7 +126,10 @@
         1080,
         120
       ],
-      "continueOnFail": true
+      "continueOnFail": false,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -402,9 +404,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT public.claim_v3_delivery($1::bigint,$2::bigint,$3::bigint,$4,$5,$6,$7,NOW()) AS result;",
+        "query": "SELECT public.claim_v3_delivery_from_webhook($1::bigint) AS result;",
         "options": {
-          "queryReplacement": "={{ [$json.opportunity_id, $json.attempt_id, $json.capture_event_id, $json.agent_id, $json.agent_phone, $json.reply_to_wamid, $json.context_wamid || $json.context_id] }}"
+          "queryReplacement": "={{ [$json.webhook_event_id] }}"
         }
       },
       "id": "wf3b-claim-v3-delivery",
@@ -415,7 +417,13 @@
         640,
         360
       ],
-      "notes": "V3 exact claim: opportunity, attempt, capture event, sender agent/number, reply/context WAMID. Accepted is not delivery proof."
+      "notes": "V3 exact claim is derived only from the durable HMAC-verified webhook row and its PostgreSQL created_at. Accepted is not delivery proof.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
     }
   ],
   "connections": {

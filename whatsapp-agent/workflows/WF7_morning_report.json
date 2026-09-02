@@ -50,7 +50,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM public.v3_release_night_queue(100,NOW()) AS opportunity_id;",
+        "query": "SELECT COUNT(*)::integer AS released_count FROM public.v3_release_night_queue(500,NOW());",
         "options": {}
       },
       "id": "wf7-v3-release-0805",
@@ -582,6 +582,7 @@
     "saveExecutionProgress": true,
     "saveManualExecutions": true,
     "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "none"
+    "saveDataSuccessExecution": "none",
+    "timezone": "America/Mexico_City"
   }
 }

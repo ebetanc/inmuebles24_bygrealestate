@@ -68,9 +68,11 @@ def load(path):
 
 
 def editions(workflow):
-    yield workflow
-    if isinstance(workflow.get("activeVersion"), dict):
-        yield workflow["activeVersion"]
+    workflows = workflow if isinstance(workflow, list) else [workflow]
+    for item in workflows:
+        yield item
+        if isinstance(item.get("activeVersion"), dict):
+            yield item["activeVersion"]
 
 
 def execute_workflow_nodes(edition):

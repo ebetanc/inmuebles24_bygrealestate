@@ -236,8 +236,16 @@ def test_attend_lead_uses_exact_request_id_and_skips_completed_note(monkeypatch)
         calls.append(("status", None))
         return True
 
+    async def no_responsible_notes(page):
+        return []
+
+    async def unassigned(page):
+        return ""
+
     monkeypatch.setattr(inbox, "goto_buzon", yes)
     monkeypatch.setattr(inbox, "find_request_by_id", open_exact)
+    monkeypatch.setattr(inbox, "read_easybroker_assignee", unassigned)
+    monkeypatch.setattr(inbox, "find_responsible_notes", no_responsible_notes)
     monkeypatch.setattr(inbox, "note_exists", yes)
     monkeypatch.setattr(inbox, "add_note", add_note)
     monkeypatch.setattr(inbox, "set_status_atendida", set_status)
@@ -271,9 +279,13 @@ def test_same_phone_opportunities_open_only_the_requested_easybroker_id(monkeypa
     async def no_phone_lookup(*args, **kwargs):
         raise AssertionError("phone lookup must not run without explicit fallback")
 
+    async def unassigned(page):
+        return ""
+
     monkeypatch.setattr(inbox, "goto_buzon", yes)
     monkeypatch.setattr(inbox, "find_request_by_id", open_exact)
     monkeypatch.setattr(inbox, "find_request_by_phone", no_phone_lookup)
+    monkeypatch.setattr(inbox, "read_easybroker_assignee", unassigned)
 
     for request_id in (222, 333):
         result = asyncio.run(inbox.attend_lead(
@@ -296,6 +308,12 @@ def test_easybroker_note_retry_reconciles_after_crash_without_duplicate(monkeypa
         calls.append(("check", text))
         return text in notes
 
+    async def responsible_notes(page):
+        return sorted(notes)
+
+    async def unassigned(page):
+        return ""
+
     async def add(page, text):
         calls.append(("add", text))
         notes.add(text)
@@ -303,6 +321,8 @@ def test_easybroker_note_retry_reconciles_after_crash_without_duplicate(monkeypa
 
     monkeypatch.setattr(inbox, "goto_buzon", yes)
     monkeypatch.setattr(inbox, "find_request_by_id", yes)
+    monkeypatch.setattr(inbox, "read_easybroker_assignee", unassigned)
+    monkeypatch.setattr(inbox, "find_responsible_notes", responsible_notes)
     monkeypatch.setattr(inbox, "note_exists", existing)
     monkeypatch.setattr(inbox, "add_note", add)
     monkeypatch.setattr(inbox, "set_status_atendida", yes)
@@ -320,6 +340,179 @@ def test_easybroker_note_retry_reconciles_after_crash_without_duplicate(monkeypa
     assert first["note_ok"] is True
     assert second["note_ok"] is True
     assert second["note_changed"] is True  # asks main to reconcile durable evidence
+
+
+def test_easybroker_full_name_note_matches_short_canonical_responsible(monkeypatch):
+    side_effects = []
+
+    async def yes(*args, **kwargs):
+        return True
+
+    async def assigned(page):
+        return "Marusa Bobadilla"
+
+    async def responsible_notes(page):
+        return ["RESPONSABLE: MÁRUSA Bobadilla"]
+
+    async def must_not_add(*args, **kwargs):
+        side_effects.append("note")
+        return True
+
+    monkeypatch.setattr(inbox, "goto_buzon", yes)
+    monkeypatch.setattr(inbox, "find_request_by_id", yes)
+    monkeypatch.setattr(inbox, "read_easybroker_assignee", assigned)
+    monkeypatch.setattr(inbox, "find_responsible_notes", responsible_notes)
+    monkeypatch.setattr(inbox, "add_note", must_not_add)
+    monkeypatch.setattr(inbox, "set_status_atendida", yes)
+
+    result = asyncio.run(inbox.attend_lead(
+        object(), request_id=222, agent_name="Marusa", note_done=False, status_done=False,
+    ))
+
+    assert result["note_ok"] is True
+    assert result["status_ok"] is True
+    assert side_effects == []
+
+
+def test_easybroker_responsible_conflict_fails_closed(monkeypatch):
+    calls = []
+
+    class Notes:
+        async def all_inner_texts(self):
+            return ["RESPONSABLE: Marusa"]
+
+    class Page:
+        def get_by_text(self, pattern, exact=None):
+            return Notes()
+
+    async def yes(*args, **kwargs):
+        return True
+
+    async def must_not_run(*args, **kwargs):
+        calls.append("side_effect")
+        return True
+
+    async def unassigned(page):
+        return ""
+
+    monkeypatch.setattr(inbox, "goto_buzon", yes)
+    monkeypatch.setattr(inbox, "find_request_by_id", yes)
+    monkeypatch.setattr(inbox, "read_easybroker_assignee", unassigned)
+    monkeypatch.setattr(inbox, "add_note", must_not_run)
+    monkeypatch.setattr(inbox, "set_status_atendida", must_not_run)
+
+    result = asyncio.run(inbox.attend_lead(
+        Page(), request_id=222, agent_name="Sandy", note_done=False, status_done=False,
+    ))
+
+    assert result["error_code"] == "responsible_note_conflict"
+    assert result["expected_responsible_note"] == "RESPONSABLE: Sandy"
+    assert result["existing_responsible_notes"] == ["RESPONSABLE: Marusa"]
+    assert result["note_ok"] is False
+    assert result["status_ok"] is False
+    assert result["note_changed"] is False
+    assert result["status_changed"] is False
+    assert calls == []
+
+
+def test_easybroker_assignee_same_first_name_allows_canonical_note(monkeypatch):
+    calls = []
+
+    class Page:
+        async def evaluate(self, script):
+            assert script == inbox._READ_ASSIGNEE_JS
+            return {"verified": True, "assignee": "MÁRUSA Bobadilla"}
+
+    async def yes(*args, **kwargs):
+        return True
+
+    async def no_responsible_notes(page):
+        return []
+
+    async def add(page, text):
+        calls.append(("note", text))
+        return True
+
+    monkeypatch.setattr(inbox, "goto_buzon", yes)
+    monkeypatch.setattr(inbox, "find_request_by_id", yes)
+    monkeypatch.setattr(inbox, "find_responsible_notes", no_responsible_notes)
+    monkeypatch.setattr(inbox, "add_note", add)
+    monkeypatch.setattr(inbox, "set_status_atendida", yes)
+
+    async def missing_note(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(inbox, "note_exists", missing_note)
+    result = asyncio.run(inbox.attend_lead(
+        Page(), request_id=222, agent_name="Marusa", note_done=False, status_done=False,
+    ))
+
+    assert result["note_ok"] is True
+    assert result["status_ok"] is True
+    assert calls == [("note", "RESPONSABLE: Marusa")]
+
+
+def test_easybroker_assignee_conflict_and_unverifiable_fail_closed(monkeypatch):
+    side_effects = []
+
+    class Page:
+        def __init__(self, result):
+            self.result = result
+
+        async def evaluate(self, script):
+            assert script == inbox._READ_ASSIGNEE_JS
+            return self.result
+
+    async def yes(*args, **kwargs):
+        return True
+
+    async def must_not_run(*args, **kwargs):
+        side_effects.append("side_effect")
+        return True
+
+    monkeypatch.setattr(inbox, "goto_buzon", yes)
+    monkeypatch.setattr(inbox, "find_request_by_id", yes)
+    monkeypatch.setattr(inbox, "add_note", must_not_run)
+    monkeypatch.setattr(inbox, "set_status_atendida", must_not_run)
+
+    conflict = asyncio.run(inbox.attend_lead(
+        Page({"verified": True, "assignee": "Marusa Bobadilla"}),
+        request_id=222, agent_name="Sandy", note_done=False, status_done=False,
+    ))
+    unreadable = asyncio.run(inbox.attend_lead(
+        Page({"verified": False, "assignee": None}),
+        request_id=223, agent_name="Sandy", note_done=False, status_done=False,
+    ))
+
+    assert conflict["error_code"] == "easybroker_assignee_conflict"
+    assert conflict["easybroker_assignee"] == "Marusa Bobadilla"
+    assert unreadable["error_code"] == "easybroker_assignee_check_failed"
+    assert unreadable["easybroker_assignee"] is None
+    assert "if (unique.length > 1)" in inbox._READ_ASSIGNEE_JS
+    assert side_effects == []
+
+
+def test_easybroker_assignee_reader_accepts_only_explicit_unassigned_state():
+    class Page:
+        def __init__(self, result):
+            self.result = result
+
+        async def evaluate(self, script):
+            assert script == inbox._READ_ASSIGNEE_JS
+            return self.result
+
+    explicit = asyncio.run(inbox.read_easybroker_assignee(
+        Page({"verified": True, "assignee": ""})
+    ))
+    ambiguous = asyncio.run(inbox.read_easybroker_assignee(
+        Page({"verified": False, "assignee": None})
+    ))
+
+    assert explicit == ""
+    assert ambiguous is None
+    assert "unassignedMarkers > 0 || explicitlyUnassigned" in inbox._READ_ASSIGNEE_JS
+    for label in ("Sin asignar", "No asignada", "Asignar", "Asignar a"):
+        assert label in inbox._READ_ASSIGNEE_JS
 
 
 def test_easybroker_api_request_resolves_buzon_by_property_and_phone(monkeypatch):
@@ -428,6 +621,56 @@ def test_v3_worker_maps_api_request_to_exact_property_and_phone(monkeypatch):
     assert captured["evidence"]["match_method"] == "property+identity"
 
 
+def test_v3_worker_persists_responsible_conflict_as_failed_effect(monkeypatch):
+    captured = {}
+
+    async def provider_rows(settings):
+        return [{
+            "eb_request_id": 40526079,
+            "property_public_id": "EB-WT7488",
+            "e164_phone": "+525599569566",
+        }]
+
+    async def claims(settings, limit):
+        return [{
+            "eb_request_id": 40526079,
+            "responsible_first_name": "Sandy",
+            "lease_token": "lease",
+            "note_due": True,
+            "attended_due": False,
+        }]
+
+    async def attend(page, **kwargs):
+        return {
+            "found": True,
+            "match_method": "property+identity",
+            "status_ok": True,
+            "note_ok": False,
+            "status_changed": False,
+            "note_changed": False,
+            "error_code": "responsible_note_conflict",
+            "expected_responsible_note": "RESPONSABLE: Sandy",
+            "existing_responsible_notes": ["RESPONSABLE: Marusa"],
+        }
+
+    async def finish(settings, **kwargs):
+        captured.update(kwargs)
+        return {"ok": kwargs["ok"]}
+
+    monkeypatch.setattr(eb_main, "fetch_contact_requests", provider_rows)
+    monkeypatch.setattr(eb_main, "claim_v3_easybroker_effects", claims)
+    monkeypatch.setattr(eb_main, "attend_lead", attend)
+    monkeypatch.setattr(eb_main, "finish_v3_easybroker_effect", finish)
+
+    completed, failed = asyncio.run(eb_main._run_v3_effect_worker(object(), object()))
+
+    assert (completed, failed) == (0, True)
+    assert captured["ok"] is False
+    assert captured["evidence"]["error_code"] == "responsible_note_conflict"
+    assert captured["evidence"]["expected_responsible_note"] == "RESPONSABLE: Sandy"
+    assert captured["evidence"]["existing_responsible_notes"] == ["RESPONSABLE: Marusa"]
+
+
 def test_easybroker_legacy_responsible_note_is_not_duplicated(monkeypatch):
     calls = []
 
@@ -442,8 +685,16 @@ def test_easybroker_legacy_responsible_note_is_not_duplicated(monkeypatch):
         calls.append(("add", text))
         return True
 
+    async def no_responsible_notes(page):
+        return []
+
+    async def unassigned(page):
+        return ""
+
     monkeypatch.setattr(inbox, "goto_buzon", yes)
     monkeypatch.setattr(inbox, "find_request_by_id", yes)
+    monkeypatch.setattr(inbox, "read_easybroker_assignee", unassigned)
+    monkeypatch.setattr(inbox, "find_responsible_notes", no_responsible_notes)
     monkeypatch.setattr(inbox, "note_exists", existing)
     monkeypatch.setattr(inbox, "add_note", add)
     monkeypatch.setattr(inbox, "set_status_atendida", yes)

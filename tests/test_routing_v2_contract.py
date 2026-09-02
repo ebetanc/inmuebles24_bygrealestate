@@ -60,6 +60,41 @@ def requires(sql: str, *rules: str) -> None:
         assert re.search(rule, sql), f"missing executable SQL rule: {rule}"
 
 
+def load_single_workflow_export(path: Path) -> dict:
+    raw = json.loads(path.read_text(encoding="utf-8-sig"))
+    if isinstance(raw, list):
+        assert len(raw) == 1, f"expected one workflow in export: {path.name}"
+        raw = raw[0]
+    assert isinstance(raw, dict), f"invalid workflow export: {path.name}"
+    return raw
+
+
+def published_workflow_editions(workflow: dict) -> tuple[dict, ...]:
+    editions = [workflow]
+    embedded = workflow.get("activeVersion")
+    if workflow.get("active") is True:
+        assert workflow.get("activeVersionId") == workflow.get("versionId"), (
+            "active export must identify its current version as published"
+        )
+    if embedded is not None:
+        assert isinstance(embedded, dict)
+        editions.append(embedded)
+    return tuple(editions)
+
+
+def assert_connections_equivalent(actual: dict, expected: dict) -> None:
+    """Treat only omitted trailing empty n8n outputs as serialization noise."""
+    assert set(actual) == set(expected)
+    for node_name in expected:
+        actual_main = list(actual[node_name]["main"])
+        expected_main = list(expected[node_name]["main"])
+        while actual_main and actual_main[-1] == []:
+            actual_main.pop()
+        while expected_main and expected_main[-1] == []:
+            expected_main.pop()
+        assert actual_main == expected_main, f"connection drift at {node_name!r}"
+
+
 def test_s01_owner_offer_starts_five_minute_sla_only_on_delivery():
     body = extract_function(migration("0021_lead_routing_v2.sql"), "mark_offer_delivered")
     event = extract_statement(body, r"insert\s+into\s+lead_routing_events")
@@ -110,7 +145,9 @@ def test_lrv2_008_offer_delivery_workflows_are_correlated_and_idempotent():
     )
     requires(raw22, r"binary.*data.*data", r"buffer.from.*base64", r"timingsafeequal", r"wf1_workflow_id")
     requires(normalized(json.dumps(wf23)), r"v3_claim_delivery_attempts", r"interval '2 minutes'")
-    assert wf23["connections"]["Sweep Delivery Timeouts"]["main"][0][0]["node"] == "Call WF3c Transition"
+    assert wf23["connections"]["Sweep Delivery Timeouts"]["main"][0][0]["node"] == "Has Timeout Candidate?"
+    assert wf23["connections"]["Has Timeout Candidate?"]["main"][0][0]["node"] == "Call WF3c Transition"
+    assert wf23["connections"]["Has Timeout Candidate?"]["main"][1] == []
     assert wf23["settings"]["saveDataSuccessExecution"] == "none"
     delivery_sql = normalized(migration("0030_delivery_attempts.sql"))
     requires(
@@ -202,16 +239,18 @@ def test_lrv2_008_offer_delivery_workflows_are_correlated_and_idempotent():
             assert edition is not None, f"{export_name} needs a current export"
             export_nodes = {node["name"]: node for node in edition["nodes"]}
             if export_name == "WF23_-_Delivery_Timeout_Sweeper_.json":
-                assert {"Sweep Delivery Timeouts", "Call WF3c Transition"}.issubset(export_nodes)
+                assert {"Sweep Delivery Timeouts", "Has Timeout Candidate?", "Call WF3c Transition"}.issubset(export_nodes)
                 mirror_query = export_nodes["Sweep Delivery Timeouts"]["parameters"]["query"].lower()
                 assert "2 minutes" in mirror_query
                 assert export_nodes["Call WF3c Transition"]["parameters"]["workflowId"]
             else:
                 assert export_nodes == source_nodes
             if export_name == "WF23_-_Delivery_Timeout_Sweeper_.json":
-                # The mirror's historical layout may differ, but the current
-                # V3 sweeper must still hand every claimed timeout to WF3c.
-                assert edition["connections"]["Sweep Delivery Timeouts"]["main"][0][0]["node"] == "Call WF3c Transition"
+                # An empty query result must stop at the explicit gate; only a
+                # real timeout candidate may enter WF3c.
+                assert edition["connections"]["Sweep Delivery Timeouts"]["main"][0][0]["node"] == "Has Timeout Candidate?"
+                assert edition["connections"]["Has Timeout Candidate?"]["main"][0][0]["node"] == "Call WF3c Transition"
+                assert edition["connections"]["Has Timeout Candidate?"]["main"][1] == []
             else:
                 assert edition["connections"] == source["connections"]
 
@@ -663,8 +702,8 @@ def test_s08_s09_claim_rpc_is_atomic_and_late_claim_cannot_reassign():
     wf1_code = "\n".join(
         node.get("parameters", {}).get("jsCode", "") for node in wf1["nodes"]
     )
-    assert "parsed.message_type === 'button'" in wf1_code
-    assert r"/^claim:v3:(\\d+):(\\d+)$/" in wf1_code
+    assert "const v3ClaimMatch = String(parsed.interactive_id || '')" in wf1_code
+    assert r"/^claim:v3:(\d+):(\d+)$/" in wf1_code
     assert "claim_version: 'v3'" in wf1_code
     assert "attempt_id: attemptId" in wf1_code
     assert "context_id: parsed.context_id || null" in wf1_code
@@ -673,8 +712,8 @@ def test_s08_s09_claim_rpc_is_atomic_and_late_claim_cannot_reassign():
     capture = next(node for node in wf1["nodes"] if node["name"] == "Attach V3 Capture Context")
     assert "capture_event_id" in capture["parameters"]["jsCode"]
     assert wf1["connections"]["Classify & Route"]["main"][0][0]["node"] == "Attach V3 Capture Context"
-    assert r"/^claim:(\\d+):(owner|primary_guard|backup_guard)$/" in wf1_code
-    assert r"/^TOMO-V2-(\\d+)-(O|P|B)$/i" in wf1_code
+    assert r"/^claim:(\d+):(owner|primary_guard|backup_guard)$/" in wf1_code
+    assert r"/^TOMO-V2-(\d+)-(O|P|B)$/i" in wf1_code
     requires(wf3b_raw, r"claim_lead_opportunity", r"claim_status", r"is routing v2 claim\?")
     requires(
         wf3b_raw,
@@ -695,6 +734,131 @@ def test_s08_s09_claim_rpc_is_atomic_and_late_claim_cannot_reassign():
     # not rewritten to impersonate the current draft.
     assert {node["name"]: node for node in export["nodes"]} == source_nodes
     assert export["connections"] == wf3b["connections"]
+
+
+def _run_wf1_classifier(code: str, parsed: dict, db: dict) -> dict:
+    """Execute WF1's classifier under Node with the two n8n inputs it reads."""
+    wrapped = "function returnValue() {\n" + code + "\n}\n"
+    wrapped += "const parsed = " + json.dumps(parsed) + ";\n"
+    wrapped += "const db = " + json.dumps(db) + ";\n"
+    wrapped += "const $ = () => ({ first: () => ({ json: parsed }) });\n"
+    wrapped += "const $input = { first: () => ({ json: db }) };\n"
+    wrapped += "console.log(JSON.stringify(returnValue()[0].json));\n"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        script_path = Path(tmp) / "wf1_classifier.js"
+        script_path.write_text(wrapped, encoding="utf-8")
+        result = subprocess.run(
+            ["node", str(script_path)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+        )
+    assert result.returncode == 0, f"node execution failed: {result.stderr}"
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+def test_wf1_routes_real_meta_interactive_button_reply_to_v3_claim():
+    if shutil.which("node") is None:
+        pytest.skip("node not on PATH")
+
+    wf1 = json.loads((WORKFLOWS / "WF1_inbound_router.json").read_text(encoding="utf-8"))
+    code = next(
+        node["parameters"]["jsCode"]
+        for node in wf1["nodes"]
+        if node["name"] == "Classify & Route"
+    )
+    base_parsed = {
+        "phone": "5215523007051",
+        "text": "Tomo",
+        "pushName": "Paty",
+        "messageId": "wamid.test-real-meta-button",
+        "webhook_event_id": 369,
+        "interactive_id": "claim:v3:679:249",
+        "context_id": "wamid.test-offer",
+    }
+    db = {
+        "new_message_id": 1221,
+        "is_agent": True,
+        "agent_id": "agent_paty",
+        "agent_name": "Paty",
+    }
+
+    for message_type in ("interactive", "button"):
+        routed = _run_wf1_classifier(code, {**base_parsed, "message_type": message_type}, db)
+        assert routed["route"] == "agent_claim"
+        assert routed["claim_version"] == "v3"
+        assert routed["opportunity_id"] == 679
+        assert routed["attempt_id"] == 249
+        assert routed["webhook_event_id"] == 369
+        assert routed["agent_id"] == "agent_paty"
+        assert routed["reply_to_wamid"] == "wamid.test-offer"
+
+    replay = _run_wf1_classifier(
+        code,
+        {**base_parsed, "message_type": "interactive"},
+        {**db, "new_message_id": None},
+    )
+    assert replay["route"] == "agent_claim"
+    assert replay["claim_version"] == "v3"
+    assert replay["webhook_event_id"] == 369
+
+    non_button = _run_wf1_classifier(
+        code,
+        {**base_parsed, "message_type": "text", "interactive_id": ""},
+        db,
+    )
+    assert non_button["route"] == "agent_followup_reply"
+
+
+def test_wf3b_claimed_outcome_builds_success_confirmation():
+    if shutil.which("node") is None:
+        pytest.skip("node not on PATH")
+
+    wf3b = json.loads((WORKFLOWS / "WF3b_claim_handler.json").read_text(encoding="utf-8"))
+    code = next(
+        node["parameters"]["jsCode"]
+        for node in wf3b["nodes"]
+        if node["name"] == "Build V3 Claim Result"
+    )
+    trigger = {
+        "agent_phone": "5215523007051",
+        "opportunity_id": 679,
+    }
+    raw = {
+        "result": {
+            "ok": True,
+            "outcome": "claimed",
+            "opportunity_id": 679,
+            "assigned_agent_id": "agent_paty",
+        }
+    }
+    wrapped = "function returnValue() {\n" + code + "\n}\n"
+    wrapped += "const trigger = " + json.dumps(trigger) + ";\n"
+    wrapped += "const raw = " + json.dumps(raw) + ";\n"
+    wrapped += "const $ = () => ({ first: () => ({ json: trigger }) });\n"
+    wrapped += "const $input = { first: () => ({ json: raw }) };\n"
+    wrapped += "console.log(JSON.stringify(returnValue()[0].json));\n"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        script_path = Path(tmp) / "wf3b_claim_result.js"
+        script_path.write_text(wrapped, encoding="utf-8")
+        result = subprocess.run(
+            ["node", str(script_path)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+        )
+    assert result.returncode == 0, f"node execution failed: {result.stderr}"
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    assert payload == {
+        "number": "5215523007051",
+        "text": "Prospecto asignado. Ya puedes atenderlo.",
+        "claim_status": "claimed",
+        "opportunity_id": 679,
+    }
 
 
 def test_s10_delivery_failure_records_event_without_starting_sla():
@@ -826,7 +990,7 @@ def test_s11_first_tag_is_strict_and_missing_owner_falls_back_to_guards():
     assert wf10["connections"]["Owner Resolved?"]["main"][1][0]["node"] == "Route Missing Owner Data"
     webhook = next(n for n in wf10["nodes"] if n["name"] == "Scraper Webhook")
     assert webhook["parameters"]["authentication"] == "headerAuth"
-    assert webhook["parameters"]["responseMode"] == "lastNode"
+    assert webhook["parameters"]["responseMode"] == "responseNode"
     assert webhook["credentials"]["httpHeaderAuth"]["id"] == "REPLACE_WITH_I24_WEBHOOK_HEADER_AUTH_CREDENTIAL_ID"
     assert wf10["connections"]["Scraper Webhook"]["main"][0][0]["node"] == "Split & Normalize Leads"
     # The historical activeVersion is intentionally not treated as current V3 wiring.
@@ -849,7 +1013,7 @@ def test_s11_first_tag_is_strict_and_missing_owner_falls_back_to_guards():
             if export_name == "WF10_-_Scraper_Lead_Intake_.json":
                 export_webhook = next(n for n in edition["nodes"] if n["name"] == "Scraper Webhook")
                 assert export_params["Scraper Webhook"]["authentication"] == "headerAuth"
-                assert export_params["Scraper Webhook"]["responseMode"] == "lastNode"
+                assert export_params["Scraper Webhook"]["responseMode"] == "responseNode"
                 assert export_webhook["credentials"]["httpHeaderAuth"]["id"] == "REPLACE_WITH_I24_WEBHOOK_HEADER_AUTH_CREDENTIAL_ID"
 
 
@@ -1290,7 +1454,7 @@ def test_lrv2_013_watchdog_reports_routing_failures_idempotently():
 
 def test_lrv2_013_wf20_safe_mode_watchdog_matches_export():
     wf20 = json.loads((WORKFLOWS / "WF20_watchdog.json").read_text(encoding="utf-8"))
-    export = json.loads((EXPORTS / "BYG_WF20_Watchdog_.json").read_text(encoding="utf-8-sig"))
+    export = load_single_workflow_export(EXPORTS / "BYG_WF20_Watchdog_.json")
 
     safe_mode_node_names = [
         "Cada 5 min (routing watchdog)",
@@ -1301,13 +1465,12 @@ def test_lrv2_013_wf20_safe_mode_watchdog_matches_export():
     ]
     source_params = {n["name"]: n["parameters"] for n in wf20["nodes"]}
 
-    for edition in (export, export.get("activeVersion")):
-        assert edition is not None
+    for edition in published_workflow_editions(export):
         export_params = {n["name"]: n["parameters"] for n in edition["nodes"]}
         for name in safe_mode_node_names:
             assert name in export_params, f"{name} missing from export"
             assert export_params[name] == source_params[name]
-        assert edition["connections"] == wf20["connections"]
+        assert_connections_equivalent(edition["connections"], wf20["connections"])
         for name in safe_mode_node_names:
             assert name in edition["connections"] or name == "Alertar Modo Seguro (Gmail)"
 
@@ -1327,13 +1490,12 @@ def test_lrv2_wf20_full_parity():
     not just the 4 safe-mode nodes checked above.
     """
     wf20 = json.loads((WORKFLOWS / "WF20_watchdog.json").read_text(encoding="utf-8"))
-    export = json.loads((EXPORTS / "BYG_WF20_Watchdog_.json").read_text(encoding="utf-8-sig"))
+    export = load_single_workflow_export(EXPORTS / "BYG_WF20_Watchdog_.json")
 
     source_names = [n["name"] for n in wf20["nodes"]]
     assert len(source_names) == len(set(source_names))
 
-    for edition in (export, export.get("activeVersion")):
-        assert edition is not None
+    for edition in published_workflow_editions(export):
         edition_by_name = {n["name"]: n for n in edition["nodes"]}
         assert set(edition_by_name) == set(source_names), (
             "node name set diverged between source and export"
@@ -1345,30 +1507,34 @@ def test_lrv2_wf20_full_parity():
                     f"{node['name']!r} field {field!r} drifted between "
                     "source and export"
                 )
-        assert edition["connections"] == wf20["connections"]
+        assert_connections_equivalent(edition["connections"], wf20["connections"])
         for key, value in wf20["settings"].items():
             assert edition["settings"].get(key) == value
 
-    assert export["connections"] == export["activeVersion"]["connections"], (
-        "export activeVersion connections must mirror export top-level connections"
-    )
+    embedded_active = export.get("activeVersion")
+    if embedded_active is not None:
+        assert_connections_equivalent(
+            export["connections"], embedded_active["connections"]
+        )
 
 
 def test_lrv2_013_v3_intake_uses_the_durable_owner_guard_sandy_router():
     wf10 = json.loads((WORKFLOWS / "WF10_scraper_intake.json").read_text(encoding="utf-8"))
     node_params = {n["name"]: n["parameters"] for n in wf10["nodes"]}
 
-    # Keep the V2 safe-mode nodes available for rollback, while the live V3
-    # intake sends resolved owners into WF13. Unresolved outcomes first pass
-    # through the fail-closed router: missing ID/URL becomes manual review,
-    # while a valid property with missing owner data continues to guard/Sandy.
+    # V2 safe-mode nodes remain as legacy definitions, but live V3 never enters
+    # them. Only created_new opens owner resolution; non-new dispositions use
+    # their idempotent route-ready transition and then the durable response gate.
     assert "Check V3 Routing Safe Mode" in node_params
     assert "get_routing_safe_mode" in json.dumps(node_params["Check V3 Routing Safe Mode"])
     assert "Safe Mode Active?" in node_params
     conn = wf10["connections"]
     assert conn["Scraper Webhook"]["main"][0][0]["node"] == "Split & Normalize Leads"
     assert conn["Split & Normalize Leads"]["main"][0][0]["node"] == "Restore V3 Dispatch Context"
-    assert conn["Restore V3 Dispatch Context"]["main"][0][0]["node"] == "Resolve Owner (WF12)"
+    assert conn["Restore V3 Dispatch Context"]["main"][0][0]["node"] == "Created New V3?"
+    assert conn["Created New V3?"]["main"][0][0]["node"] == "Resolve Owner (WF12)"
+    assert conn["Created New V3?"]["main"][1][0]["node"] == "Handle V3 Non-New Disposition"
+    assert conn["Handle V3 Non-New Disposition"]["main"][0][0]["node"] == "Verify V3 Dispatch Durable"
     assert conn["Resolve Owner (WF12)"]["main"][0][0]["node"] == "Owner Resolved?"
     assert conn["Owner Resolved?"]["main"][0][0]["node"] == "Prepare V3 Owner Notify"
     assert conn["Owner Resolved?"]["main"][1][0]["node"] == "Route Missing Owner Data"
@@ -1661,7 +1827,7 @@ def test_lrv2_014_wf20_alerts_unassigned_cases_via_dedupe_rpc():
 
 def test_lrv2_014_wf20_unassigned_branch_matches_export():
     wf20 = json.loads((WORKFLOWS / "WF20_watchdog.json").read_text(encoding="utf-8"))
-    export = json.loads((EXPORTS / "BYG_WF20_Watchdog_.json").read_text(encoding="utf-8-sig"))
+    export = load_single_workflow_export(EXPORTS / "BYG_WF20_Watchdog_.json")
 
     unassigned_node_names = [
         "Revisar Casos Sin Asignar",
@@ -1670,13 +1836,12 @@ def test_lrv2_014_wf20_unassigned_branch_matches_export():
     ]
     source_params = {n["name"]: n["parameters"] for n in wf20["nodes"]}
 
-    for edition in (export, export.get("activeVersion")):
-        assert edition is not None
+    for edition in published_workflow_editions(export):
         export_params = {n["name"]: n["parameters"] for n in edition["nodes"]}
         for name in unassigned_node_names:
             assert name in export_params, f"{name} missing from export"
             assert export_params[name] == source_params[name]
-        assert edition["connections"] == wf20["connections"]
+        assert_connections_equivalent(edition["connections"], wf20["connections"])
 
     export_ids = [n["id"] for n in export["nodes"]]
     assert len(export_ids) == len(set(export_ids))

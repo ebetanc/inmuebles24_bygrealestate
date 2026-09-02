@@ -18,10 +18,8 @@ interface ScheduleRow {
 }
 
 interface DayData {
-  mp: string;
-  mb: string;
-  tp: string;
-  tb: string;
+  morning: string;
+  afternoon: string;
 }
 
 const DAY_NAMES = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
@@ -57,16 +55,14 @@ function buildInitialState(
 
   for (let d = 1; d <= days; d++) {
     const date = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    state[date] = { mp: "", mb: "", tp: "", tb: "" };
+    state[date] = { morning: "", afternoon: "" };
   }
 
   const conflicts = new Set(legacyConflictKeys(existing));
   for (const row of existing) {
     if (!state[row.schedule_date]) continue;
     if (conflicts.has(`${row.schedule_date}:${row.shift}`)) continue;
-    const slot = row.shift === "morning"
-      ? row.coverage_role === "backup" ? "mb" : "mp"
-      : row.coverage_role === "backup" ? "tb" : "tp";
+    const slot = row.shift === "morning" ? "morning" : "afternoon";
     if (!state[row.schedule_date][slot]) state[row.schedule_date][slot] = row.agent_id;
   }
 
@@ -77,15 +73,15 @@ function buildInitialState(
 // a VALID, intentional arrangement (e.g. weekends with a single advisor on duty
 // the whole day). Surfaced as info only — it does NOT block saving.
 function dayIsFullDay(day: DayData): boolean {
-  return !!day.mp && !!day.tp && day.mp === day.tp;
+  return !!day.morning && !!day.afternoon && day.morning === day.afternoon;
 }
 
 function countShifts(schedule: Record<string, DayData>, agents: Agent[]) {
   const counts: Record<string, { morning: number; afternoon: number }> = {};
   for (const a of agents) counts[a.agent_id] = { morning: 0, afternoon: 0 };
   for (const day of Object.values(schedule)) {
-    for (const agentId of [day.mp, day.mb]) if (agentId && counts[agentId]) counts[agentId].morning++;
-    for (const agentId of [day.tp, day.tb]) if (agentId && counts[agentId]) counts[agentId].afternoon++;
+    if (day.morning && counts[day.morning]) counts[day.morning].morning++;
+    if (day.afternoon && counts[day.afternoon]) counts[day.afternoon].afternoon++;
   }
   return counts;
 }
@@ -141,8 +137,7 @@ export default function CalendarEditor({
       ...prev,
       [date]: { ...prev[date], [slot]: value },
     }));
-    const shift = slot.startsWith("m") ? "morning" : "afternoon";
-    setUnresolvedLegacy((current) => current.filter((key) => key !== `${date}:${shift}`));
+    setUnresolvedLegacy((current) => current.filter((key) => key !== `${date}:${slot}`));
     setDirty(true);
   };
 
@@ -152,13 +147,11 @@ export default function CalendarEditor({
     const newSchedule = { ...schedule };
     let idx = 0;
     for (const date of Object.keys(newSchedule).sort()) {
-      const primary = agents[idx % agents.length].agent_id;
-      const backup = agents[(idx + 1) % agents.length].agent_id;
+      const morning = agents[idx % agents.length].agent_id;
+      const afternoon = agents[(idx + 1) % agents.length].agent_id;
       newSchedule[date] = {
-        mp: primary,
-        mb: backup,
-        tp: backup,
-        tb: primary,
+        morning,
+        afternoon,
       };
       idx++;
     }
@@ -185,16 +178,10 @@ export default function CalendarEditor({
       showToast("Resuelva las coberturas legacy ambiguas antes de guardar");
       return;
     }
-    if (Object.values(schedule).some((day) =>
-      (!!day.mp && day.mp === day.mb) || (!!day.tp && day.tp === day.tb)
-    )) {
-      showToast("Primaria y respaldo deben ser agentes distintos");
-      return;
-    }
     const data = Object.entries(schedule).map(([date, day]) => ({
       date,
-      morning: [day.mp, day.mb].filter(Boolean),
-      afternoon: [day.tp, day.tb].filter(Boolean),
+      morning: [day.morning].filter(Boolean),
+      afternoon: [day.afternoon].filter(Boolean),
     }));
 
     startTransition(async () => {
@@ -213,10 +200,10 @@ export default function CalendarEditor({
   const today = mxToday();
   const stats = countShifts(schedule, agents);
   const filledSlots = Object.values(schedule).reduce(
-    (n, d) => n + [d.mp, d.mb, d.tp, d.tb].filter(Boolean).length,
+    (n, d) => n + [d.morning, d.afternoon].filter(Boolean).length,
     0
   );
-  const totalSlots = dates.length * 4;
+  const totalSlots = dates.length * 2;
   const pct = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
 
   const prevMonth = month === 1 ? { y: year - 1, m: 12 } : { y: year, m: month - 1 };
@@ -229,13 +216,13 @@ export default function CalendarEditor({
         <div>
           <h2 className="font-display text-base font-bold text-foreground">Calendario de Guardias</h2>
           <div className="text-xs text-muted-foreground">
-            Asigne guardia primaria y respaldo por turno — los cambios se guardan en Supabase
+            Asigne una guardia por turno — los cambios se guardan en Supabase
           </div>
         </div>
         <div className="flex items-center gap-2">
           {fullDayDates.length > 0 && (
             <span className="nb-chip">
-              {fullDayDates.length} dia(s) con la misma primaria todo el dia
+              {fullDayDates.length} dia(s) con la misma guardia todo el dia
             </span>
           )}
           {dirty && (
@@ -256,7 +243,7 @@ export default function CalendarEditor({
       {/* Controls */}
       {unresolvedLegacy.length > 0 && (
         <div className="mb-4 rounded-[var(--radius-sm)] border-2 border-foreground bg-[var(--amber)] px-4 py-3 text-xs font-bold text-foreground">
-          Cobertura legacy ambigua en {unresolvedLegacy.length} turno(s). Vuelva a elegir primaria o respaldo en cada turno marcado antes de guardar.
+          Cobertura legacy ambigua en {unresolvedLegacy.length} turno(s). Elija una sola guardia en cada turno marcado antes de guardar.
         </div>
       )}
       <div className="flex flex-wrap items-center gap-3 bg-card rounded-[var(--radius)] border-2 border-foreground shadow-[var(--shadow-sm)] px-4 py-3 mb-4">
@@ -345,39 +332,38 @@ export default function CalendarEditor({
                 )}
               </div>
 
-              {/* Ordered primary/backup coverage. */}
-              {([[["mp", "mb"], true], [["tp", "tb"], false]] as const).map(([slots, isMorning]) => {
+              {/* V3: exactly one guard per shift. */}
+              {(["morning", "afternoon"] as const).map((slot) => {
+                const isMorning = slot === "morning";
                 return (
-                  <div key={slots[0]} className={`grid grid-cols-2 gap-1 px-1.5 py-1.5 border-l border-[var(--line-2)] ${
+                  <div key={slot} className={`px-1.5 py-1.5 border-l border-[var(--line-2)] ${
                     unresolvedLegacy.includes(`${date}:${isMorning ? "morning" : "afternoon"}`) ? "bg-[var(--amber)]" : ""
                   }`}>
-                    {slots.map((slot, index) => (
-                      <label key={slot} className="min-w-0">
-                        <span className="block px-1 pb-0.5 font-display text-[9px] font-extrabold uppercase text-muted-foreground">
-                          {index === 0 ? "Primaria" : "Respaldo"}
-                        </span>
-                        <select
-                          value={day[slot]}
-                          onChange={(e) => updateSlot(date, slot, e.target.value)}
-                          className={`w-full px-1.5 py-1.5 rounded-[var(--radius-sm)] text-xs font-bold border-2 border-foreground transition-colors cursor-pointer ${
-                            fullDay && index === 0
-                              ? "bg-[var(--green)] text-foreground"
-                              : day[slot]
-                              ? isMorning
-                                ? "bg-[var(--accent-fill)] text-foreground"
-                                : "bg-[var(--neutral)] text-foreground"
-                              : "bg-card text-muted-foreground"
-                          } focus:outline-none focus:-translate-x-px focus:-translate-y-px focus:shadow-[var(--shadow-sm)]`}
-                        >
-                          <option value="">--</option>
-                          {agents.map((a) => (
-                            <option key={a.agent_id} value={a.agent_id} disabled={a.agent_id === day[slots[index === 0 ? 1 : 0]]}>
-                              {a.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ))}
+                    <label className="min-w-0">
+                      <span className="block px-1 pb-0.5 font-display text-[9px] font-extrabold uppercase text-muted-foreground">
+                        Guardia
+                      </span>
+                      <select
+                        value={day[slot]}
+                        onChange={(e) => updateSlot(date, slot, e.target.value)}
+                        className={`w-full px-1.5 py-1.5 rounded-[var(--radius-sm)] text-xs font-bold border-2 border-foreground transition-colors cursor-pointer ${
+                          fullDay
+                            ? "bg-[var(--green)] text-foreground"
+                            : day[slot]
+                            ? isMorning
+                              ? "bg-[var(--accent-fill)] text-foreground"
+                              : "bg-[var(--neutral)] text-foreground"
+                            : "bg-card text-muted-foreground"
+                        } focus:outline-none focus:-translate-x-px focus:-translate-y-px focus:shadow-[var(--shadow-sm)]`}
+                      >
+                        <option value="">--</option>
+                        {agents.map((a) => (
+                          <option key={a.agent_id} value={a.agent_id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 );
               })}

@@ -12,6 +12,9 @@ export async function saveMonthSchedule(scheduleData: DaySchedule[]) {
   const supabase = createSupabaseServer();
 
   if (scheduleData.length === 0) return { success: false, error: "No data" };
+  if (scheduleData.some((day) => day.morning.length > 1 || day.afternoon.length > 1)) {
+    return { success: false, error: "V3 permite una sola guardia por turno" };
+  }
 
   // NOTE: It is intentionally ALLOWED for the same agent to cover both morning
   // and afternoon on the same day (full-day coverage — common on weekends with a

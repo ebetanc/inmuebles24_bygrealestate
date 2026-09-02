@@ -62,7 +62,7 @@
                   {
                     "id": "route-guard",
                     "leftValue": "={{ $json.state }}",
-              "rightValue": "guard_delivery_requested",
+                    "rightValue": "guard_delivery_requested",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -85,7 +85,7 @@
                   {
                     "id": "route-unassigned",
                     "leftValue": "={{ $json.state }}",
-              "rightValue": "assigned",
+                    "rightValue": "assigned",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -116,7 +116,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const state = String($json.state || 'missing');\nconst opportunityId = $json.opportunity_id == null ? 'missing' : String($json.opportunity_id);\nif (!['guard_delivery_pending', 'unassigned_alerted'].includes(state)) {\n  throw new Error(`unexpected_routing_transition_state state=${state} opportunity_id=${opportunityId}`);\n}\nreturn [{ json: $json }];"
+        "jsCode": "const state = String($json.state || 'missing');\nconst opportunityId = $json.opportunity_id == null ? 'missing' : String($json.opportunity_id);\nif (!['guard_delivery_pending', 'unassigned_alerted', 'open', 'awaiting_delivery_timeout', 'missing_delivery_attempt', 'missing_capture_context', 'missing'].includes(state)) {\n  throw new Error(`unexpected_routing_transition_state state=${state} opportunity_id=${opportunityId}`);\n}\nreturn [{ json: $json }];"
       },
       "id": "a1a2a3a4-0014-4000-8000-000000000014",
       "name": "Reject Unexpected Transition State",
@@ -170,7 +170,8 @@
           "value": "Bo2YbbUpmBzRbhDa",
           "mode": "id"
         },
-        "options": {}
+        "options": {},
+        "mode": "each"
       },
       "id": "a1a2a3a4-0006-4000-8000-000000000006",
       "name": "Call Directed Guard Offer",

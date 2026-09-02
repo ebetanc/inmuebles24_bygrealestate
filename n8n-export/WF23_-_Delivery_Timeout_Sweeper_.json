@@ -1,7 +1,7 @@
 {
   "id": "MjfHw3tYE2qYgJfM",
   "name": "WF23 - Delivery Timeout Sweeper",
-  "active": true,
+  "active": false,
   "isArchived": false,
   "nodes": [
     {
@@ -27,8 +27,10 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH claimed AS (SELECT * FROM public.v3_claim_delivery_attempts(100,NOW())) SELECT a.attempt_id,a.opportunity_id,a.capture_event_id,a.routing_tier AS expected_tier,a.target_agent_id,a.target_number,a.lease_token,a.status,a.provider_accepted_at,a.requested_at FROM claimed a JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id JOIN public.i24_capture_events e ON e.capture_event_id=a.capture_event_id WHERE a.delivery_kind='offer' AND a.delivered_at IS NULL AND o.v3_enabled IS TRUE AND o.assigned_agent_id IS NULL AND o.current_delivery_attempt_id=a.attempt_id AND o.routing_tier=a.routing_tier AND COALESCE(a.provider_accepted_at,a.requested_at)+INTERVAL '2 minutes' <= NOW() AND COALESCE(e.offer_context->>'easybroker_url','') ~* '^https://(www\\.)?easybroker\\.com/' UNION ALL SELECT a.attempt_id,a.opportunity_id,a.capture_event_id,a.routing_tier AS expected_tier,a.target_agent_id,a.target_number,a.lease_token,a.status,a.provider_accepted_at,a.requested_at FROM public.lead_routing_delivery_attempts a JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id JOIN public.i24_capture_events e ON e.capture_event_id=a.capture_event_id WHERE a.delivery_kind='offer' AND a.status='sent' AND a.delivered_at IS NULL AND o.v3_enabled IS TRUE AND o.assigned_agent_id IS NULL AND o.current_delivery_attempt_id=a.attempt_id AND o.routing_tier=a.routing_tier AND COALESCE(a.provider_accepted_at,a.requested_at)+INTERVAL '2 minutes' <= NOW() AND COALESCE(e.offer_context->>'easybroker_url','') ~* '^https://(www\\.)?easybroker\\.com/' UNION ALL SELECT a.attempt_id,a.opportunity_id,a.capture_event_id,a.routing_tier AS expected_tier,a.target_agent_id,a.target_number,a.lease_token,a.status,a.provider_accepted_at,a.requested_at FROM public.lead_routing_delivery_attempts a JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id JOIN public.i24_capture_events e ON e.capture_event_id=a.capture_event_id WHERE a.delivery_kind='offer' AND a.status='delivered' AND a.delivered_at IS NOT NULL AND o.v3_enabled IS TRUE AND o.assigned_agent_id IS NULL AND o.current_delivery_attempt_id=a.attempt_id AND o.routing_tier=a.routing_tier AND COALESCE(o.expires_at,a.delivered_at+INTERVAL '5 minutes') <= NOW() AND COALESCE(e.offer_context->>'easybroker_url','') ~* '^https://(www\\.)?easybroker\\.com/';",
-        "options": {}
+        "query": "SET LOCAL statement_timeout = '8s'; WITH claimed AS (SELECT * FROM public.v3_claim_delivery_attempts(100,NOW())) SELECT a.attempt_id,a.opportunity_id,a.capture_event_id,a.routing_tier AS expected_tier,a.target_agent_id,a.target_number,a.lease_token,a.status,a.provider_accepted_at,a.requested_at FROM claimed a JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id JOIN public.i24_capture_events e ON e.capture_event_id=a.capture_event_id WHERE a.delivery_kind='offer' AND a.delivered_at IS NULL AND o.v3_enabled IS TRUE AND o.assigned_agent_id IS NULL AND o.current_delivery_attempt_id=a.attempt_id AND o.routing_tier=a.routing_tier AND COALESCE(a.provider_accepted_at,a.requested_at)+INTERVAL '2 minutes' <= NOW() UNION ALL SELECT a.attempt_id,a.opportunity_id,a.capture_event_id,a.routing_tier AS expected_tier,a.target_agent_id,a.target_number,a.lease_token,a.status,a.provider_accepted_at,a.requested_at FROM public.lead_routing_delivery_attempts a JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id JOIN public.i24_capture_events e ON e.capture_event_id=a.capture_event_id WHERE a.delivery_kind='offer' AND a.status='sent' AND a.delivered_at IS NULL AND o.v3_enabled IS TRUE AND o.assigned_agent_id IS NULL AND o.current_delivery_attempt_id=a.attempt_id AND o.routing_tier=a.routing_tier AND COALESCE(a.provider_accepted_at,a.requested_at)+INTERVAL '2 minutes' <= NOW() UNION ALL SELECT a.attempt_id,a.opportunity_id,a.capture_event_id,a.routing_tier AS expected_tier,a.target_agent_id,a.target_number,a.lease_token,a.status,a.provider_accepted_at,a.requested_at FROM public.lead_routing_delivery_attempts a JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id JOIN public.i24_capture_events e ON e.capture_event_id=a.capture_event_id WHERE a.delivery_kind='offer' AND a.status='delivered' AND a.delivered_at IS NOT NULL AND o.v3_enabled IS TRUE AND o.assigned_agent_id IS NULL AND o.current_delivery_attempt_id=a.attempt_id AND o.routing_tier=a.routing_tier AND COALESCE(o.expires_at,a.delivered_at+INTERVAL '5 minutes') <= NOW();",
+        "options": {
+          "connectionTimeout": 8
+        }
       },
       "id": "wf23-sweep-timeouts",
       "name": "Sweep Delivery Timeouts",
@@ -47,29 +49,64 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "wf23-timeout-attempt-present",
+              "leftValue": "={{ String($json.attempt_id ?? '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf23-has-timeout-candidate",
+      "name": "Has Timeout Candidate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "workflowId": {
           "__rl": true,
           "value": "UNIKqyAvIUAZkNIs",
           "mode": "id"
         },
-        "options": {}
+        "options": {},
+        "mode": "each"
       },
       "id": "wf23-call-wf3c",
       "name": "Call WF3c Transition",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        520,
-        220
+        920,
+        300
       ],
-      "mode": "each",
       "notes": "WF23 is the sole delivery-timeout scheduler; WF3c owns the transition."
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH claimed AS (SELECT * FROM public.claim_v3_assigned_notices(100,NOW())) SELECT a.*,a.target_number AS number,COALESCE(NULLIF(e.offer_context->>'lead_name',''),NULLIF(c.lead_name,''),'No disponible') AS lead_name,COALESCE(NULLIF(e.offer_context->>'lead_phone',''),NULLIF(c.lead_phone,''),NULLIF(o.e164_phone,''),'No disponible') AS lead_phone,COALESCE(NULLIF(e.offer_context->>'property_title',''),NULLIF(e.offer_context->>'property',''),NULLIF(c.current_property,''),NULLIF(o.property_id,''),'No disponible') AS property_title,COALESCE(NULLIF(e.offer_context->>'operation_type',''),NULLIF(e.offer_context->>'operation',''),NULLIF(e.offer_context->>'listing_type',''),'No disponible') AS operation_type,COALESCE(NULLIF(e.offer_context->>'property_zone',''),NULLIF(e.offer_context->>'zone',''),NULLIF(e.offer_context->>'address',''),'No disponible') AS property_zone,COALESCE(NULLIF(e.offer_context->>'property_price',''),NULLIF(e.offer_context->>'price',''),'No disponible') AS property_price,COALESCE(NULLIF(e.property_public_id,''),NULLIF(o.property_id,''),'No disponible') AS property_public_id,e.offer_context->>'easybroker_url' AS easybroker_url FROM claimed a JOIN public.i24_capture_events e ON e.capture_event_id=a.capture_event_id JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id LEFT JOIN public.conversations c ON c.conversation_id=o.conversation_id WHERE COALESCE(e.offer_context->>'easybroker_url','') ~* '^https://(www\\.)?easybroker\\.com/';",
-        "options": {}
+        "query": "SET LOCAL statement_timeout = '8s'; WITH claimed AS (SELECT * FROM public.claim_v3_assigned_notices(100,NOW())) SELECT a.*,a.target_number AS number,COALESCE(NULLIF(e.offer_context->>'lead_name',''),NULLIF(c.lead_name,''),'No disponible') AS lead_name,COALESCE(NULLIF(e.offer_context->>'lead_phone',''),NULLIF(c.lead_phone,''),NULLIF(o.e164_phone,''),'No disponible') AS lead_phone,COALESCE(NULLIF(e.offer_context->>'property_title',''),NULLIF(e.offer_context->>'property',''),NULLIF(c.current_property,''),NULLIF(o.property_id,''),'No disponible') AS property_title,COALESCE(NULLIF(e.offer_context->>'operation_type',''),NULLIF(e.offer_context->>'operation',''),NULLIF(e.offer_context->>'listing_type',''),'No disponible') AS operation_type,COALESCE(NULLIF(e.offer_context->>'property_zone',''),NULLIF(e.offer_context->>'zone',''),NULLIF(e.offer_context->>'address',''),'No disponible') AS property_zone,COALESCE(NULLIF(e.offer_context->>'property_price',''),NULLIF(e.offer_context->>'price',''),'No disponible') AS property_price,COALESCE(NULLIF(e.property_public_id,''),NULLIF(o.property_id,''),'No disponible') AS property_public_id,e.offer_context->>'easybroker_url' AS easybroker_url FROM claimed a JOIN public.i24_capture_events e ON e.capture_event_id=a.capture_event_id JOIN public.lead_routing_opportunities o ON o.opportunity_id=a.opportunity_id LEFT JOIN public.conversations c ON c.conversation_id=o.conversation_id WHERE COALESCE(e.offer_context->>'easybroker_url','') ~* '^https://(www\\.)?easybroker\\.com/';",
+        "options": {
+          "connectionTimeout": 8
+        }
       },
       "id": "wf23-claim-assigned-notices",
       "name": "Claim Assigned Notices",
@@ -88,22 +125,55 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "wf23-assigned-attempt-present",
+              "leftValue": "={{ String($json.attempt_id ?? '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf23-has-assigned-notice",
+      "name": "Has Assigned Notice?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        500
+      ]
+    },
+    {
+      "parameters": {
         "workflowId": {
           "__rl": true,
           "value": "Bo2YbbUpmBzRbhDa",
           "mode": "id"
         },
-        "options": {}
+        "options": {},
+        "mode": "each"
       },
       "id": "wf23-call-wf13-assigned",
       "name": "Call WF13 Assigned Notice",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        720,
+        920,
         500
-      ],
-      "mode": "each"
+      ]
     }
   ],
   "connections": {
@@ -127,14 +197,37 @@
       "main": [
         [
           {
-            "node": "Call WF3c Transition",
+            "node": "Has Timeout Candidate?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
+    "Has Timeout Candidate?": {
+      "main": [
+        [
+          {
+            "node": "Call WF3c Transition",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
     "Claim Assigned Notices": {
+      "main": [
+        [
+          {
+            "node": "Has Assigned Notice?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Assigned Notice?": {
       "main": [
         [
           {
@@ -142,7 +235,8 @@
             "type": "main",
             "index": 0
           }
-        ]
+        ],
+        []
       ]
     }
   },
@@ -150,6 +244,7 @@
     "executionOrder": "v1",
     "saveExecutionProgress": false,
     "saveManualExecutions": false,
+    "executionTimeout": 20,
     "timezone": "America/Mexico_City",
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "none",

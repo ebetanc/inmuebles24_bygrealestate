@@ -35,12 +35,15 @@ export function SourceChart({ bySource }: SourceChartProps) {
     raw: bySource[s.key] / total,
   }));
 
-  let offset = 0;
-  const segments = percentages.map((s) => {
-    const dashArray = s.raw * circumference;
-    const dashOffset = -offset;
-    offset += dashArray;
-    return { ...s, dashArray, dashOffset };
+  const segments = percentages.map((s, index) => {
+    const priorRaw = percentages
+      .slice(0, index)
+      .reduce((sum, item) => sum + item.raw, 0);
+    return {
+      ...s,
+      dashArray: s.raw * circumference,
+      dashOffset: -(priorRaw * circumference),
+    };
   });
 
   return (

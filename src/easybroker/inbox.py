@@ -10,6 +10,7 @@ import asyncio
 import json
 import random
 import re
+import unicodedata
 from pathlib import Path
 
 from loguru import logger
@@ -250,6 +251,50 @@ _TAG_AGREGAR_NOTA_JS = """
 }
 """
 
+# Read the current EasyBroker assignee from the request details.  This is a
+# separate source of truth from our timeline notes: a human can take a request
+# in EasyBroker before the routing worker writes its note.
+_READ_ASSIGNEE_JS = r"""
+() => {
+    const visible = (el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    };
+    const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+    const candidates = [];
+    let labels = 0;
+    let unassignedMarkers = 0;
+    for (const el of document.querySelectorAll('span,div,p,label')) {
+        if (el.children.length > 0 || clean(el.textContent) !== 'Asignada a' || !visible(el)) continue;
+        labels += 1;
+        let parent = el.parentElement;
+        for (let depth = 0; parent && depth < 4; depth += 1, parent = parent.parentElement) {
+            const lines = (parent.innerText || '').split('\n').map(clean).filter(Boolean);
+            const index = lines.findIndex((line) => line === 'Asignada a');
+            if (index >= 0 && index + 1 < lines.length) {
+                const candidate = lines[index + 1];
+                if (['Sin asignar','No asignada','Asignar','Asignar a','Asignada a'].includes(candidate)) {
+                    unassignedMarkers += 1;
+                } else if (!['Fuente','Estatus'].includes(candidate)) {
+                    candidates.push(candidate);
+                }
+                break;
+            }
+        }
+    }
+    const unique = [...new Set(candidates)];
+    if (unique.length === 1) return { verified: true, assignee: unique[0] };
+    if (unique.length > 1) return { verified: false, assignee: null };
+    const explicitlyUnassigned = [...document.querySelectorAll('a,button,[role="button"]')]
+        .some((el) => visible(el) && ['Asignada a','Sin asignar','No asignada','Asignar','Asignar a']
+            .includes(clean(el.textContent)));
+    if (labels > 0 && (unassignedMarkers > 0 || explicitlyUnassigned)) {
+        return { verified: true, assignee: '' };
+    }
+    return { verified: false, assignee: null };
+}
+"""
+
 
 async def _clear_tag(page: Page, value: str) -> None:
     await page.evaluate(
@@ -347,6 +392,43 @@ async def note_exists(page: Page, note_text: str) -> bool:
         return False
 
 
+async def read_easybroker_assignee(page: Page) -> str | None:
+    """Return assignee name, ``""`` when unassigned, or ``None`` if unverifiable."""
+    try:
+        result = await page.evaluate(_READ_ASSIGNEE_JS)
+        if not isinstance(result, dict) or result.get("verified") is not True:
+            return None
+        return str(result.get("assignee") or "").strip()
+    except Exception as e:
+        logger.warning("Could not verify EasyBroker assignee: {}", e)
+        return None
+
+
+def _normalized_first_name(value: str) -> str:
+    compact = " ".join((value or "").split())
+    decomposed = unicodedata.normalize("NFKD", compact)
+    folded = "".join(char for char in decomposed if not unicodedata.combining(char)).casefold()
+    return folded.split(" ", 1)[0] if folded else ""
+
+
+_RESPONSIBLE_NOTE_RE = re.compile(r"^\s*RESPONSABLE\s*:\s*(\S(?:.*\S)?)\s*$", re.I)
+
+
+def _responsible_from_note(note_text: str) -> str | None:
+    match = _RESPONSIBLE_NOTE_RE.fullmatch(note_text or "")
+    return " ".join(match.group(1).split()).casefold() if match else None
+
+
+async def find_responsible_notes(page: Page) -> list[str] | None:
+    """Return visible RESPONSABLE notes, or None when they cannot be verified."""
+    try:
+        texts = await page.get_by_text(_RESPONSIBLE_NOTE_RE).all_inner_texts()
+        return sorted({text.strip() for text in texts if _responsible_from_note(text)})
+    except Exception as e:
+        logger.warning("Could not verify EasyBroker responsible notes: {}", e)
+        return None
+
+
 async def attend_lead(
     page: Page, *, request_id: int | str | None = None, phone: str = "",
     email: str = "", property_id: str = "",
@@ -395,11 +477,68 @@ async def attend_lead(
         logger.error("Could not find Buzón request id={} (phone fallback={})", request_id, allow_phone_fallback)
         return result
 
+    easybroker_assignee = await read_easybroker_assignee(page)
+    if easybroker_assignee is None:
+        result.update(
+            error_code="easybroker_assignee_check_failed",
+            expected_responsible_note=note,
+            easybroker_assignee=None,
+        )
+        return result
+    if easybroker_assignee:
+        expected_first_name = _normalized_first_name(agent_name)
+        actual_first_name = _normalized_first_name(easybroker_assignee)
+        if not expected_first_name or actual_first_name != expected_first_name:
+            result.update(
+                error_code="easybroker_assignee_conflict",
+                expected_responsible_note=note,
+                easybroker_assignee=easybroker_assignee,
+            )
+            logger.error(
+                "EasyBroker assignee conflict: expected={!r} existing={!r}; manual review required",
+                agent_name, easybroker_assignee,
+            )
+            return result
+
+    expected_responsible = _responsible_from_note(note)
+    expected_responsible_key = _normalized_first_name(expected_responsible or "")
+    existing_responsible_notes: list[str] | None = []
+    if expected_responsible:
+        existing_responsible_notes = await find_responsible_notes(page)
+        if existing_responsible_notes is None:
+            result.update(
+                error_code="responsible_note_check_failed",
+                expected_responsible_note=note,
+                existing_responsible_notes=None,
+            )
+            return result
+        conflicting_notes = [
+            existing for existing in existing_responsible_notes
+            if _normalized_first_name(_responsible_from_note(existing) or "")
+            != expected_responsible_key
+        ]
+        if conflicting_notes:
+            result.update(
+                error_code="responsible_note_conflict",
+                expected_responsible_note=note,
+                existing_responsible_notes=existing_responsible_notes,
+            )
+            logger.error(
+                "EasyBroker responsible conflict: expected={!r} existing={!r}; manual review required",
+                note, existing_responsible_notes,
+            )
+            return result
+
     if not note_done:
         # The exact request page scopes idempotency. If the process died after
         # Guardar but before Supabase evidence, reconcile the visible note
         # without writing a duplicate.
-        result["note_ok"] = await note_exists(page, note)
+        result["note_ok"] = bool(
+            expected_responsible
+            and any(_normalized_first_name(_responsible_from_note(existing) or "")
+                    == expected_responsible_key
+                    for existing in existing_responsible_notes)
+        ) or await note_exists(page, note)
         if not result["note_ok"] and allow_legacy_note:
             # Reconcile any pre-migration note without adding a second one.
             result["note_ok"] = await note_exists(page, legacy_note)

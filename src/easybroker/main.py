@@ -107,6 +107,12 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
                 "reconciled_existing": bool(note_ok and not result.get("note_changed")),
                 "match_method": result.get("match_method"),
             }
+            evidence.update({
+                key: result[key] for key in (
+                    "error_code", "expected_responsible_note", "existing_responsible_notes",
+                    "easybroker_assignee",
+                ) if key in result
+            })
             try:
                 saved = await finish_v3_easybroker_effect(
                     settings,
@@ -143,6 +149,12 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
                 "status_changed": bool(result.get("status_changed")),
                 "match_method": result.get("match_method"),
             }
+            evidence.update({
+                key: result[key] for key in (
+                    "error_code", "expected_responsible_note", "existing_responsible_notes",
+                    "easybroker_assignee",
+                ) if key in result
+            })
             try:
                 saved = await finish_v3_easybroker_effect(
                     settings,
@@ -266,13 +278,14 @@ async def async_main(args: argparse.Namespace) -> int:
                     status_done=l["eb_marked_attended"],
                     note_text=f"RESPONSABLE: {l['agent_name']}",
                 )
-                error_code = None
-                if not res["found"]:
-                    error_code = "request_not_found"
-                elif not res["note_ok"]:
-                    error_code = "note_failed"
-                elif not res["status_ok"]:
-                    error_code = "status_failed"
+                error_code = res.get("error_code")
+                if not error_code:
+                    if not res["found"]:
+                        error_code = "request_not_found"
+                    elif not res["note_ok"]:
+                        error_code = "note_failed"
+                    elif not res["status_ok"]:
+                        error_code = "status_failed"
                 evidence_ok = await finish_attend_attempt(
                     settings, l["conversation_id"], l["lease_token"],
                     note_ok=res["note_ok"], status_ok=res["status_ok"],
