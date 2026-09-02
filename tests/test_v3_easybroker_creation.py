@@ -1,4 +1,5 @@
 """Local contract tests for the one-shot I24 -> EasyBroker bridge."""
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -581,3 +582,36 @@ async def test_creation_fetch_covers_oldest_claim_window_and_invalid_claim_never
 
 async def _async(value):
     return value
+
+
+def test_fetch_contact_requests_follows_url_next_page(monkeypatch):
+    calls = []
+
+    class Response:
+        def __init__(self, page):
+            self._page = page
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            row = {"id": self._page, "property_id": "EB-AAAA", "phone": "+525500000000",
+                   "email": None, "happened_at": "2026-09-02T10:00:00Z"}
+            nxt = "https://api.easybroker.com/v1/contact_requests?page=2" if self._page == 1 else None
+            return {"content": [row], "pagination": {"next_page": nxt}}
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, headers=None, params=None):
+            calls.append(params["page"])
+            return Response(params["page"])
+
+    monkeypatch.setattr(supa.httpx, "AsyncClient", lambda **kw: Client())
+    rows = asyncio.run(supa.fetch_contact_requests(SimpleNamespace(api_key="k")))
+    assert calls == [1, 2]
+    assert [r["eb_request_id"] for r in rows] == [1, 2]

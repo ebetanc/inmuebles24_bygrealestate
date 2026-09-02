@@ -482,13 +482,11 @@ async def fetch_contact_requests(settings, *, happened_after: datetime | None = 
                 normalized = sanitize_contact_request(row) if isinstance(row, dict) else None
                 if normalized:
                     rows[normalized["eb_request_id"]] = normalized
-            next_page = (payload.get("pagination") or {}).get("next_page")
-            if not next_page:
+            # EasyBroker returns pagination.next_page as a URL (or null on the
+            # last page), so only its presence matters.
+            if not (payload.get("pagination") or {}).get("next_page"):
                 break
-            next_page = int(next_page)
-            if next_page == page:
-                raise ValueError("EasyBroker pagination did not advance")
-            page = next_page
+            page += 1
     return sorted(rows.values(), key=lambda r: (r["happened_at"], r["eb_request_id"]))
 
 
