@@ -477,28 +477,9 @@ async def attend_lead(
         logger.error("Could not find Buzón request id={} (phone fallback={})", request_id, allow_phone_fallback)
         return result
 
-    easybroker_assignee = await read_easybroker_assignee(page)
-    if easybroker_assignee is None:
-        result.update(
-            error_code="easybroker_assignee_check_failed",
-            expected_responsible_note=note,
-            easybroker_assignee=None,
-        )
-        return result
-    if easybroker_assignee:
-        expected_first_name = _normalized_first_name(agent_name)
-        actual_first_name = _normalized_first_name(easybroker_assignee)
-        if not expected_first_name or actual_first_name != expected_first_name:
-            result.update(
-                error_code="easybroker_assignee_conflict",
-                expected_responsible_note=note,
-                easybroker_assignee=easybroker_assignee,
-            )
-            logger.error(
-                "EasyBroker assignee conflict: expected={!r} existing={!r}; manual review required",
-                agent_name, easybroker_assignee,
-            )
-            return result
+    # EasyBroker auto-assigns the property's agent to every request, so the
+    # assignee is evidence only: the V3 RESPONSABLE note always wins.
+    result["easybroker_assignee"] = await read_easybroker_assignee(page)
 
     expected_responsible = _responsible_from_note(note)
     expected_responsible_key = _normalized_first_name(expected_responsible or "")

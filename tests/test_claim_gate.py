@@ -185,6 +185,7 @@ def test_attend_lead_uses_exact_request_id_and_skips_completed_note(monkeypatch)
         "note_ok": True,
         "status_changed": True,
         "note_changed": False,
+        "easybroker_assignee": "",
     }
     assert calls == [("request", 222), ("status", None)]
 
@@ -375,8 +376,8 @@ def test_easybroker_assignee_same_first_name_allows_canonical_note(monkeypatch):
     assert calls == [("note", "RESPONSABLE: Marusa")]
 
 
-def test_easybroker_assignee_conflict_and_unverifiable_fail_closed(monkeypatch):
-    side_effects = []
+def test_easybroker_assignee_is_evidence_only_and_never_blocks_note(monkeypatch):
+    notes = []
 
     class Page:
         def __init__(self, result):
@@ -386,33 +387,43 @@ def test_easybroker_assignee_conflict_and_unverifiable_fail_closed(monkeypatch):
             assert script == inbox._READ_ASSIGNEE_JS
             return self.result
 
+        def get_by_text(self, pattern):
+            class Loc:
+                async def all_inner_texts(self):
+                    return []
+            return Loc()
+
     async def yes(*args, **kwargs):
         return True
 
-    async def must_not_run(*args, **kwargs):
-        side_effects.append("side_effect")
+    async def no(*args, **kwargs):
+        return False
+
+    async def add_note(page, text):
+        notes.append(text)
         return True
 
     monkeypatch.setattr(inbox, "goto_buzon", yes)
     monkeypatch.setattr(inbox, "find_request_by_id", yes)
-    monkeypatch.setattr(inbox, "add_note", must_not_run)
-    monkeypatch.setattr(inbox, "set_status_atendida", must_not_run)
+    monkeypatch.setattr(inbox, "add_note", add_note)
+    monkeypatch.setattr(inbox, "note_exists", no)
 
     conflict = asyncio.run(inbox.attend_lead(
         Page({"verified": True, "assignee": "Marusa Bobadilla"}),
-        request_id=222, agent_name="Sandy", note_done=False, status_done=False,
+        request_id=222, agent_name="Sandy", note_done=False, status_done=True,
+        allow_legacy_note=False,
     ))
     unreadable = asyncio.run(inbox.attend_lead(
         Page({"verified": False, "assignee": None}),
-        request_id=223, agent_name="Sandy", note_done=False, status_done=False,
+        request_id=223, agent_name="Sandy", note_done=False, status_done=True,
+        allow_legacy_note=False,
     ))
 
-    assert conflict["error_code"] == "easybroker_assignee_conflict"
+    assert "error_code" not in conflict and conflict["note_ok"]
     assert conflict["easybroker_assignee"] == "Marusa Bobadilla"
-    assert unreadable["error_code"] == "easybroker_assignee_check_failed"
+    assert "error_code" not in unreadable and unreadable["note_ok"]
     assert unreadable["easybroker_assignee"] is None
-    assert "if (unique.length > 1)" in inbox._READ_ASSIGNEE_JS
-    assert side_effects == []
+    assert notes == ["RESPONSABLE: Sandy", "RESPONSABLE: Sandy"]
 
 
 def test_easybroker_assignee_reader_accepts_only_explicit_unassigned_state():
