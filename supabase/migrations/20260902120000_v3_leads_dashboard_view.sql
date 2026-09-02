@@ -21,10 +21,8 @@ WITH att AS (
     max(a.delivered_at) FILTER (
       WHERE a.delivery_kind = 'assigned_notice'
     ) AS sandy_notice_delivered_at,
-    min(a.claimed_at) AS claimed_at,
-    -- Clock base for the claim is the delivery of the claimed attempt.
-    min(COALESCE(a.delivered_at, a.provider_accepted_at, a.requested_at))
-      FILTER (WHERE a.claimed_at IS NOT NULL) AS claim_delivered_at,
+    -- NOTE: a.claimed_at is the sender's lease (WF13/WF23), NOT the human click.
+    -- The human click lives in lead_routing_opportunities.accepted_at (see ca below).
     count(*) FILTER (
       WHERE a.delivery_kind = 'offer'
         AND a.provider_accepted_at IS NULL
@@ -56,10 +54,12 @@ eb AS (
 SELECT
   o.opportunity_id,
   o.created_at,
-  COALESCE(NULLIF(c.lead_name, ''), cap.offer_context->>'lead_name') AS lead_name,
-  COALESCE(NULLIF(c.lead_phone, ''), cap.offer_context->>'lead_phone', o.e164_phone) AS lead_phone,
+  COALESCE(NULLIF(c.lead_name, ''), NULLIF(cap.offer_context->>'name', ''), cap.offer_context->>'lead_name') AS lead_name,
+  COALESCE(NULLIF(c.lead_phone, ''), o.e164_phone, cap.offer_context->>'phone', cap.offer_context->>'lead_phone') AS lead_phone,
   o.property_id,
-  COALESCE(cap.offer_context->>'property_title', c.current_property) AS property_title,
+  COALESCE(cap.offer_context->>'property_title',
+           NULLIF(concat_ws(' · ', cap.offer_context->>'property', cap.offer_context->>'address'), ''),
+           c.current_property) AS property_title,
   cap.offer_context->>'easybroker_url' AS easybroker_url,
   o.state,
   o.routing_tier,
@@ -68,13 +68,14 @@ SELECT
   ag.role AS assigned_role,
   o.assigned_at,
   CASE
-    WHEN att.claimed_at IS NOT NULL THEN 'claim'
-    WHEN ev.manager_assigned THEN 'sandy_fallback'
+    WHEN o.accepted_at IS NOT NULL THEN 'claim'
+    WHEN ev.manager_assigned OR o.external_evidence->>'v3_final_route' = 'sandy' THEN 'sandy_fallback'
+    WHEN o.assigned_agent_id IS NOT NULL THEN 'direct'
     ELSE NULL
   END AS assignment_method,
   CASE
-    WHEN att.claimed_at IS NOT NULL AND att.claim_delivered_at IS NOT NULL
-      THEN round(EXTRACT(EPOCH FROM (att.claimed_at - att.claim_delivered_at)) / 60.0)::int
+    WHEN o.accepted_at IS NOT NULL AND ca.delivered_base IS NOT NULL
+      THEN round(EXTRACT(EPOCH FROM (o.accepted_at - ca.delivered_base)) / 60.0)::int
     ELSE NULL
   END AS minutes_to_claim,
   att.owner_offer_delivered_at,
@@ -120,6 +121,16 @@ LEFT JOIN LATERAL (
   ORDER BY e.capture_event_id DESC
   LIMIT 1
 ) cap ON true
+LEFT JOIN LATERAL (
+  -- The offer addressed to the agent who ended up assigned: its delivery is the claim clock base.
+  SELECT COALESCE(a.delivered_at, a.provider_accepted_at, a.requested_at) AS delivered_base
+  FROM public.lead_routing_delivery_attempts a
+  WHERE a.opportunity_id = o.opportunity_id
+    AND a.delivery_kind = 'offer'
+    AND a.target_agent_id = o.assigned_agent_id
+  ORDER BY a.requested_at DESC
+  LIMIT 1
+) ca ON true
 WHERE o.v3_enabled;
 
 COMMENT ON VIEW public.v3_leads_dashboard IS
