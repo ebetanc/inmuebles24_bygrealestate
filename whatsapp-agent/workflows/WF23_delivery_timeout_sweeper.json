@@ -84,7 +84,9 @@
           "value": "UNIKqyAvIUAZkNIs",
           "mode": "id"
         },
-        "options": {},
+        "options": {
+          "waitForSubWorkflow": false
+        },
         "mode": "each"
       },
       "id": "wf23-call-wf3c",
@@ -160,7 +162,9 @@
           "value": "Bo2YbbUpmBzRbhDa",
           "mode": "id"
         },
-        "options": {},
+        "options": {
+          "waitForSubWorkflow": false
+        },
         "mode": "each"
       },
       "id": "wf23-call-wf13-assigned",
