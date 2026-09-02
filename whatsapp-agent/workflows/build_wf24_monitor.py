@@ -84,12 +84,13 @@ if (Number(h.stuck_requested) > 0) alerts.push(h.stuck_requested + ' oferta(s) p
 if (Number(h.stuck_expired) > 0) alerts.push(h.stuck_expired + ' oferta(s) vencidas sin escalar (¿WF23 apagado?)');
 if (Number(h.manual_review_new) > 0) alerts.push(h.manual_review_new + ' solicitud(es) nuevas cayeron en revisión manual (sin ID EasyBroker)');
 
-let nClaim = 0, nSandy = 0, nOpen = 0, nEbOk = 0, nProblem = 0;
+let nNew = 0, nClaim = 0, nSandy = 0, nOpen = 0, nEbOk = 0, nProblem = 0;
 const cards = leads.map(l => {
   const attempts = l.attempts || [], events = l.events || [], effects = l.eb_effects || [];
   const lines = [];
   const problems = [];
   const detected = events.find(e => e.type === 'detected');
+  if (detected && new Date(detected.at) >= new Date(row.since)) nNew++;
   const contacted = events.find(e => e.type === 'i24_contacted');
   lines.push(`Detectado ${hhmm(detected ? detected.at : l.created_at)} · Contactado en Inmuebles24 ${contacted ? OK + ' ' + hhmm(contacted.at) : (l.contactado_status === 'verified' ? OK : WAIT)}`);
   if (l.v3_night_queued_at) lines.push(`Cola nocturna ${hhmm(l.v3_night_queued_at)} ${dmy(l.v3_night_queued_at)} → liberado ${l.v3_night_released_at ? OK + ' ' + hhmm(l.v3_night_released_at) : WAIT + ' pendiente 08:05'}`);
@@ -102,11 +103,11 @@ const cards = leads.map(l => {
       const isClaim = !!l.accepted_at && a.to_id === l.assigned_agent_id;
       if (isClaim) { st = `${OK} <b>Tomó ${esc(a.to)}</b> ${hhmm(l.accepted_at)} (${mins(a.delivered_at || a.sent_at || a.requested_at, l.accepted_at)} min tras entrega)`; claimed = a; }
       else if (a.status === 'expired') st = `${BAD} venció sin respuesta`;
-      else if (a.status === 'failed' || a.failed_at) { st = `${BAD} WhatsApp falló ${hhmm(a.failed_at)}`; problems.push('WhatsApp no llegó a ' + a.to); }
+      else if (a.status === 'failed' || a.failed_at) { st = `${BAD} WhatsApp falló ${hhmm(a.failed_at)}`; if (!l.assigned_agent_id) problems.push('WhatsApp no llegó a ' + a.to); }
       else if (a.delivered_at && l.assigned_agent_id) st = `${BAD} venció sin respuesta`;
       else if (a.delivered_at) st = `${WAIT} entregado, esperando Tomo (5 min)`;
-      else if (a.sent_at) { st = `${WAIT} enviado, sin confirmación de entrega`; if (mins(a.sent_at, row.until) > 3) problems.push('Sin "entregado" de Meta para ' + a.to); }
-      else { st = `${WAIT} pedido, aún no enviado`; if (mins(a.requested_at, row.until) > 3) problems.push('Oferta a ' + a.to + ' pedida hace ' + mins(a.requested_at, row.until) + ' min sin enviar'); }
+      else if (a.sent_at) { st = `${WAIT} enviado, sin confirmación de entrega`; if (!l.assigned_agent_id && mins(a.sent_at, row.until) > 3) problems.push('Sin "entregado" de Meta para ' + a.to); }
+      else { st = `${WAIT} pedido, aún no enviado`; if (!l.assigned_agent_id && mins(a.requested_at, row.until) > 3) problems.push('Oferta a ' + a.to + ' pedida hace ' + mins(a.requested_at, row.until) + ' min sin enviar'); }
       lines.push(`WhatsApp a <b>${esc(a.to)}</b> (${tierName(a.tier)}): enviado ${hhmm(a.sent_at || a.requested_at)} · entregado ${a.delivered_at ? OK + ' ' + hhmm(a.delivered_at) : '—'} · ${st}`);
     } else if (a.kind === 'assigned_notice') {
       lines.push(`Aviso de asignación a <b>${esc(a.to)}</b>: ${a.delivered_at ? OK + ' entregado ' + hhmm(a.delivered_at) : (a.failed_at ? BAD + ' falló' : WAIT + ' ' + a.status)}`);
@@ -156,7 +157,8 @@ ${healthHtml}
 ${leads.length ? cards.join('') : '<p style="color:#5D6C79">Sin leads con actividad en esta ventana.</p>'}
 <p style="font-size:11px;color:#5D6C79;margin-top:18px">Hechos leídos directamente de Supabase (oportunidades, intentos de entrega, eventos, efectos EasyBroker). Horas en CDMX. Generado por WF24.</p></div>`;
 const subject = `[V3] ${mode === 'day' ? 'Reporte del día' : hhmm(row.until)} · ${leads.length} leads · ${nClaim + nSandy} asignados${nProblem ? ' · ' + nProblem + ' con problema' : ''}${alerts.length ? ' · ALERTA' : ''}`;
-const send = mode === 'day' || leads.length > 0 || alerts.length > 0;
+// Half-hour mail only when something needs eyes: new lead, live problem or health alert.
+const send = mode === 'day' || nNew > 0 || nProblem > 0 || alerts.length > 0;
 return [{ json: { send, subject, html, mode, n_leads: leads.length, n_problem: nProblem, alerts } }];
 """
 
