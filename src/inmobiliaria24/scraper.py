@@ -430,14 +430,6 @@ _TABS = [
     ("whatsapp",  "button.whatsapp"),       # "Contactaron por WhatsApp"
 ]
 
-# Tabs whose rows are NOT inquiries and must never reach the auction.
-# The 'telefono' tab records "Vió teléfono": the person only clicked to reveal
-# the number and never contacted anyone. Routing those produced cold calls to
-# people who had asked for nothing ("yo no pedí información", 2026-09-03).
-# Leads that also wrote a real message still arrive via 'mensajes', which is
-# scraped first and wins the per-lead_id dedup below.
-_IGNORED_TABS = {"telefono"}
-
 
 async def extract_leads_list(page: Page) -> list[dict]:
     """Navigate to the Interesados inbox and extract Pendiente leads from all tabs."""
@@ -448,10 +440,6 @@ async def extract_leads_list(page: Page) -> list[dict]:
     all_pendiente: list[dict] = []
 
     for tab_name, tab_selector in _TABS:
-        if tab_name in _IGNORED_TABS:
-            logger.info("Tab '{}': ignored — not an inquiry, never routed", tab_name)
-            continue
-
         # Click the tab (skip for the default Mensajes tab).
         if tab_selector:
             clicked = await page.evaluate(_CLICK_TAB_JS, tab_selector)
