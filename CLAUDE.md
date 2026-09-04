@@ -13,9 +13,8 @@ Rules:
 Lead Routing V3 en producción (desde 2026-09-02). Ver `README.md` para el detalle.
 
 Flujo vivo: scraper en Raspberry Pi (`/opt/inmobiliaria24`, `inmobiliaria24.timer`
-cada 15 min 24/7) lee **solo la bandeja `mensajes`** de Inmuebles24 —desde el
-2026-09-04 se ignoran `telefono` ("Vió teléfono") y `whatsapp` ("Contactó por
-Whatsapp"): ninguna de las dos es una consulta, la persona no escribió nada—
+cada 15 min 24/7) lee las bandejas `mensajes` y `whatsapp` de Inmuebles24 —la de
+`telefono` ("Vió teléfono") se ignora desde el 2026-09-04, no es una consulta—
 → `v3_intake` en Supabase → marca
 `Contactado` (verificado) → `POST https://n8n.srv856940.hstgr.cloud/webhook/scraper-leads`
 → WF10 → WF12 (dueño por tag de EasyBroker) → WF13 (plantilla Meta `lead_subasta_v3`,

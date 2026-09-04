@@ -34,25 +34,27 @@ def _row(lead_id, name):
     return {"lead_id": lead_id, "name": name, "listing_id": "L1", "status": "Pendiente"}
 
 
-def test_only_the_mensajes_tab_is_scraped_or_routed(monkeypatch):
-    """Only 'mensajes' carries a question the person wrote; the rest never route."""
+def test_telefono_tab_is_never_scraped_or_routed(monkeypatch):
+    """'Vió teléfono' rows are not inquiries: they must never reach the auction."""
     leads, clicked = _run_extract(monkeypatch, {
         "mensajes": [_row("1", "Ana")],
         "telefono": [_row("2", "Luis")],
         "whatsapp": [_row("3", "Milena")],
     })
 
-    assert [(l["lead_id"], l["source_tab"]) for l in leads] == [("1", "mensajes")]
-    # The tabs are not even opened, so the run does not pay for loading them.
-    assert clicked == []
+    tabs = {l["source_tab"] for l in leads}
+    assert tabs == {"mensajes", "whatsapp"}
+    assert [l["lead_id"] for l in leads] == ["1", "3"]
+    # The tab is not even opened, so the run does not pay for loading it.
+    assert "telefono" not in clicked
 
 
 def test_lead_that_also_wrote_a_message_survives_the_filter(monkeypatch):
-    """Same lead_id in several tabs stays: 'mensajes' is scraped first."""
+    """Same lead_id in 'mensajes' and 'telefono' stays: 'mensajes' is scraped first."""
     leads, _ = _run_extract(monkeypatch, {
         "mensajes": [_row("7", "Sofia")],
         "telefono": [_row("7", "Sofia")],
-        "whatsapp": [_row("7", "Sofia")],
+        "whatsapp": [],
     })
 
     assert [(l["lead_id"], l["source_tab"]) for l in leads] == [("7", "mensajes")]
