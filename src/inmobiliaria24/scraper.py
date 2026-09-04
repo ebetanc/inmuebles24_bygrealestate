@@ -430,13 +430,15 @@ _TABS = [
     ("whatsapp",  "button.whatsapp"),       # "Contactaron por WhatsApp"
 ]
 
-# Tabs whose rows are NOT inquiries and must never reach the auction.
-# The 'telefono' tab records "Vió teléfono": the person only clicked to reveal
-# the number and never contacted anyone. Routing those produced cold calls to
-# people who had asked for nothing ("yo no pedí información", 2026-09-03).
-# Leads that also wrote a real message still arrive via 'mensajes', which is
-# scraped first and wins the per-lead_id dedup below.
-_IGNORED_TABS = {"telefono"}
+# Tabs whose rows are NOT inquiries and must never reach the auction. Only
+# 'mensajes' carries a question the person actually wrote about the property.
+#   telefono — "Vió teléfono": only clicked to reveal the number.
+#   whatsapp — "Contactó por Whatsapp": only tapped the button; the message
+#              may never have been sent.
+# Routing either produced cold calls to people who had asked for nothing
+# ("yo no pedí información", 2026-09-03). Leads that also wrote a real message
+# still arrive via 'mensajes', which is scraped first and wins the dedup below.
+_IGNORED_TABS = {"telefono", "whatsapp"}
 
 
 async def extract_leads_list(page: Page) -> list[dict]:
