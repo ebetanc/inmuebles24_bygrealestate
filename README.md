@@ -12,7 +12,7 @@ fue reemplazado; ver [Legacy](#legacy--apagado-o-fuera-del-camino-v3).
 ## Arquitectura V3
 
 ```
-Inmuebles24 (mensajes + whatsapp) --15 min--> scraper (Raspberry Pi)
+Inmuebles24 (3 bandejas) --15 min--> scraper (Raspberry Pi)
       |                                  |
       | marca "Contactado" (verificado)   +--> v3_intake (Supabase)
       v                                            |
@@ -33,12 +33,9 @@ las 08:05.
 
 ## Flujo, paso a paso
 
-1. **Captura.** El scraper (`src/inmobiliaria24/`) recorre las bandejas
-   `mensajes` y `whatsapp` de Inmuebles24 cada 15 minutos, 24/7, y persiste cada
-   solicitud en `v3_intake` antes de tocar nada más. Reintentar el mismo evento
-   no crea otra oportunidad. La bandeja `telefono` se ignora: registra "Vió
-   teléfono" (alguien reveló el número sin contactar a nadie) y subastarla
-   producía llamadas en frío a quien no había pedido nada.
+1. **Captura.** El scraper (`src/inmobiliaria24/`) recorre las 3 bandejas de
+   Inmuebles24 cada 15 minutos, 24/7, y persiste cada solicitud en `v3_intake`
+   antes de tocar nada más. Reintentar el mismo evento no crea otra oportunidad.
 2. **Contactado.** El scraper cambia el estado en Inmuebles24 de `Pendiente` a
    `Contactado` y **verifica** el efecto. Ninguna oferta sale antes de eso.
 3. **Intake.** `POST https://n8n.srv856940.hstgr.cloud/webhook/scraper-leads`
