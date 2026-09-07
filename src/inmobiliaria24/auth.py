@@ -143,17 +143,17 @@ def _rotate_proxy_ip() -> str | None:
     return None
 
 
-async def _session_is_valid(page: Page) -> bool:
+async def _session_is_valid(page: Page, *, wait_for_render: bool = True) -> bool:
     """Return True only if we are on a real logged-in panel.
 
     Hardened against the silent-failure mode where a Cloudflare block or an
-    empty shell passed a URL-only check, so the scraper reported "session valid"
-    and scraped 0 leads without re-logging-in. This only ADDS rejections (never
-    accepts a page the old check rejected), so it cannot cause a spurious
-    re-login of a genuinely valid session.
+    empty shell passed a URL-only check. Give a slow SPA one bounded render
+    wait, then repeat the logout and block checks before accepting it.
     """
     url = page.url.lower()
     if any(frag in url for frag in ("login", "acceso", "ingresar")):
+        return False
+    if not url.startswith((HOME_URL + "panel/", AVISOS_URL)):
         return False
 
     title = (await page.title()).lower()
@@ -174,7 +174,18 @@ async def _session_is_valid(page: Page) -> bool:
     except Exception:
         text = ""
     if len(text.strip()) < 100:
-        return False
+        if not wait_for_render:
+            return False
+        # The authenticated SPA can still be empty after domcontentloaded.
+        # Recheck all logout/block signals after rendering, not just the URL.
+        try:
+            await page.wait_for_function(
+                "() => (document.body?.innerText || '').trim().length >= 100",
+                timeout=15_000,
+            )
+        except Exception:
+            return False
+        return await _session_is_valid(page, wait_for_render=False)
 
     return True
 
@@ -309,6 +320,15 @@ async def login(page: Page, settings: Settings) -> None:
     logger.info("Step 1: Navigating to {}", HOME_URL)
     await page.goto(HOME_URL, wait_until="domcontentloaded")
     await _wait_for_cloudflare(page)
+
+    # A slow panel may have triggered this fallback while cookies remain valid.
+    # The authenticated homepage has Mis avisos and no Ingresar button.
+    if await page.locator(MENU_MIS_AVISOS).count() > 0:
+        await navigate_to_avisos(page)
+        if await _session_is_valid(page):
+            logger.info("Existing session recovered through Mis avisos")
+            return
+        raise AuthenticationError("Authenticated menu found, but panel did not become ready")
 
     # Step 2: Click "Ingresar"
     logger.info("Step 2: Clicking 'Ingresar' button")

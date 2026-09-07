@@ -1233,11 +1233,28 @@ async def send_to_webhook(
         phone = f"+{raw_phone}" if raw_phone.isdigit() and 8 <= len(raw_phone) <= 15 and raw_phone[0] != "0" else raw_phone
         payload.append({**lead, "phone": phone})
 
+    # A proxy/default webhook 200 is not proof that WF10 persisted this capture.
+    v3_capture_id = None
+    if idempotency_key.startswith("v3-route:"):
+        if len(payload) != 1 or not payload[0].get("capture_event_id"):
+            raise ValueError("V3 dispatch requires exactly one durable capture")
+        v3_capture_id = str(payload[0]["capture_event_id"])
+        if idempotency_key != f"v3-route:{v3_capture_id}":
+            raise ValueError("V3 dispatch idempotency key does not match capture")
+
     async with httpx.AsyncClient(timeout=30) as client:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 resp = await client.post(url, json=payload, headers=headers)
                 resp.raise_for_status()
+                if v3_capture_id is not None:
+                    receipt = resp.json()
+                    if (not isinstance(receipt, dict)
+                            or receipt.get("accepted") is not True
+                            or str(receipt.get("capture_event_id")) != v3_capture_id
+                            or str(receipt.get("opportunity_id"))
+                            != str(payload[0].get("opportunity_id"))):
+                        raise ValueError("V3 dispatch returned no matching durable receipt")
                 logger.info(
                     "Webhook response: {} {} (attempt {})",
                     resp.status_code, resp.reason_phrase, attempt,

@@ -89,6 +89,8 @@ def test_v3_contactado_lease_uses_capture_event_id(monkeypatch):
 
     async def claim(limit=20):
         calls.append(("claim", limit))
+        if len(calls) > 1:
+            return []
         return [{
             "capture_event_id": 31,
             "opportunity_id": 17,
@@ -114,8 +116,9 @@ def test_v3_contactado_lease_uses_capture_event_id(monkeypatch):
 
     assert result == {"265183003"}
     assert calls == [
-        ("claim", 20),
+        ("claim", 1),
         ("finish", 31, "lease-31", {"success": True, "error_code": None}),
+        ("claim", 1),
     ]
 
 
@@ -133,7 +136,7 @@ def test_v3_route_dispatch_recovers_when_lead_left_pendiente_scrape(monkeypatch)
     finished = []
 
     async def claim(limit=20):
-        return claims
+        return [claims.pop(0)] if claims else []
 
     async def finish(capture_event_id, lease_token, **kwargs):
         finished.append((capture_event_id, lease_token, kwargs))
@@ -183,7 +186,7 @@ def test_v3_route_dispatch_failure_is_reclaimable(monkeypatch):
     async def claim(limit=20):
         nonlocal claim_calls
         claim_calls += 1
-        return [row]
+        return [row] if claim_calls % 2 else []
 
     async def finish(capture_event_id, lease_token, **kwargs):
         finishes.append(kwargs)
@@ -216,7 +219,7 @@ def test_v3_route_dispatch_failure_is_reclaimable(monkeypatch):
 
     good_store = GoodStore()
     assert len(asyncio.run(main._run_v3_route_dispatch(settings, good_store))) == 1
-    assert claim_calls == 2
+    assert claim_calls == 4
     assert finishes[-1] == {"success": True}
 
 
@@ -237,7 +240,7 @@ def test_v3_route_dispatch_blocks_incomplete_easybroker_property(monkeypatch):
     finished = []
 
     async def claim_dispatches(limit=20):
-        return [claim]
+        return [] if finished else [claim]
 
     async def finish(capture_event_id, lease_token, **kwargs):
         finished.append((capture_event_id, lease_token, kwargs))
@@ -276,3 +279,40 @@ def test_v3_main_orders_intake_contactado_then_webhook_and_skips_i24_notes():
     dispatch = inspect.getsource(main._run_v3_route_dispatch)
     assert dispatch.index("send_to_webhook") > 0
     assert '"contactado_status": "verified"' in dispatch
+
+
+def test_slow_work_does_not_consume_the_next_items_lease():
+    """Each item takes 100 seconds; a batch lease would expire the third item."""
+    clock = 0
+    remaining = list(range(3))
+    completed = []
+
+    async def claim(limit):
+        assert limit == 1
+        if not remaining:
+            return []
+        return [{"id": remaining.pop(0), "expires": clock + 120}]
+
+    async def run():
+        nonlocal clock
+        async for row in main._claim_v3_serially(claim):
+            clock += 100
+            assert clock < row["expires"]
+            completed.append(row["id"])
+
+    asyncio.run(run())
+    assert completed == [0, 1, 2]
+
+
+def test_serial_claim_still_bounds_work_per_scraper_cycle():
+    calls = 0
+
+    async def claim(limit):
+        nonlocal calls
+        calls += 1
+        return [{"id": calls}]
+
+    async def run():
+        return [row async for row in main._claim_v3_serially(claim)]
+
+    assert len(asyncio.run(run())) == calls == 20

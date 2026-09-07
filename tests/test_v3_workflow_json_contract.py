@@ -324,11 +324,13 @@ def test_wf23_is_the_30_second_two_minute_dispatcher():
         assert schedules[0]["parameters"]["rule"]["interval"][0]["expression"] == "*/30 * * * * *"
         assert workflow["settings"]["executionTimeout"] == 20
         timeout_node = node(workflow, "Sweep Delivery Timeouts")
-        assert timeout_node["parameters"]["options"] == {"connectionTimeout": 8}
+        assert timeout_node["parameters"]["options"] == {"connectionTimeout": 5}
         timeout_query = timeout_node["parameters"]["query"]
         assert timeout_query.startswith("SET LOCAL statement_timeout = '8s';")
         assert "SELECT * FROM public.v3_claim_delivery_attempts" in timeout_query
-        assert timeout_node.get("retryOnFail") is not True
+        assert timeout_node["retryOnFail"] is True
+        assert timeout_node["maxTries"] == 3
+        assert timeout_node["waitBetweenTries"] == 2000
         assert "INTERVAL '2 minutes'" in timeout_query
         assert "o.assigned_agent_id IS NULL" in timeout_query
         assert "o.current_delivery_attempt_id=a.attempt_id" in timeout_query
@@ -338,11 +340,13 @@ def test_wf23_is_the_30_second_two_minute_dispatcher():
         # Contract 5.2: a lead without an EasyBroker URL must still expire and reach guard/Sandy.
         assert "easybroker_url" not in timeout_query
         assigned_node = node(workflow, "Claim Assigned Notices")
-        assert assigned_node["parameters"]["options"] == {"connectionTimeout": 8}
+        assert assigned_node["parameters"]["options"] == {"connectionTimeout": 5}
         assigned_query = assigned_node["parameters"]["query"]
         assert assigned_query.startswith("SET LOCAL statement_timeout = '8s';")
         assert "SELECT * FROM public.claim_v3_assigned_notices" in assigned_query
-        assert assigned_node.get("retryOnFail") is not True
+        assert assigned_node["retryOnFail"] is True
+        assert assigned_node["maxTries"] == 3
+        assert assigned_node["waitBetweenTries"] == 2000
         assert "easybroker_url" in assigned_query
         assert "easybroker" in assigned_query
         assert workflow["connections"]["Sweep Delivery Timeouts"]["main"][0][0]["node"] == "Has Timeout Candidate?"

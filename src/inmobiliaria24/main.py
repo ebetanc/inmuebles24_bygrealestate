@@ -133,6 +133,15 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+async def _claim_v3_serially(claim, limit: int = 20):
+    """Lease work only when this serial worker is ready to process it."""
+    for _ in range(limit):
+        rows = await claim(limit=1)
+        if not rows:
+            break
+        yield rows[0]
+
+
 async def _run_v3_contactado(page, leads: list[dict]) -> set[str]:
     """Mark Contactado per durable capture, returning verified lead IDs."""
     from inmobiliaria24.supa import (
@@ -146,7 +155,7 @@ async def _run_v3_contactado(page, leads: list[dict]) -> set[str]:
         if str(lead.get("lead_id") or "").strip()
     }
     verified: set[str] = set()
-    for contact in await claim_v3_i24_contact_effects():
+    async for contact in _claim_v3_serially(claim_v3_i24_contact_effects):
         lead_id = str(contact.get("i24_lead_id") or "").strip()
         if not lead_id:
             await finish_v3_i24_contact_effect(
@@ -185,7 +194,7 @@ async def _run_v3_route_dispatch(settings, store: StateStore) -> list[dict]:
     )
 
     dispatched: list[dict] = []
-    for claim in await claim_v3_route_dispatches():
+    async for claim in _claim_v3_serially(claim_v3_route_dispatches):
         capture_event_id = int(claim["capture_event_id"])
         lease_token = str(claim["lease_token"])
         context = claim.get("offer_context")
