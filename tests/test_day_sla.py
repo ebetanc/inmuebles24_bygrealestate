@@ -94,3 +94,17 @@ def test_fast_reader_ignores_assets_redirects_and_counter_prefetches():
     rows = asyncio.run(read_fast_inbox(page, since=now-timedelta(seconds=1)))
     assert [r["lead_id"] for r in rows] == ["123"]
     assert page.handler is None
+
+
+def test_n8n_empty_sql_success_row_cannot_reach_alert_send():
+    import json
+    import subprocess
+    from pathlib import Path
+    workflow = json.loads((Path(__file__).parents[1]/"whatsapp-agent/workflows/WF23_delivery_timeout_sweeper.json").read_text(encoding="utf-8"))
+    gate = next(n for n in workflow["nodes"] if n["name"] == "Has Day Deadline Alert?")
+    expression = gate["parameters"]["conditions"]["conditions"][0]["leftValue"][3:-2].strip()
+    script = "const f=new Function('$json','return ('+"+json.dumps(expression)+"+')'); console.log(JSON.stringify([f({success:true}),f({}),f({capture_event_id:123,notification_token:'token',manager_phone:'525500000000'})]));"
+    result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    assert json.loads(result.stdout) == [False, False, True]
+    assert workflow["connections"]["Claim Day Deadline Alerts"]["main"][0][0]["node"] == gate["name"]
+    assert workflow["connections"][gate["name"]]["main"][1] == []

@@ -7,6 +7,8 @@ import asyncio
 
 from inmobiliaria24.day_sla import parse_time
 from inmobiliaria24.scraper import INTERESADOS_URL, _TABS
+from inmobiliaria24.scraper import _screenshot_on_error
+from loguru import logger
 
 LEADS_PATH = "/leads-api/publisher/leads"
 
@@ -74,13 +76,17 @@ async def read_fast_inbox(page, *, since: datetime) -> list[dict]:
         page.on("response", collect)
         try:
             if selector:
-                await page.locator(selector).click(timeout=10_000)
+                await page.locator(selector).click(timeout=25_000)
             else:
                 await page.goto(INTERESADOS_URL, wait_until="domcontentloaded")
             received = await asyncio.wait_for(queue.get(), timeout=25)
             if isinstance(received, Exception):
                 raise received
             response, payload = received
+        except Exception:
+            logger.error("Fast inbox failed in tab {} at {}", tab, page.url)
+            await _screenshot_on_error(page, "fast_inbox")
+            raise
         finally:
             page.remove_listener("response", collect)
         for _ in range(50):
