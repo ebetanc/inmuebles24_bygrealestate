@@ -394,6 +394,8 @@ async def create_pending_easybroker_requests(
             outcomes.append({"capture_event_id": capture_id, "state": "recovery"})
             continue
         try:
+            from inmobiliaria24.day_sla import get_deadline, require_time
+            require_time(await get_deadline(capture_id=capture_id), reserve_seconds=30)
             result = await post_v3_easybroker_contact_request(settings, claim)
         except httpx.RequestError:
             result = {"kind": "ambiguous", "status_code": None}

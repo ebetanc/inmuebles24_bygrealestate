@@ -68,13 +68,13 @@
         700,
         520
       ],
+      "notes": "Create or validate the durable V3 attempt in its own SQL command so the hydration command can see it.",
       "credentials": {
         "postgres": {
           "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
           "name": "Postgres - Supabase"
         }
-      },
-      "notes": "Create or validate the durable V3 attempt in its own SQL command so the hydration command can see it."
+      }
     },
     {
       "parameters": {
@@ -151,7 +151,7 @@
         "specifyBody": "json",
         "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"lead_subasta_v3\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_name || 'No disponible')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.lead_phone || 'No disponible')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.property_title || 'No disponible')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.operation_type || 'No disponible')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.property_zone || 'No disponible')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.property_price || 'No disponible')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.property_public_id || 'No disponible')) }} },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(String($json.easybroker_url)) }} }\n        ]\n      },\n      {\n        \"type\": \"button\",\n        \"sub_type\": \"quick_reply\",\n        \"index\": \"0\",\n        \"parameters\": [{ \"type\": \"payload\", \"payload\": {{ JSON.stringify($json.claim_payload) }} }]\n      }\n    ]\n  }\n}",
         "options": {
-          "timeout": 15000
+          "timeout": 10000
         }
       },
       "id": "wf13-send-owner-offer",
@@ -162,7 +162,8 @@
         920,
         300
       ],
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": false
     },
     {
       "parameters": {
@@ -255,13 +256,21 @@
     {
       "parameters": {
         "conditions": {
-          "options": {"caseSensitive": true, "typeValidation": "strict"},
-          "conditions": [{
-            "id": "wf13-is-assigned-notice",
-            "leftValue": "={{ $json.delivery_kind }}",
-            "rightValue": "assigned_notice",
-            "operator": {"type": "string", "operation": "equals"}
-          }],
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "wf13-is-assigned-notice",
+              "leftValue": "={{ $json.delivery_kind }}",
+              "rightValue": "assigned_notice",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
           "combinator": "and"
         }
       },
@@ -269,7 +278,10 @@
       "name": "Is Assigned Notice?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [460, 120]
+      "position": [
+        460,
+        120
+      ]
     },
     {
       "parameters": {
@@ -280,36 +292,65 @@
       "name": "Validate Assigned Notice",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 100]
+      "position": [
+        700,
+        100
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.WA_CLOUD_API_BASE_URL + \"/\" + $env.WA_API_VERSION + \"/\" + $env.WA_PHONE_NUMBER_ID + \"/messages\" }}",
         "sendHeaders": true,
-        "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"}, {"name": "Content-Type", "value": "application/json"}]},
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.number }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"lead_asignado_v3\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [{\n      \"type\": \"body\",\n      \"parameters\": [\n        { \"type\": \"text\", \"text\": {{ JSON.stringify($json.lead_name) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify($json.lead_phone) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify($json.property_title) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify($json.operation_type) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify($json.property_zone) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify($json.property_price) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify($json.property_public_id) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify($json.easybroker_url) }} }\n      ]\n    }]\n  }\n}",
-        "options": {"timeout": 15000}
+        "options": {
+          "timeout": 10000
+        }
       },
       "id": "wf13-send-assigned-notice",
       "name": "Send Assigned Notice",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [920, 100],
-      "onError": "continueErrorOutput"
+      "position": [
+        920,
+        100
+      ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": false
     },
     {
       "parameters": {
         "conditions": {
-          "options": {"caseSensitive": true, "typeValidation": "strict"},
-          "conditions": [{
-            "id": "wf13-assigned-has-wamid",
-            "leftValue": "={{ $json.messages && $json.messages[0] && $json.messages[0].id }}",
-            "rightValue": "",
-            "operator": {"type": "string", "operation": "notEmpty", "singleValue": true}
-          }],
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "wf13-assigned-has-wamid",
+              "leftValue": "={{ $json.messages && $json.messages[0] && $json.messages[0].id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
           "combinator": "and"
         }
       },
@@ -317,33 +358,132 @@
       "name": "Assigned Provider Accepted?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1120, 100]
+      "position": [
+        1120,
+        100
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT public.v3_record_provider_accepted($1::bigint,$2,$3,NOW()) AS accepted;",
-        "options": {"queryReplacement": "={{ [$('Validate Assigned Notice').item.json.attempt_id, $json.messages[0].id, $('Validate Assigned Notice').item.json.lease_token] }}"}
+        "options": {
+          "queryReplacement": "={{ [$('Validate Assigned Notice').item.json.attempt_id, $json.messages[0].id, $('Validate Assigned Notice').item.json.lease_token] }}"
+        }
       },
       "id": "wf13-bind-assigned-message",
       "name": "Bind Assigned Provider Message",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1340, 60],
-      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
+      "position": [
+        1340,
+        60
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT public.release_v3_assigned_notice_failure($1::bigint,$2,$3,NOW()) AS released;",
-        "options": {"queryReplacement": "={{ [$('Validate Assigned Notice').item.json.attempt_id, $('Validate Assigned Notice').item.json.lease_token, String($json.error && $json.error.message || 'provider_send_failed')] }}"}
+        "options": {
+          "queryReplacement": "={{ [$('Validate Assigned Notice').item.json.attempt_id, $('Validate Assigned Notice').item.json.lease_token, String($json.error && $json.error.message || 'provider_send_failed')] }}"
+        }
       },
       "id": "wf13-release-assigned-failure",
       "name": "Release Assigned Notice Failure",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1340, 160],
-      "credentials": {"postgres": {"id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID", "name": "Postgres - Supabase"}}
+      "position": [
+        1340,
+        160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT $1::jsonb AS payload, public.v3_day_deadline($2::bigint,$3::bigint,NULL) AS day_deadline_at, public.v3_day_allowed($2::bigint,$3::bigint,NULL) AS allowed;",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json), $json.capture_event_id, $json.opportunity_id] }}"
+        }
+      },
+      "id": "check-day-deadline-offer",
+      "name": "Check Day Deadline Offer",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        900
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "allow-day-send-offer",
+      "name": "Allow Day Send Offer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        900
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().flatMap((item, index) => { const r=item.json; const deadline=r.day_deadline_at ? Date.parse(r.day_deadline_at) : null; if(r.allowed!==true || (deadline!==null && (!Number.isFinite(deadline) || Date.now()+10000>=deadline))) return []; return [{json:{...r.payload,day_deadline_at:r.day_deadline_at},pairedItem:{item:index}}]; });"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT $1::jsonb AS payload, public.v3_day_deadline($2::bigint,$3::bigint,NULL) AS day_deadline_at, public.v3_day_allowed($2::bigint,$3::bigint,NULL) AS allowed;",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json), $json.capture_event_id, $json.opportunity_id] }}"
+        }
+      },
+      "id": "check-day-deadline-notice",
+      "name": "Check Day Deadline Notice",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        900
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "allow-day-send-notice",
+      "name": "Allow Day Send Notice",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        900
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().flatMap((item, index) => { const r=item.json; const deadline=r.day_deadline_at ? Date.parse(r.day_deadline_at) : null; if(r.allowed!==true || (deadline!==null && (!Number.isFinite(deadline) || Date.now()+10000>=deadline))) return []; return [{json:{...r.payload,day_deadline_at:r.day_deadline_at},pairedItem:{item:index}}]; });"
+      }
     }
   ],
   "connections": {
@@ -360,23 +500,67 @@
     },
     "Is Assigned Notice?": {
       "main": [
-        [{"node": "Validate Assigned Notice", "type": "main", "index": 0}],
-        [{"node": "Build Owner Offer", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Validate Assigned Notice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Owner Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Validate Assigned Notice": {
-      "main": [[{"node": "Send Assigned Notice", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Check Day Deadline Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Send Assigned Notice": {
       "main": [
-        [{"node": "Assigned Provider Accepted?", "type": "main", "index": 0}],
-        [{"node": "Release Assigned Notice Failure", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Assigned Provider Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Assigned Notice Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Assigned Provider Accepted?": {
       "main": [
-        [{"node": "Bind Assigned Provider Message", "type": "main", "index": 0}],
-        [{"node": "Release Assigned Notice Failure", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Bind Assigned Provider Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Assigned Notice Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Owner Offer": {
@@ -384,17 +568,6 @@
         [
           {
             "node": "Request V3 Route",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Request V3 Route": {
-      "main": [
-        [
-          {
-            "node": "Route Ready V3",
             "type": "main",
             "index": 0
           }
@@ -427,7 +600,7 @@
       "main": [
         [
           {
-            "node": "Send Owner Offer",
+            "node": "Check Day Deadline Offer",
             "type": "main",
             "index": 0
           }
@@ -471,6 +644,61 @@
         [
           {
             "node": "Fail Unbound Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request V3 Route": {
+      "main": [
+        [
+          {
+            "node": "Route Ready V3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Day Deadline Offer": {
+      "main": [
+        [
+          {
+            "node": "Allow Day Send Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allow Day Send Offer": {
+      "main": [
+        [
+          {
+            "node": "Send Owner Offer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Day Deadline Notice": {
+      "main": [
+        [
+          {
+            "node": "Allow Day Send Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allow Day Send Notice": {
+      "main": [
+        [
+          {
+            "node": "Send Assigned Notice",
             "type": "main",
             "index": 0
           }

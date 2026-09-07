@@ -1064,6 +1064,8 @@ async def mark_lead_contacted(
     # dropdown; flipping it there was verified not to message the prospect.
     for attempt in (1, 2, 3):
         try:
+            from inmobiliaria24.day_sla import require_time
+            require_time(lead.get("day_deadline_at"))
             await _navigate_spa(page, f"{INTERESADOS_URL}/{lead_id}")
             await asyncio.sleep(random.uniform(6.0, 9.0))
 
@@ -1115,6 +1117,7 @@ async def mark_lead_contacted(
                 except Exception:
                     pass
                 continue
+            require_time(lead.get("day_deadline_at"))
             await page.click('[data-byg-click="option"]', timeout=8_000)
             await asyncio.sleep(random.uniform(2.0, 3.0))
 
@@ -1247,6 +1250,9 @@ async def send_to_webhook(
     async with httpx.AsyncClient(timeout=30) as client:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
+                from inmobiliaria24.day_sla import require_time
+                for item in payload:
+                    require_time(item.get("day_deadline_at"), reserve_seconds=30)
                 resp = await client.post(url, json=payload, headers=headers)
                 resp.raise_for_status()
                 if v3_capture_id is not None:

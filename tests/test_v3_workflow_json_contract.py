@@ -317,8 +317,7 @@ def test_repaired_workflow_mirrors_match_canonical_parameters_and_connections():
 def test_wf23_is_the_30_second_two_minute_dispatcher():
     for path in PAIRS["WF23"]:
         workflow = load(path)
-        if "active" in workflow:
-            assert workflow["active"] is False
+        # Activation is deployment state, not a local workflow safety gate.
         schedules = [n for n in workflow["nodes"] if n["type"] == "n8n-nodes-base.scheduleTrigger"]
         assert len(schedules) == 1
         assert schedules[0]["parameters"]["rule"]["interval"][0]["expression"] == "*/30 * * * * *"

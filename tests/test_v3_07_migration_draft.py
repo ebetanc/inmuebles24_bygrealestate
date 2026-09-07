@@ -28,7 +28,7 @@ def test_v3_07_only_references_snapshot_canonical_keys():
 def test_easybroker_worker_reconciles_exact_note_before_writing():
     source = INBOX.read_text(encoding="utf-8")
     flow = source[source.index("async def attend_lead"):source.index("# Diagnostics")]
-    assert flow.index("note_exists(page, note)") < flow.index("add_note(page, note)")
+    assert flow.index("note_exists(page, note)") < flow.index("add_note(page, note,")
     assert "The exact request page scopes idempotency" in flow
 
 

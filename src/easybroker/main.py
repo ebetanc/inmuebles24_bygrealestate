@@ -48,23 +48,39 @@ logger.add("logs/eb_run.log", level="DEBUG", rotation="10 MB", retention="7 days
 async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int, bool]:
     """Execute one request-level V3 effect step with exact-request evidence.
 
-    One lease handles one step per invocation. This deliberately lets the
-    database release a lease after recording the note before a later claim
-    performs Atendida, so status can never outrun durable note evidence.
+    A lease handles one step. After saving note evidence, the same invocation
+    can claim Atendida. Status can never outrun durable note evidence.
     """
     try:
         provider_requests = {
             int(row["eb_request_id"]): row
             for row in await fetch_contact_requests(settings)
         }
-        claims = await claim_v3_easybroker_effects(settings, limit=limit)
     except Exception as exc:
         logger.warning("EasyBroker V3 effect claim failed: {}", exc)
         return 0, True
 
     completed = 0
     failed = False
-    for claim in claims:
+    seen_leases = set()
+    for _ in range(limit):
+        # Reclaim immediately after saving note evidence; never hold a batch
+        # of leases while serial browser operations consume their lifetime.
+        claims = await claim_v3_easybroker_effects(settings, limit=1)
+        if not claims:
+            break
+        claim = claims[0]
+        lease_key = (claim["eb_request_id"], claim["lease_token"], bool(claim.get("note_due")))
+        if lease_key in seen_leases:
+            break
+        seen_leases.add(lease_key)
+        from inmobiliaria24.day_sla import get_deadline, require_time
+        deadline = await get_deadline(opportunity_id=claim.get("opportunity_id"), request_id=claim["eb_request_id"])
+        try:
+            require_time(deadline)
+        except TimeoutError:
+            failed = True
+            continue
         request_id = int(claim["eb_request_id"])
         responsible = str(claim.get("responsible_first_name") or "").strip()
         lease_token = str(claim["lease_token"])
@@ -95,6 +111,7 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
                 note_done=False,
                 status_done=True,
                 allow_legacy_note=False,
+                deadline=deadline,
             ) if identity_ok else missing_identity
             note_ok = bool(result.get("found") and result.get("note_ok"))
             evidence = {
@@ -138,6 +155,7 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
                 note_done=True,
                 status_done=False,
                 allow_legacy_note=False,
+                deadline=deadline,
             ) if identity_ok else missing_identity
             status_ok = bool(result.get("found") and result.get("status_ok"))
             evidence = {

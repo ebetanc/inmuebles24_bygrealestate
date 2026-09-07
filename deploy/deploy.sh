@@ -14,6 +14,7 @@ echo "==> Installing dependencies..."
 "${VENV}/bin/pip" install -e . --quiet
 
 echo "==> Reloading systemd and restarting timer..."
+install -m 644 deploy/inmobiliaria24.timer /etc/systemd/system/inmobiliaria24.timer
 install -m 644 deploy/inmobiliaria24-dispatch.service /etc/systemd/system/inmobiliaria24-dispatch.service
 install -m 644 deploy/inmobiliaria24-dispatch.timer /etc/systemd/system/inmobiliaria24-dispatch.timer
 systemctl daemon-reload

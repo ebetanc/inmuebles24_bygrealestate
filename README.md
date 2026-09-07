@@ -12,7 +12,7 @@ fue reemplazado; ver [Legacy](#legacy--apagado-o-fuera-del-camino-v3).
 ## Arquitectura V3
 
 ```
-Inmuebles24 (3 bandejas) --15 min--> scraper (Raspberry Pi)
+Inmuebles24 (3 bandejas) --1 min dia / 15 min noche--> scraper (Raspberry Pi)
       |                                  |
       | marca "Contactado" (verificado)   +--> v3_intake (Supabase)
       v                                            |
@@ -46,7 +46,7 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
 ## Flujo, paso a paso
 
 1. **Captura.** El scraper (`src/inmobiliaria24/`) recorre las 3 bandejas de
-   Inmuebles24 cada 15 minutos, 24/7, y persiste cada solicitud en `v3_intake`
+   Inmuebles24 cada minuto en horario diurno (15 minutos de noche), y persiste cada solicitud en `v3_intake`
    antes de tocar nada más. Reintentar el mismo evento no crea otra oportunidad.
 2. **Contactado.** El scraper cambia el estado en Inmuebles24 de `Pendiente` a
    `Contactado` y **verifica** el efecto. Ninguna oferta sale antes de eso.
@@ -143,7 +143,7 @@ sudo systemctl restart easybroker.timer reporte-semanal.timer
 systemctl list-timers | grep -E 'inmobiliaria24|easybroker|n8n-export'
 ```
 
-Timers en el Pi: `inmobiliaria24.timer` (cada 15 min, 24/7),
+Timers en el Pi: `inmobiliaria24.timer` (cada minuto de 08:05 a 20:00 CDMX; 15 min de noche),
 `easybroker.timer` (cada minuto), `reporte-semanal.timer`,
 `n8n-export.timer` (domingo 03:00 CDMX, snapshot de solo lectura a `n8n-export/`).
 
@@ -245,3 +245,6 @@ Copia `.env.example` a `.env`. Las claves que importan hoy en el Pi:
 ## Licencia
 
 Privado / propietario. Todos los derechos reservados.
+
+Plazo diurno de 15 minutos desde la llegada original de I24: activación, pruebas
+y limitaciones en [el informe operativo](docs/incidents/2026-09-07-day-sla.md).

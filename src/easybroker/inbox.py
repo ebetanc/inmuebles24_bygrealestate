@@ -311,7 +311,7 @@ async def _current_status(page: Page) -> str | None:
         await _clear_tag(page, "status-trigger")
 
 
-async def set_status_atendida(page: Page) -> bool:
+async def set_status_atendida(page: Page, *, deadline: str | None = None) -> bool:
     """Open the 'Cambiar estatus' dropdown and select 'Atendida'. Idempotent."""
     current = await page.evaluate(_TAG_STATUS_TRIGGER_JS)
     if current is None:
@@ -332,7 +332,9 @@ async def set_status_atendida(page: Page) -> bool:
         await screenshot(page, "status_atendida_option_missing")
         logger.error("Could not find 'Atendida' option in the open dropdown")
         return False
-    await page.locator(f'[{_BOT_ATTR}="status-option"]').first.click()
+    from inmobiliaria24.day_sla import require_time
+    require_time(deadline)
+    await page.locator(f'[{_BOT_ATTR}="status-option"]').first.click(**({"timeout": 8_000} if deadline else {}))
     await _clear_tag(page, "status-option")
 
     await asyncio.sleep(random.uniform(1.0, 2.0))
@@ -342,7 +344,7 @@ async def set_status_atendida(page: Page) -> bool:
     return ok
 
 
-async def add_note(page: Page, note_text: str) -> bool:
+async def add_note(page: Page, note_text: str, *, deadline: str | None = None) -> bool:
     """Click 'Agregar nota', type the note, and save."""
     tagged = await page.evaluate(_TAG_AGREGAR_NOTA_JS)
     if not tagged:
@@ -371,7 +373,9 @@ async def add_note(page: Page, note_text: str) -> bool:
         if await save.count() == 0:
             save = page.get_by_text(re.compile("^Guardar$", re.I)).first
         await save.wait_for(state="visible", timeout=6_000)
-        await save.click()
+        from inmobiliaria24.day_sla import require_time
+        require_time(deadline)
+        await save.click(**({"timeout": 8_000} if deadline else {}))
     except Exception as e:
         await screenshot(page, "nota_guardar_missing")
         logger.error("Could not click 'Guardar' on the note: {}", e)
@@ -435,6 +439,7 @@ async def attend_lead(
     agent_name: str, note_text: str | None = None, note_done: bool = False,
     status_done: bool = False, allow_phone_fallback: bool = False,
     allow_legacy_note: bool = True,
+    deadline: str | None = None,
 ) -> dict:
     """Full flow for one lead: open request, set Atendida, add the agent note.
 
@@ -524,10 +529,10 @@ async def attend_lead(
             # Reconcile any pre-migration note without adding a second one.
             result["note_ok"] = await note_exists(page, legacy_note)
         if not result["note_ok"]:
-            result["note_ok"] = await add_note(page, note)
+            result["note_ok"] = await add_note(page, note, **({"deadline": deadline} if deadline else {}))
         result["note_changed"] = result["note_ok"]
     if result["note_ok"] and not status_done:
-        result["status_ok"] = await set_status_atendida(page)
+        result["status_ok"] = await set_status_atendida(page, **({"deadline": deadline} if deadline else {}))
         result["status_changed"] = result["status_ok"]
     return result
 

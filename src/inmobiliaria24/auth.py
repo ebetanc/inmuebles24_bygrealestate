@@ -199,6 +199,8 @@ async def _wait_for_cloudflare(page: Page, timeout_ms: int = 90_000) -> None:
         return
 
     hard_block = _is_hard_cloudflare_block(title)
+    if hard_block and os.environ.get("I24_FAST_DAY") == "1":
+        raise AuthenticationError("I24 access blocked by Cloudflare; normal session revalidation required")
     if hard_block:
         logger.warning(
             "Cloudflare hard block detected (title={!r}) — rotating proxy "
@@ -524,7 +526,8 @@ async def load_or_login(context: BrowserContext, settings: Settings) -> Page:
     # Try navigating directly — cookies from previous run may still be valid.
     logger.info("Checking if persistent session is still valid")
     try:
-        await page.goto(AVISOS_URL, wait_until="domcontentloaded")
+        start_url = INTERESADOS_URL if os.environ.get("I24_FAST_DAY") == "1" else AVISOS_URL
+        await page.goto(start_url, wait_until="domcontentloaded")
         await _wait_for_cloudflare(page)
 
         if await _session_is_valid(page):
@@ -537,6 +540,8 @@ async def load_or_login(context: BrowserContext, settings: Settings) -> Page:
             page.url,
         )
     except Exception as e:
+        if isinstance(e, AuthenticationError) and "access blocked by Cloudflare" in str(e):
+            raise
         logger.warning("Session check error ({}): performing fresh login", e)
 
     # Fresh login.

@@ -170,6 +170,10 @@ async def _run_v3_contactado(page, leads: list[dict]) -> set[str]:
         evidence: dict = {}
         contacted = False
         try:
+            from inmobiliaria24.day_sla import get_deadline, require_time
+            lead_payload = dict(lead_payload)
+            lead_payload["day_deadline_at"] = await get_deadline(capture_id=int(contact["capture_event_id"]))
+            require_time(lead_payload["day_deadline_at"])
             contacted = await mark_lead_contacted(
                 page, lead_payload, evidence=evidence
             )
@@ -227,6 +231,9 @@ async def _run_v3_route_dispatch(settings, store: StateStore) -> list[dict]:
             continue
         payload["property_public_id"] = property_public_id
         try:
+            from inmobiliaria24.day_sla import get_deadline, require_time
+            payload["day_deadline_at"] = await get_deadline(capture_id=capture_event_id)
+            require_time(payload["day_deadline_at"])
             await send_to_webhook(
                 [payload],
                 webhook_url=settings.webhook_url,
@@ -332,11 +339,13 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     store.finish_run(run_id, status="dry_run")
                     return 0
 
+                from inmobiliaria24.day_sla import is_day
+                fast_day = os.environ.get("I24_FAST_DAY", "") == "1" and is_day(started_at)
                 # Mis avisos exposes both the Inmuebles24 listing ID and the
                 # EB advertiser code; lead detail pages expose only the first.
                 conflicting_listing_ids: set[str] = set()
                 try:
-                    live_property_map = await extract_property_public_id_map(
+                    live_property_map = {} if fast_day else await extract_property_public_id_map(
                         page, conflicts_out=conflicting_listing_ids
                     )
                     store.delete_property_public_id_mappings(conflicting_listing_ids)
@@ -348,9 +357,17 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                 # Scrape all Pendiente leads (with session recovery).
                 observed_rows: list[dict] = []
                 try:
-                    all_leads = await scrape_pendiente_leads(
+                    if fast_day:
+                        from inmobiliaria24.fast_inbox import read_fast_inbox
+                        from inmobiliaria24.day_sla import parse_time
+                        # Explicit deployment cutoff prevents historical reoffers.
+                        all_leads = await read_fast_inbox(page, since=parse_time(os.environ["I24_DAY_ENABLED_AT"]))
+                        observed_rows.extend(all_leads)
+                        metadata["fast_day"] = True
+                    else:
+                        all_leads = await scrape_pendiente_leads(
                         page, limit=args.limit, observed_rows=observed_rows
-                    )
+                        )
                 except SessionStaleError:
                     logger.warning("Session stale — re-authenticating and retrying")
                     from inmobiliaria24.auth import login, navigate_to_avisos

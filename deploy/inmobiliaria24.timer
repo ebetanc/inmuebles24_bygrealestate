@@ -1,10 +1,14 @@
 [Unit]
-Description=Run Inmobiliaria24 scraper every 15 minutes, 24/7
+Description=Inmobiliaria24 every minute during daytime; existing night cadence
 
 [Timer]
 # Capture always runs; only notification routing changes during the night window.
-OnCalendar=*-*-* *:0/15:00 America/Mexico_City
-RandomizedDelaySec=5
+OnCalendar=*-*-* 00..07,20..23:0/15:00 America/Mexico_City
+OnCalendar=*-*-* 08:00:00 America/Mexico_City
+OnCalendar=*-*-* 08:05..59:00 America/Mexico_City
+OnCalendar=*-*-* 09..19:*:00 America/Mexico_City
+RandomizedDelaySec=0
+AccuracySec=1s
 Persistent=true
 
 [Install]
