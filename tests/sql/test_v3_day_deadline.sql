@@ -49,6 +49,7 @@ BEGIN
  night:=r.capture_event_id;
  IF public.v3_day_deadline(night,NULL,NULL) IS NOT NULL OR NOT public.v3_day_allowed(night,NULL,NULL)
    THEN RAISE EXCEPTION 'night changed'; END IF;
+ IF public.v3_day_deadline(night,op,NULL) IS NOT NULL THEN RAISE EXCEPTION 'capture scope overridden by previous opportunity'; END IF;
  IF NOT public.v3_day_allowed(304,NULL,NULL) THEN RAISE EXCEPTION 'legacy changed'; END IF;
  RAISE NOTICE 'DAY_SLA_ROLLBACK_TESTS_PASS';
 END $$;

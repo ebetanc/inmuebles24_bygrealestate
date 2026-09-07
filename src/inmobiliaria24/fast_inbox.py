@@ -3,6 +3,7 @@ import re
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 import json
+import asyncio
 
 from inmobiliaria24.day_sla import parse_time
 from inmobiliaria24.scraper import INTERESADOS_URL, _TABS
@@ -58,26 +59,30 @@ async def read_fast_inbox(page, *, since: datetime) -> list[dict]:
     cutoff; exact request IDs deduplicate the three overlapping tabs.
     """
     found: dict[str, dict] = {}
-    async def is_full_list(response):
-        parts = urlsplit(response.url)
-        if parts.hostname != "www.inmuebles24.com" or parts.path != LEADS_PATH or response.status != 200:
-            return False
-        try:
-            payload = await response.json()
-            return payload.get("paging", {}).get("limit", 0) >= 20
-        except (ValueError, TypeError):
-            return False
     for tab, selector in _TABS:
-        async with page.expect_response(
-            is_full_list,
-            timeout=25_000,
-        ) as incoming:
+        queue = asyncio.Queue()
+        async def collect(response, target=queue):
+            parts = urlsplit(response.url)
+            if parts.hostname != "www.inmuebles24.com" or parts.path != LEADS_PATH or response.status != 200:
+                return
+            try:
+                payload = await response.json()
+                if payload.get("paging", {}).get("limit", 0) >= 20:
+                    await target.put((response, payload))
+            except Exception as exc:
+                await target.put(exc)
+        page.on("response", collect)
+        try:
             if selector:
                 await page.locator(selector).click(timeout=10_000)
             else:
                 await page.goto(INTERESADOS_URL, wait_until="domcontentloaded")
-        response = await incoming.value
-        payload = await response.json()
+            received = await asyncio.wait_for(queue.get(), timeout=25)
+            if isinstance(received, Exception):
+                raise received
+            response, payload = received
+        finally:
+            page.remove_listener("response", collect)
         for _ in range(50):
             rows = payload.get("result")
             if not isinstance(rows, list):

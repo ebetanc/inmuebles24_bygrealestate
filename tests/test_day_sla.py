@@ -63,3 +63,34 @@ def test_eb_attended_cannot_click_after_deadline(monkeypatch):
     with pytest.raises(TimeoutError):
         asyncio.run(inbox.set_status_atendida(Page(), deadline="2026-01-01T00:00:00Z"))
     assert len(clicks) == 1  # Opening the dropdown is safe; selecting Atendida was blocked.
+
+
+def test_fast_reader_ignores_assets_redirects_and_counter_prefetches():
+    from inmobiliaria24.fast_inbox import read_fast_inbox
+    now = datetime.now(timezone.utc)
+    class Response:
+        status = 200
+        def __init__(self, url, limit=20): self.url, self.limit = url, limit
+        async def json(self):
+            assert "/leads-api/publisher/leads" in self.url, "Unrelated body must never be read"
+            return {"paging": {"offset": 0, "limit": self.limit, "total": 1}, "result": [{
+                "contact_publisher_user_id": "123", "last_lead_date": now.isoformat(),
+                "lead_user": {"name": "Prueba"}, "posting": {"internal_code": "EB-QJ4964"},
+            }]}
+    class Page:
+        handler = None
+        def on(self, name, handler): self.handler = handler
+        def remove_listener(self, name, handler):
+            assert self.handler == handler
+            self.handler = None
+        async def emit(self):
+            await self.handler(Response("https://cdn.example.test/redirect.js"))
+            await self.handler(Response("https://www.inmuebles24.com/leads-api/publisher/leads", 2))
+            await self.handler(Response("https://www.inmuebles24.com/leads-api/publisher/leads"))
+        async def goto(self, *args, **kwargs): await self.emit()
+        def locator(self, selector): return self
+        async def click(self, **kwargs): await self.emit()
+    page = Page()
+    rows = asyncio.run(read_fast_inbox(page, since=now-timedelta(seconds=1)))
+    assert [r["lead_id"] for r in rows] == ["123"]
+    assert page.handler is None
