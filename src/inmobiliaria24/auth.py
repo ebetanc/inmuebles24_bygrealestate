@@ -327,6 +327,8 @@ async def login(page: Page, settings: Settings) -> None:
     # A slow panel may have triggered this fallback while cookies remain valid.
     # The authenticated homepage has Mis avisos and no Ingresar button.
     if await page.locator(MENU_MIS_AVISOS).count() > 0:
+        if os.environ.get("I24_FAST_DAY") == "1" and await _recover_inbox_session(page):
+            return
         await navigate_to_avisos(page)
         if await _session_is_valid(page):
             logger.info("Existing session recovered through Mis avisos")
