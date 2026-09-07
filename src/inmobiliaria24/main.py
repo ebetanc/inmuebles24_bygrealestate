@@ -281,13 +281,15 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                 from inmobiliaria24.day_sla import is_day
                 fast_day = os.environ.get("I24_FAST_DAY", "") == "1" and is_day(started_at)
                 inbox_responses = []
+                def remember_response(response):
+                    inbox_responses.append(response)
                 if fast_day:
-                    context.on("response", inbox_responses.append)
+                    context.on("response", remember_response)
                 try:
                     page = await load_or_login(context, settings)
                 finally:
                     if fast_day:
-                        context.remove_listener("response", inbox_responses.append)
+                        context.remove_listener("response", remember_response)
                 if args.dry_run:
                     logger.info("Dry run complete — session is valid, on Mis avisos")
                     print("Dry run complete — session is valid, on Mis avisos")
