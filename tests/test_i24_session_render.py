@@ -9,6 +9,52 @@ def test_public_homepage_is_not_a_valid_panel():
     assert asyncio.run(auth._session_is_valid(page)) is False
 
 
+def test_permissions_error_is_not_a_valid_panel():
+    page = SimpleNamespace(url='https://www.inmuebles24.com/panel/permissionserror')
+    assert asyncio.run(auth._session_is_valid(page)) is False
+
+
+def test_broken_avisos_route_recovers_inbox_without_login(monkeypatch):
+    class Page:
+        url = ''
+
+        async def goto(self, url, **kwargs):
+            self.url = (auth.HOME_URL + 'panel/permissionserror'
+                        if url == auth.AVISOS_URL else url)
+
+    page = Page()
+
+    async def new_page():
+        return page
+
+    async def cleared(_page):
+        pass
+
+    async def valid(candidate):
+        return candidate.url == auth.INTERESADOS_URL
+
+    async def no_login(*args):
+        raise AssertionError('working inbox must not trigger login')
+
+    monkeypatch.setattr(auth, '_wait_for_cloudflare', cleared)
+    monkeypatch.setattr(auth, '_session_is_valid', valid)
+    monkeypatch.setattr(auth, 'login', no_login)
+    result = asyncio.run(auth.load_or_login(SimpleNamespace(new_page=new_page), None))
+    assert result.url == auth.INTERESADOS_URL
+
+
+def test_inbox_recovery_does_not_accept_login_redirect(monkeypatch):
+    class Page:
+        async def goto(self, url, **kwargs):
+            self.url = auth.HOME_URL + 'login'
+
+    async def cleared(_page):
+        pass
+
+    monkeypatch.setattr(auth, '_wait_for_cloudflare', cleared)
+    assert asyncio.run(auth._recover_inbox_session(Page())) is False
+
+
 def test_slow_panel_is_rechecked_before_relogin():
     class Locator:
         async def count(self):

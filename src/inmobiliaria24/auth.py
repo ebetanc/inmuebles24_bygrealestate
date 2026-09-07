@@ -38,6 +38,7 @@ _CHROME_CANDIDATES = [
 
 HOME_URL = "https://www.inmuebles24.com/"
 AVISOS_URL = "https://www.inmuebles24.com/panel.bum"
+INTERESADOS_URL = "https://www.inmuebles24.com/panel/interesados"
 
 # Selectors (from live DOM inspection)
 BTN_INGRESAR = '[data-qa="HEADER_LOGIN"] >> visible=true'
@@ -151,7 +152,7 @@ async def _session_is_valid(page: Page, *, wait_for_render: bool = True) -> bool
     wait, then repeat the logout and block checks before accepting it.
     """
     url = page.url.lower()
-    if any(frag in url for frag in ("login", "acceso", "ingresar")):
+    if any(frag in url for frag in ("login", "acceso", "ingresar", "permissionserror")):
         return False
     if not url.startswith((HOME_URL + "panel/", AVISOS_URL)):
         return False
@@ -328,7 +329,9 @@ async def login(page: Page, settings: Settings) -> None:
         if await _session_is_valid(page):
             logger.info("Existing session recovered through Mis avisos")
             return
-        raise AuthenticationError("Authenticated menu found, but panel did not become ready")
+        if await _recover_inbox_session(page):
+            return
+        raise AuthenticationError("Authenticated menu found, but neither panel nor inbox became ready")
 
     # Step 2: Click "Ingresar"
     logger.info("Step 2: Clicking 'Ingresar' button")
@@ -492,6 +495,19 @@ async def launch_chrome(
 # ---------------------------------------------------------------------------
 
 
+async def _recover_inbox_session(page: Page) -> bool:
+    """A failing Mis avisos route does not prove the inbox session is expired."""
+    try:
+        await page.goto(INTERESADOS_URL, wait_until="domcontentloaded")
+        await _wait_for_cloudflare(page)
+        if await _session_is_valid(page):
+            logger.info("Existing session recovered through Interesados")
+            return True
+    except Exception as exc:
+        logger.warning("Inbox session recovery failed: {}", exc)
+    return False
+
+
 async def load_or_login(context: BrowserContext, settings: Settings) -> Page:
     """Ensure the context is authenticated, then navigate to Mis avisos.
 
@@ -514,6 +530,8 @@ async def load_or_login(context: BrowserContext, settings: Settings) -> Page:
         if await _session_is_valid(page):
             logger.info("Persistent session is valid — skipping login")
             return page
+        if await _recover_inbox_session(page):
+            return page
         logger.warning(
             "Session not valid (expired / blocked / logged out, url={}) — performing fresh login",
             page.url,
@@ -524,7 +542,12 @@ async def load_or_login(context: BrowserContext, settings: Settings) -> Page:
     # Fresh login.
     await login(page, settings)
 
+    # login may already have recovered the inbox when Mis avisos is broken.
+    if await _session_is_valid(page):
+        return page
+
     # Navigate to Mis avisos.
     await navigate_to_avisos(page)
-
+    if not await _session_is_valid(page) and not await _recover_inbox_session(page):
+        raise AuthenticationError("Neither panel nor inbox is usable after login")
     return page

@@ -431,7 +431,7 @@ _TABS = [
 ]
 
 
-async def extract_leads_list(page: Page) -> list[dict]:
+async def extract_leads_list(page: Page, *, observed_rows: list[dict] | None = None) -> list[dict]:
     """Navigate to the Interesados inbox and extract Pendiente leads from all tabs."""
     await _navigate_spa(page, INTERESADOS_URL)
     # The inbox loads lead rows asynchronously after the shell renders.
@@ -450,6 +450,8 @@ async def extract_leads_list(page: Page) -> list[dict]:
             await asyncio.sleep(30)
 
         leads: list[dict] = await page.evaluate(_EXTRACT_LEADS_LIST_JS)
+        if observed_rows is not None:
+            observed_rows.extend({**lead, "source_tab": tab_name} for lead in leads)
         pendiente = [l for l in leads if l.get("status") == "Pendiente"]
 
         # Chipless rows (status '') are brand-new leads whose status chip has
@@ -1287,7 +1289,9 @@ def _merge_lead_detail(lead: dict, detail: dict) -> dict:
     return merged
 
 
-async def scrape_pendiente_leads(page: Page, *, limit: int = 0) -> list[dict]:
+async def scrape_pendiente_leads(
+    page: Page, *, limit: int = 0, observed_rows: list[dict] | None = None
+) -> list[dict]:
     """Extract all Pendiente leads (with full detail) from the Interesados inbox.
 
     Returns all extracted leads (before dedup). The caller handles dedup via
@@ -1300,7 +1304,7 @@ async def scrape_pendiente_leads(page: Page, *, limit: int = 0) -> list[dict]:
     Includes session staleness detection and screenshot capture on failures.
     """
     # Step 1: Get Pendiente leads from the inbox.
-    pendiente_leads = await extract_leads_list(page)
+    pendiente_leads = await extract_leads_list(page, observed_rows=observed_rows)
 
     # Check for stale session after navigation.
     if _is_session_stale(page.url):

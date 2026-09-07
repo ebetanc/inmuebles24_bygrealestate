@@ -264,6 +264,7 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
         new_count = 0
         status = "ok"
         error_message: str | None = None
+        metadata: dict = {}
 
         async with async_playwright() as pw:
             context, chrome_proc = await launch_chrome(
@@ -345,15 +346,21 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     live_property_map = {}
 
                 # Scrape all Pendiente leads (with session recovery).
+                observed_rows: list[dict] = []
                 try:
-                    all_leads = await scrape_pendiente_leads(page, limit=args.limit)
+                    all_leads = await scrape_pendiente_leads(
+                        page, limit=args.limit, observed_rows=observed_rows
+                    )
                 except SessionStaleError:
                     logger.warning("Session stale — re-authenticating and retrying")
                     from inmobiliaria24.auth import login, navigate_to_avisos
 
                     await login(page, settings)
                     await navigate_to_avisos(page)
-                    all_leads = await scrape_pendiente_leads(page, limit=args.limit)
+                    observed_rows.clear()
+                    all_leads = await scrape_pendiente_leads(
+                        page, limit=args.limit, observed_rows=observed_rows
+                    )
                 total = len(all_leads)
                 property_map = store.property_public_id_map()
                 property_map.update(live_property_map)
@@ -393,6 +400,22 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                 # removes a lead from the next portal scrape.
                 new_leads = await _run_v3_route_dispatch(settings, store)
                 new_count = len(new_leads)
+
+                # Already-contacted rows may never have passed through V3.
+                # Surface them without assigning an invented responsible agent.
+                from inmobiliaria24.supa import find_uncaptured_contacted_rows
+                try:
+                    unmatched = await find_uncaptured_contacted_rows(settings, observed_rows)
+                    metadata["uncaptured_contacted_rows"] = unmatched
+                    if unmatched:
+                        error_message = "Contactado sin captura V3: " + ", ".join(
+                            row["lead_id"] for row in unmatched
+                        )
+                        logger.warning(error_message)
+                except Exception as exc:
+                    error_message = "No se pudo verificar Contactado contra capturas V3"
+                    metadata["contactado_reconciliation_failed"] = True
+                    logger.warning("Contactado reconciliation unavailable: {}", exc)
 
                 print(f"Scraped {total} Pendiente leads, {new_count} new")
                 for lead in new_leads:
@@ -453,6 +476,7 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     total=total,
                     new=new_count,
                     error_message=error_message,
+                    metadata=metadata,
                 )
                 await context.close()
                 chrome_proc.terminate()

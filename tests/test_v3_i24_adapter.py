@@ -32,6 +32,40 @@ class _Client:
         return self.response
 
 
+def test_contacted_without_capture_is_reported_without_reassignment(monkeypatch):
+    requests = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, url, **kwargs):
+            requests.append(kwargs["params"])
+            return _Response([{"external_event_id": "100"}])
+
+        async def post(self, *args, **kwargs):
+            raise AssertionError("observation must never mutate or reassign")
+
+    monkeypatch.setattr(supa.httpx, "AsyncClient", Client)
+    monkeypatch.setattr(supa, "_supa_cfg", lambda: ("https://example.test", "test"))
+    settings = type("Settings", (), {"lead_routing_account_key": "default"})()
+    rows = [
+        {"lead_id": "100", "status": "Contactado"},
+        {"lead_id": "200", "status": "Contactado", "listing_id": "300", "source_tab": "whatsapp"},
+        {"lead_id": "200", "status": "Contactado", "listing_id": "300", "source_tab": "whatsapp"},
+        {"lead_id": "400", "status": "Pendiente"},
+    ]
+    assert asyncio.run(supa.find_uncaptured_contacted_rows(settings, rows)) == [
+        {"lead_id": "200", "listing_id": "300", "source_tab": "whatsapp", "status": "Contactado"}
+    ]
+    assert requests[0]["external_event_id"] == "in.(100,200)"
+
 def test_v3_intake_sends_durable_capture_before_downstream_effect(monkeypatch):
     client = _Client(_Response([{
         "disposition": "created_new",

@@ -31,6 +31,18 @@ Inmuebles24 (3 bandejas) --15 min--> scraper (Raspberry Pi)
 Noche 20:00–08:00 CDMX: las ofertas quedan en `queued_night` y WF7 las libera a
 las 08:05.
 
+El despacho de capturas verificadas tiene un servicio independiente:
+`inmobiliaria24-dispatch.timer` revisa la cola cada minuto sin abrir el navegador.
+El scraper también intenta el envío al terminar Contactado; las reservas atómicas
+de Supabase evitan que ambos consumidores tomen el mismo trabajo. Un fallo de
+sesión ya no detiene la cola lista ni obliga a esperar el siguiente ciclo de 15
+minutos. El horario efectivo de liberación de la mañana sigue siendo 08:05 CDMX.
+
+Las filas Contactado visibles sin captura V3 se registran como advertencias en
+`scrape_logs.error_message` y `metadata.uncaptured_contacted_rows`. Esta comparación
+cubre las filas observadas en las tres bandejas, no todo el historial del portal.
+No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
+
 ## Flujo, paso a paso
 
 1. **Captura.** El scraper (`src/inmobiliaria24/`) recorre las 3 bandejas de

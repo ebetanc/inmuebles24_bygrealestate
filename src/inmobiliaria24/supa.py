@@ -26,6 +26,7 @@ async def log_scrape_run(
     total: int = 0,
     new: int = 0,
     error_message: str | None = None,
+    metadata: dict | None = None,
 ) -> None:
     """Insert one row into Supabase scrape_logs describing a finished run."""
     url = os.environ.get("SUPABASE_URL", "").strip()
@@ -44,7 +45,7 @@ async def log_scrape_run(
         "total_scraped": total,
         "new_listings": new,
         "error_message": error_message,
-        "metadata": {"source": "inmuebles24"},
+        "metadata": {**(metadata or {}), "source": "inmuebles24"},
     }
     headers = {
         "apikey": key,
@@ -80,6 +81,40 @@ def _supa_cfg() -> tuple[str, str] | None:
 
 def _headers(key: str) -> dict:
     return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+
+
+async def find_uncaptured_contacted_rows(settings, rows: list[dict]) -> list[dict]:
+    """Observe portal-only Contactado rows; never infer an owner or reoffer them."""
+    candidates = {
+        str(row.get("lead_id") or ""): row for row in rows
+        if row.get("status") == "Contactado"
+        and re.fullmatch(r"\d+", str(row.get("lead_id") or ""))
+    }
+    if not candidates:
+        return []
+    cfg = _supa_cfg()
+    if not cfg:
+        raise RuntimeError("Supabase required to reconcile Contactado rows")
+    url, key = cfg
+    captured: set[str] = set()
+    ids = list(candidates)
+    async with httpx.AsyncClient(timeout=15) as client:
+        for start in range(0, len(ids), 100):
+            response = await client.get(
+                f"{url}/rest/v1/i24_capture_events",
+                params={
+                    "select": "external_event_id",
+                    "account_key": f"eq.{settings.lead_routing_account_key}",
+                    "source": "eq.inmuebles24",
+                    "external_event_id": "in.(" + ",".join(ids[start:start + 100]) + ")",
+                },
+                headers=_headers(key),
+            )
+            response.raise_for_status()
+            captured.update(str(row["external_event_id"]) for row in response.json())
+    # No phone/email/name needed to identify and investigate the exact request.
+    return [{key: row.get(key) for key in ("lead_id", "listing_id", "source_tab", "status")}
+            for lead_id, row in candidates.items() if lead_id not in captured]
 
 
 def _v3_phone(value: object) -> str | None:

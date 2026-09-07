@@ -1,0 +1,11 @@
+[Unit]
+Description=Check verified V3 dispatch queue every minute, including night release
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=1s
+Persistent=true
+Unit=inmobiliaria24-dispatch.service
+
+[Install]
+WantedBy=timers.target

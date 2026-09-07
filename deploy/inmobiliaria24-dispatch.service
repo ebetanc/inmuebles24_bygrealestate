@@ -1,0 +1,21 @@
+[Unit]
+Description=Dispatch verified V3 captures independently of the I24 browser
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=inmobiliaria24
+Group=inmobiliaria24
+WorkingDirectory=/opt/inmobiliaria24
+EnvironmentFile=/opt/inmobiliaria24/.env
+ExecStart=/opt/inmobiliaria24/.venv/bin/python -m inmobiliaria24.dispatch
+TimeoutStartSec=180
+MemoryMax=256M
+NoNewPrivileges=yes
+PrivateTmp=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
