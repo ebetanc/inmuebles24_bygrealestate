@@ -278,7 +278,16 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                 pw, headless=not args.headful
             )
             try:
-                page = await load_or_login(context, settings)
+                from inmobiliaria24.day_sla import is_day
+                fast_day = os.environ.get("I24_FAST_DAY", "") == "1" and is_day(started_at)
+                inbox_responses = []
+                if fast_day:
+                    context.on("response", inbox_responses.append)
+                try:
+                    page = await load_or_login(context, settings)
+                finally:
+                    if fast_day:
+                        context.remove_listener("response", inbox_responses.append)
                 if args.dry_run:
                     logger.info("Dry run complete — session is valid, on Mis avisos")
                     print("Dry run complete — session is valid, on Mis avisos")
@@ -339,8 +348,6 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     store.finish_run(run_id, status="dry_run")
                     return 0
 
-                from inmobiliaria24.day_sla import is_day
-                fast_day = os.environ.get("I24_FAST_DAY", "") == "1" and is_day(started_at)
                 # Mis avisos exposes both the Inmuebles24 listing ID and the
                 # EB advertiser code; lead detail pages expose only the first.
                 conflicting_listing_ids: set[str] = set()
@@ -361,7 +368,7 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                         from inmobiliaria24.fast_inbox import read_fast_inbox
                         from inmobiliaria24.day_sla import parse_time
                         # Explicit deployment cutoff prevents historical reoffers.
-                        all_leads = await read_fast_inbox(page, since=parse_time(os.environ["I24_DAY_ENABLED_AT"]))
+                        all_leads = await read_fast_inbox(page, since=parse_time(os.environ["I24_DAY_ENABLED_AT"]), initial_responses=inbox_responses)
                         observed_rows.extend(all_leads)
                         metadata["fast_day"] = True
                     else:

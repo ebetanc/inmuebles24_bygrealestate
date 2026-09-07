@@ -54,7 +54,7 @@ def normalize_row(row: dict, tab: str) -> dict:
     }
 
 
-async def read_fast_inbox(page, *, since: datetime) -> list[dict]:
+async def read_fast_inbox(page, *, since: datetime, initial_responses=()) -> list[dict]:
     """Wait for each tab's complete list, not its two-row counter prefetch.
 
     Pagination stays in the actual UI. Stop once rows precede the activation
@@ -78,7 +78,16 @@ async def read_fast_inbox(page, *, since: datetime) -> list[dict]:
             if selector:
                 await page.locator(selector).click(timeout=25_000)
             else:
-                await page.goto(INTERESADOS_URL, wait_until="domcontentloaded")
+                # Authentication already loaded this inbox. Reopening it can
+                # redirect a valid session to /panel/permissionserror.
+                if initial_responses and page.url == INTERESADOS_URL:
+                    for existing in reversed(initial_responses):
+                        if (LEADS_PATH in existing.url and existing.frame.page == page):
+                            await collect(existing)
+                            if not queue.empty():
+                                break
+                if queue.empty():
+                    await page.goto(INTERESADOS_URL, wait_until="domcontentloaded")
             received = await asyncio.wait_for(queue.get(), timeout=25)
             if isinstance(received, Exception):
                 raise received

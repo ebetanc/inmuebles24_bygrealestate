@@ -94,6 +94,18 @@ def test_fast_reader_ignores_assets_redirects_and_counter_prefetches():
     rows = asyncio.run(read_fast_inbox(page, since=now-timedelta(seconds=1)))
     assert [r["lead_id"] for r in rows] == ["123"]
     assert page.handler is None
+    # Reuse the exact authenticated page's initial response: a second navigation
+    # can turn that valid session into I24's permissionserror page.
+    from types import SimpleNamespace
+    from inmobiliaria24.fast_inbox import INTERESADOS_URL
+    page.url = INTERESADOS_URL
+    async def unexpected_navigation(*args, **kwargs):
+        raise AssertionError("Authenticated inbox must not be reopened")
+    page.goto = unexpected_navigation
+    initial = Response("https://www.inmuebles24.com/leads-api/publisher/leads")
+    initial.frame = SimpleNamespace(page=page)
+    rows = asyncio.run(read_fast_inbox(page, since=now-timedelta(seconds=1), initial_responses=[initial]))
+    assert [r["lead_id"] for r in rows] == ["123"]
 
 
 def test_n8n_empty_sql_success_row_cannot_reach_alert_send():
