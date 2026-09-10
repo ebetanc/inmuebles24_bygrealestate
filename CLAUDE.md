@@ -19,10 +19,13 @@ cada 15 min 24/7) lee 3 bandejas de Inmuebles24 → `v3_intake` en Supabase → 
 botón único "Tomo", requiere URL pública de EB) → callbacks Meta → WF22 (HMAC, inbox
 durable) → WF1 → WF3b (primer clic válido gana, atómico). WF23 (cron 30 s) es el
 **único** motor de tiempos: 2 min sin `delivered` o 5 min tras `delivered` → WF3c →
-guardia del turno → 5 min → Sandy (`agent_manager`, plantilla `lead_asignado_v3`).
+guardia del turno → 5 min → SIN ASIGNACIÓN (`v3_mark_unassigned`, estado `unassigned`,
+sin WhatsApp a Sandy; EB nota `RESPONSABLE: SIN ASIGNACIÓN` sin Atendida).
 Noche 20:00–08:00 CDMX: `queued_night`, liberado por WF7 a las 08:05. El worker
 `src/easybroker` (cada minuto) escribe nota `RESPONSABLE: <nombre>` + `Atendida` en la
-solicitud EB exacta.
+solicitud EB exacta. WF24 corre solo a las 20:45 CDMX y manda el reporte diario por
+email y por WhatsApp (plantilla `reporte_diario_v3`, botón "Ver detalle" que WF1
+(`report_detail`) responde con el texto completo).
 
 Workflows vivos (13): WF10 `Obr38705ZZYS3FB8`, WF12 `w7yJr7naWoxPq6Pw`,
 WF13 `Bo2YbbUpmBzRbhDa`, WF22 `Z89IQDw1fgWlqXEW`, WF1 `snF6Sr9CBJIevMVD`,
@@ -47,7 +50,10 @@ Reglas de operación:
 - Pi: `ssh esteban@100.88.225.103` (Tailscale). Deploy: `sudo bash /opt/inmobiliaria24/deploy/deploy.sh`
   (git pull + pip install + restart de `inmobiliaria24.timer`); `easybroker.timer` se
   reinicia aparte.
-- Tests: `PYTHONPATH=src python -m pytest -q` (380 passed, 2 xfailed).
+- Tests: `PYTHONPATH=src python -m pytest -q` (357 passed, 2 xfailed); en sandboxes
+  de Windows agrega `--basetemp=<dir>`.
+- **En expresiones de n8n nunca uses `JSON.stringify({...})` con llaves anidadas
+  (`}}` cierra la expresión):** cuerpo JSON literal con islas `{{ }}`.
 
 Fuentes de verdad: `docs/superpowers/specs/2026-08-26-lead-routing-v3-contract.md`,
 `docs/superpowers/plans/2026-08-26-lead-routing-v3-execution-plan.md`,

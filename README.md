@@ -23,7 +23,7 @@ Inmuebles24 (3 bandejas) --1 min dia / 15 min noche--> scraper (Raspberry Pi)
                                      |                (botón único "Tomo")
   Meta callbacks --> WF22 --> WF1 --> WF3b  (primer clic válido gana, atómico)
                                      ^
-                     WF23 (cron 30 s) --> WF3c: dueño -> guardia del turno -> Sandy
+                     WF23 (cron 30 s) --> WF3c: dueño -> guardia del turno -> SIN ASIGNACIÓN
                                      |
   EasyBroker worker (1 min) <--------+  nota "RESPONSABLE: <nombre>" + "Atendida"
 ```
@@ -66,8 +66,8 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
    `delivered`, o 5 minutos después de `delivered`, disparan WF3c
    `v3_advance_routing_tier` → guardia del turno (`get_guard_coverage_slots`, una
    sola guardia por turno, tomada del calendario del dashboard) → 5 minutos más →
-   `v3_assign_sandy` (`agent_id = agent_manager`) con plantilla `lead_asignado_v3`
-   (sin botón).
+   cierre `unassigned` ("SIN ASIGNACIÓN") vía `v3_mark_unassigned`. Sandy no recibe
+   WhatsApp por este cierre.
 8. **Cierre EasyBroker.** El worker `src/easybroker/` corre cada minuto, correlaciona
    la solicitud exacta (propiedad + email/teléfono) y escribe por Playwright la nota
    `RESPONSABLE: <nombre>` y el estado `Atendida`. Los efectos son idempotentes vía
@@ -88,7 +88,7 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
 | WF7 | `xzBG0GIsHCUd44DC` | Cron 08:05 `America/Mexico_City` | `v3_release_night_queue` + reporte matutino |
 | WF20 | `pYV88ntxI0Lc4NCB` | Cron | Watchdog: scraper sin corrida, errores, silencios |
 | WF21 | `He95yJflKVspGFyb` | Error trigger global | Email de error con throttling |
-| WF24 | `WF24V3MonitorDia` | Cada 30 min 08:00–20:30 + 20:45 | Monitor V3 por email (se genera con `build_wf24_monitor.py`) |
+| WF24 | `WF24V3MonitorDia` | 20:45 CDMX | Reporte diario V3 por email y WhatsApp (`reporte_diario_v3`, botón "Ver detalle") (se genera con `build_wf24_monitor.py`) |
 | WF17 | `YkhDEps0WbqaszMX` | Lunes 08:00 CDMX | Reporte semanal por email — **todavía lee datos V1** |
 
 `whatsapp-agent/workflows/` es la fuente de verdad del repo; `n8n-export/` es el
@@ -212,8 +212,9 @@ Copia `.env.example` a `.env`. Las claves que importan hoy en el Pi:
 - **WF20** watchdog: alerta si el scraper deja de correr o si hay silencios.
 - **WF21** error handler: captura cualquier ejecución fallida y manda email
   (con throttling para no inundar).
-- **WF24** monitor V3: email cada 30 min entre 08:00 y 20:30 y reporte del día a
-  las 20:45.
+- **WF24** monitor V3: reporte del día a las 20:45 CDMX por email y WhatsApp
+  (`reporte_diario_v3` a `public.v3_report_recipients`, botón "Ver detalle" que
+  WF1 responde con el texto completo de `public.v3_daily_reports`).
 - Telegram opcional para errores del scraper (`TELEGRAM_*`).
 
 ## Brechas conocidas
