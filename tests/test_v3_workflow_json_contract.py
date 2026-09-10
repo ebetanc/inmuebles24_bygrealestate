@@ -456,4 +456,7 @@ def test_wf1_routes_ver_detalle_button_to_the_stored_daily_report():
         reader = node(workflow, "Leer último reporte")
         assert reader.get("alwaysOutputData") is False
         assert "v3_report_recipients" in reader["parameters"]["query"]
-        assert "type:'text'" in node(workflow, "Enviar detalle")["parameters"]["jsonBody"]
+        sender_body = node(workflow, "Enviar detalle")["parameters"]["jsonBody"]
+        assert '"type": "text"' in sender_body
+        # Las llaves anidadas de JSON.stringify({...}) cierran la expresión {{ }} antes de tiempo.
+        assert "JSON.stringify({" not in sender_body

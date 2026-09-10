@@ -764,7 +764,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({messaging_product:'whatsapp',recipient_type:'individual',to:$json.phone,type:'text',text:{preview_url:false,body:$json.text}}) }}",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": { \"preview_url\": false, \"body\": {{ JSON.stringify($json.text) }} }\n}",
         "options": {
           "timeout": 10000,
           "batching": {
