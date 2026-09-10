@@ -88,7 +88,9 @@ def test_claim_effects_promotes_unassigned_with_sin_asignacion(sql):
 
 def test_request_creations_accepts_unassigned(sql):
     body = _body(sql, "claim_v3_easybroker_request_creations")
-    assert "o.state IN ('assigned','closed_won','unassigned')" in body
+    assert "LEFT JOIN public.agents a ON a.agent_id=o.assigned_agent_id" in body, \
+        "an unassigned lead has no agent row to join"
+    assert "OR o.state='unassigned'" in body
 
 
 def test_day_sweep_counts_unassigned_as_closed(sql):

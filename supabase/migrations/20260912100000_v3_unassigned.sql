@@ -331,7 +331,12 @@ BEGIN
 END;
 $$;
 
--- 6. EasyBroker request creation also runs for the unassigned terminal.
+-- 6. EasyBroker request creation also runs for the unassigned terminal: without
+-- a request there is nothing to write the "RESPONSABLE: SIN ASIGNACIÓN" note on.
+-- The creation ledger stores no responsible (see
+-- easybroker_contact_request_creation_ledger); the agent join is only an
+-- eligibility gate, so an unassigned lead skips it entirely and the responsible
+-- is resolved later by claim_v3_easybroker_effects.
 CREATE OR REPLACE FUNCTION public.claim_v3_easybroker_request_creations(p_limit integer DEFAULT 20, p_now timestamp with time zone DEFAULT now(), p_lease_duration interval DEFAULT '00:02:00'::interval)
  RETURNS TABLE(capture_event_id bigint, opportunity_id bigint, i24_lead_id text, property_public_id text, offer_context jsonb, normalized_email text, e164_phone text, correlation_window_start_at timestamp with time zone, correlation_horizon_at timestamp with time zone, remote_request_id bigint, lease_token uuid, lease_expires_at timestamp with time zone, post_allowed boolean)
  LANGUAGE plpgsql
@@ -354,7 +359,7 @@ BEGIN
          UPPER(BTRIM(e.property_public_id))
   FROM public.i24_capture_events e
   JOIN public.lead_routing_opportunities o ON o.opportunity_id=e.opportunity_id
-  JOIN public.agents a ON a.agent_id=o.assigned_agent_id
+  LEFT JOIN public.agents a ON a.agent_id=o.assigned_agent_id
   WHERE (e.capture_event_id IN (107,108)
          OR e.happened_at >= TIMESTAMPTZ '2026-08-28T17:00:05.020Z')
     AND public.v3_day_allowed(e.capture_event_id,NULL,NULL)
@@ -362,9 +367,12 @@ BEGIN
     AND e.contactado_status='verified'
     AND e.route_dispatch_status='dispatched'
     AND o.v3_enabled
-    AND o.state IN ('assigned','closed_won','unassigned')
-    AND o.assigned_agent_id IS NOT NULL
-    AND NULLIF(BTRIM(a.name),'') IS NOT NULL
+    AND (
+      (o.state IN ('assigned','closed_won')
+       AND o.assigned_agent_id IS NOT NULL
+       AND NULLIF(BTRIM(a.name),'') IS NOT NULL)
+      OR o.state='unassigned'
+    )
     AND NULLIF(BTRIM(e.property_public_id),'') IS NOT NULL
     AND UPPER(BTRIM(e.property_public_id)) ~ '^EB-[A-Z0-9]{4,}$'
     AND (e.normalized_email IS NOT NULL OR e.e164_phone IS NOT NULL)
@@ -383,22 +391,42 @@ BEGIN
     ORDER BY l.capture_event_id
     FOR UPDATE OF l SKIP LOCKED
     LIMIT p_limit
-  ),
-  claimed AS (
+  ), claimed AS (
     UPDATE public.easybroker_contact_request_creation_ledger l
-    SET lease_token=gen_random_uuid(), lease_expires_at=p_now+p_lease_duration,
-        updated_at=p_now
+    SET lease_token=gen_random_uuid(),
+        lease_expires_at=p_now+p_lease_duration, updated_at=p_now
     FROM candidates c
     WHERE l.capture_event_id=c.capture_event_id
     RETURNING l.*
+  ), refreshed AS (
+    -- easybroker_creation_claim_window_v1
+    -- Only a never-posted claim receives a fresh bounded window. Recovery
+    -- claims after the one allowed POST cannot extend the horizon forever.
+    UPDATE public.i24_capture_events e
+    SET correlation_window_start_at=LEAST(
+          COALESCE(e.correlation_window_start_at,p_now-INTERVAL '5 minutes'),
+          p_now-INTERVAL '5 minutes'
+        ),
+        correlation_horizon_at=GREATEST(
+          COALESCE(e.correlation_horizon_at,p_now+INTERVAL '24 hours'),
+          p_now+INTERVAL '24 hours'
+        )
+    FROM claimed l
+    WHERE e.capture_event_id=l.capture_event_id
+      AND l.post_attempt_count=0
+    RETURNING e.capture_event_id, e.correlation_window_start_at,
+              e.correlation_horizon_at
   )
-  SELECT c.capture_event_id, c.opportunity_id, c.i24_lead_id, c.property_public_id,
-         e.offer_context, e.normalized_email, e.e164_phone,
-         e.correlation_window_start_at, e.correlation_horizon_at,
-         c.remote_request_id, c.lease_token, c.lease_expires_at,
-         (c.post_count=0 OR c.manual_retry_allowed) AS post_allowed
-  FROM claimed c
-  JOIN public.i24_capture_events e ON e.capture_event_id=c.capture_event_id;
+  SELECT l.capture_event_id, l.opportunity_id, e.external_event_id,
+         l.property_public_id, e.offer_context, e.normalized_email,
+         e.e164_phone,
+         COALESCE(r.correlation_window_start_at,e.correlation_window_start_at),
+         COALESCE(r.correlation_horizon_at,e.correlation_horizon_at),
+         l.remote_request_id, l.lease_token,
+         l.lease_expires_at, l.post_attempt_count=0
+  FROM claimed l
+  JOIN public.i24_capture_events e ON e.capture_event_id=l.capture_event_id
+  LEFT JOIN refreshed r ON r.capture_event_id=l.capture_event_id;
 END;
 $$;
 

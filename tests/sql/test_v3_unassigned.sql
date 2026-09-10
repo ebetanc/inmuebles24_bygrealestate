@@ -2,7 +2,7 @@
 -- No HTTP calls, no WhatsApp sends, nothing committed.
 DO $$
 DECLARE
-  r record; op bigint; cap bigint; op2 bigint; cap2 bigint;
+  r record; op bigint; cap bigint; op2 bigint; cap2 bigint; op3 bigint; cap3 bigint;
   n integer; res jsonb; tok uuid; changed boolean;
   t0 timestamptz := clock_timestamp() - interval '1 hour';
   deadline timestamptz := clock_timestamp() - interval '30 minutes';
@@ -78,6 +78,40 @@ BEGIN
  IF EXISTS(SELECT 1 FROM public.easybroker_effect_attempts
     WHERE eb_request_id=990001 AND effect_kind='attended') THEN
    RAISE EXCEPTION 'an Atendida attempt was created'; END IF;
+
+ -- (g) an unassigned lead with no EasyBroker request still gets one created,
+ -- and the resulting effect ledger resolves to the literal responsible.
+ SELECT * INTO r FROM public.v3_intake(
+   p_account_key=>'unassigned-rollback',p_idempotency_key=>gen_random_uuid()::text,
+   p_external_id=>'9999990003',p_property_public_id=>'EB-QJ4964',
+   p_email=>gen_random_uuid()::text||'@example.invalid',
+   p_offer_context=>jsonb_build_object('name','Sin asignacion sin request'));
+ op3:=r.opportunity_id; cap3:=r.capture_event_id;
+ PERFORM public.v3_mark_unassigned(op3,'guard_expired',cap3,t0);
+ UPDATE public.i24_capture_events
+ SET contactado_status='verified', contactado_verified_at=t0,
+     route_dispatch_status='dispatched', route_dispatched_at=t0
+ WHERE capture_event_id=cap3;
+ IF NOT EXISTS(SELECT 1 FROM public.claim_v3_easybroker_request_creations(50,clock_timestamp(),interval '2 minutes') c
+    WHERE c.capture_event_id=cap3) THEN
+   RAISE EXCEPTION 'unassigned lead was not queued for EasyBroker request creation'; END IF;
+
+ -- the created request correlates back and the note names SIN ASIGNACIÓN
+ INSERT INTO public.easybroker_contact_request_inbox(
+   eb_request_id,account_key,happened_at,correlation_state)
+ VALUES (990003,'unassigned-rollback',t0,'linked');
+ INSERT INTO public.easybroker_i24_request_links(
+   eb_request_id,i24_capture_event_id,opportunity_id,idempotency_key,match_basis)
+ VALUES (990003,cap3,op3,'unassigned-rollback:990003','email');
+ res := public.enqueue_v3_easybroker_effect(990003,t0);
+ IF res->>'state'<>'awaiting_responsible' THEN
+   RAISE EXCEPTION 'unexpected enqueue state: %', res; END IF;
+ SELECT * INTO r FROM public.claim_v3_easybroker_effects(10,t0,interval '2 minutes')
+ WHERE eb_request_id=990003;
+ IF NOT FOUND THEN RAISE EXCEPTION 'created request never became actionable'; END IF;
+ IF r.responsible_first_name<>'SIN ASIGNACIÓN' OR r.attended_due THEN
+   RAISE EXCEPTION 'created request resolved to %/attended_due=%',
+     r.responsible_first_name, r.attended_due; END IF;
 
  -- (e) day SLA: unassigned before the deadline plus a closed ledger is a close
  UPDATE public.i24_capture_events
