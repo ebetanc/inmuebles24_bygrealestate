@@ -11,10 +11,12 @@ const estadoPills: Record<string, PillStyle> = {
   oferta: { fill: "bg-[var(--accent-fill)]", dot: "bg-[var(--amber)]", label: "En oferta" },
   cola: { fill: "bg-[var(--bg-3)]", dot: "bg-[var(--tx-lo)]", label: "En cola" },
   revision: { fill: "bg-[var(--alert-fill)]", dot: "bg-[var(--rose)]", label: "En revision" },
+  sinAsignacion: { fill: "bg-[var(--accent-fill)]", dot: "bg-[var(--amber)]", label: "Sin asignación" },
 };
 
 function estadoOf(l: V3Lead): PillStyle {
   if (l.assigned_agent_id) return estadoPills.asignado;
+  if (l.state === "unassigned") return estadoPills.sinAsignacion;
   if (l.dispatch_status === "manual_review") return estadoPills.revision;
   if (l.night_queued_at && !l.night_released_at) return estadoPills.cola;
   return estadoPills.oferta;
@@ -48,6 +50,7 @@ function responsable(l: V3Lead): string {
       : "toco Tomo";
   }
   if (l.assignment_method === "sandy_fallback") return "Sandy por vencimiento";
+  if (l.assignment_method === "unassigned") return "Sin asignación";
   return "asignacion directa";
 }
 
@@ -55,6 +58,7 @@ const kpiCards = [
   { key: "total" as const, label: "Leads Hoy" },
   { key: "claimed" as const, label: "Tomados" },
   { key: "sandy" as const, label: "A Sandy" },
+  { key: "unassigned" as const, label: "Sin asignación" },
   { key: "open" as const, label: "En Oferta" },
   { key: "withProblem" as const, label: "Con Problema" },
   { key: "avgMinutesToClaim" as const, label: "Prom. Tomo", suffix: " min" },

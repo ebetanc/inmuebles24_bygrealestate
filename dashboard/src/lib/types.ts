@@ -141,7 +141,7 @@ export interface V3Lead {
   assigned_name: string | null;
   assigned_role: string | null;
   assigned_at: string | null;
-  assignment_method: "claim" | "sandy_fallback" | null;
+  assignment_method: "claim" | "sandy_fallback" | "unassigned" | null;
   minutes_to_claim: number | null;
   owner_offer_delivered_at: string | null;
   guard_offer_delivered_at: string | null;
@@ -161,6 +161,7 @@ export interface V3KPIs {
   total: number;
   claimed: number;
   sandy: number;
+  unassigned: number;
   open: number;
   withProblem: number;
   avgMinutesToClaim: number | null;
