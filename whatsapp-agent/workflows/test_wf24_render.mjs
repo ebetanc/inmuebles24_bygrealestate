@@ -14,9 +14,14 @@ const out = render(row);
 assert.equal(out.tpl.length, 7);
 out.tpl.forEach((p, i) => assert.ok(!p.includes('\n'), `tpl[${i}] has a newline`));
 assert.ok(out.tpl[6].length <= 600, 'tpl[6] too long');
-assert.equal(out.tpl[3], '1', 'expected exactly one lead sin asignación (Sandy)');
+assert.equal(out.tpl[3], '1', 'expected exactly one lead sin asignación');
 
 const joined = out.text_chunks.join('\n');
+assert.ok(joined.includes('SIN ASIGNACIÓN'), 'missing SIN ASIGNACIÓN line');
+assert.ok(joined.includes('(guard_expired)'), 'missing left_unassigned reason');
+assert.ok(joined.includes('Atendida omitida'), 'missing Atendida omitida');
+assert.ok(joined.includes('1 a Sandy'), 'legacy Sandy fallback lost from summary');
+assert.ok(out.subject.includes('1 sin asignación'), out.subject);
 out.text_chunks.forEach(c => assert.ok(c.length <= 4000, 'chunk over 4000'));
 for (const l of row.leads) assert.ok(joined.includes('#' + l.opportunity_id), 'missing #' + l.opportunity_id);
 assert.ok(!/<[a-z]/i.test(joined), 'HTML tag leaked into text');

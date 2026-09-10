@@ -15,6 +15,7 @@
       "assigned_at": "2026-09-09T16:06:48.000Z",
       "accepted_at": "2026-09-09T16:06:48.000Z",
       "expires_at": "2026-09-09T16:08:30.000Z",
+      "unassigned_at": null,
       "v3_night_queued_at": null,
       "v3_night_released_at": null,
       "lead_name": "Fernanda Robles",
@@ -62,16 +63,17 @@
     },
     {
       "opportunity_id": 802,
-      "state": "assigned",
-      "routing_tier": "sandy",
+      "state": "unassigned",
+      "routing_tier": "primary_guard",
       "property_id": "EB-CD3345",
-      "assigned_agent_id": "agent_manager",
-      "assigned_name": "Sandy Mora",
-      "assigned_role": "manager",
+      "assigned_agent_id": null,
+      "assigned_name": null,
+      "assigned_role": null,
       "created_at": "2026-09-09T18:31:04.000Z",
-      "assigned_at": "2026-09-09T18:44:12.000Z",
+      "assigned_at": null,
       "accepted_at": null,
       "expires_at": "2026-09-09T18:44:12.000Z",
+      "unassigned_at": "2026-09-09T18:44:12.000Z",
       "v3_night_queued_at": null,
       "v3_night_released_at": null,
       "lead_name": "Ricardo Peña",
@@ -103,30 +105,16 @@
           "delivered_at": "2026-09-09T18:38:51.000Z",
           "claimed_at": null,
           "failed_at": null
-        },
-        {
-          "tier": "sandy",
-          "kind": "assigned_notice",
-          "to": "Sandy Mora",
-          "to_id": "agent_manager",
-          "status": "delivered",
-          "requested_at": "2026-09-09T18:44:20.000Z",
-          "sent_at": "2026-09-09T18:44:23.000Z",
-          "delivered_at": "2026-09-09T18:44:31.000Z",
-          "claimed_at": null,
-          "failed_at": null
         }
       ],
       "events": [
         {"type": "detected", "actor": "scraper", "at": "2026-09-09T18:31:04.000Z", "reason": ""},
         {"type": "i24_contacted", "actor": "scraper", "at": "2026-09-09T18:31:35.000Z", "reason": ""},
         {"type": "escalated", "actor": "wf23", "at": "2026-09-09T18:38:40.000Z", "reason": "owner_timeout"},
-        {"type": "manager_assigned", "actor": "wf3c", "at": "2026-09-09T18:44:12.000Z", "reason": "guard_expired"},
-        {"type": "assigned_notice_delivered", "actor": "wf22", "at": "2026-09-09T18:44:31.000Z", "reason": ""}
+        {"type": "left_unassigned", "actor": "wf3c", "at": "2026-09-09T18:44:12.000Z", "reason": "guard_expired"}
       ],
       "eb_effects": [
-        {"kind": "note", "ok": true, "at": "2026-09-09T18:45:10.000Z", "status": "ok", "eb_request_id": "ebr_802"},
-        {"kind": "attended", "ok": true, "at": "2026-09-09T18:45:22.000Z", "status": "ok", "eb_request_id": "ebr_802"}
+        {"kind": "note", "ok": true, "at": "2026-09-09T18:45:10.000Z", "status": "ok", "eb_request_id": "ebr_802"}
       ]
     },
     {
@@ -141,6 +129,7 @@
       "assigned_at": null,
       "accepted_at": null,
       "expires_at": "2026-09-10T02:49:30.000Z",
+      "unassigned_at": null,
       "v3_night_queued_at": null,
       "v3_night_released_at": null,
       "lead_name": "Marisol Aguirre",
@@ -181,6 +170,7 @@
       "assigned_at": "2026-09-10T02:10:00.000Z",
       "accepted_at": "2026-09-10T02:10:00.000Z",
       "expires_at": "2026-09-10T02:12:00.000Z",
+      "unassigned_at": null,
       "v3_night_queued_at": null,
       "v3_night_released_at": null,
       "lead_name": "Hugo Lemus",
@@ -208,6 +198,63 @@
         {"type": "claim_accepted", "actor": "Milena Ortiz", "at": "2026-09-10T02:10:00.000Z", "reason": ""}
       ],
       "eb_effects": null
+    },
+    {
+      "opportunity_id": 805,
+      "state": "assigned",
+      "routing_tier": "sandy",
+      "property_id": "EB-GH9900",
+      "assigned_agent_id": "agent_manager",
+      "assigned_name": "Sandy Mora",
+      "assigned_role": "manager",
+      "created_at": "2026-09-09T17:05:12.000Z",
+      "assigned_at": "2026-09-09T17:18:40.000Z",
+      "accepted_at": null,
+      "expires_at": "2026-09-09T17:18:40.000Z",
+      "unassigned_at": null,
+      "v3_night_queued_at": null,
+      "v3_night_released_at": null,
+      "lead_name": "Norma Vidal",
+      "lead_phone": "5215512340005",
+      "property_title": "Departamento Condesa · Amsterdam 45",
+      "route_dispatch_status": "dispatched",
+      "contactado_status": "verified",
+      "attempts": [
+        {
+          "tier": "owner",
+          "kind": "offer",
+          "to": "Vicky Lara",
+          "to_id": "agent_vicky",
+          "status": "expired",
+          "requested_at": "2026-09-09T17:06:02.000Z",
+          "sent_at": "2026-09-09T17:06:05.000Z",
+          "delivered_at": "2026-09-09T17:06:14.000Z",
+          "claimed_at": null,
+          "failed_at": null
+        },
+        {
+          "tier": "sandy",
+          "kind": "assigned_notice",
+          "to": "Sandy Mora",
+          "to_id": "agent_manager",
+          "status": "delivered",
+          "requested_at": "2026-09-09T17:18:48.000Z",
+          "sent_at": "2026-09-09T17:18:51.000Z",
+          "delivered_at": "2026-09-09T17:18:59.000Z",
+          "claimed_at": null,
+          "failed_at": null
+        }
+      ],
+      "events": [
+        {"type": "detected", "actor": "scraper", "at": "2026-09-09T17:05:12.000Z", "reason": ""},
+        {"type": "i24_contacted", "actor": "scraper", "at": "2026-09-09T17:05:44.000Z", "reason": ""},
+        {"type": "manager_assigned", "actor": "wf3c", "at": "2026-09-09T17:18:40.000Z", "reason": "guard_expired"},
+        {"type": "assigned_notice_delivered", "actor": "wf22", "at": "2026-09-09T17:18:59.000Z", "reason": ""}
+      ],
+      "eb_effects": [
+        {"kind": "note", "ok": true, "at": "2026-09-09T17:19:30.000Z", "status": "ok", "eb_request_id": "ebr_805"},
+        {"kind": "attended", "ok": true, "at": "2026-09-09T17:19:42.000Z", "status": "ok", "eb_request_id": "ebr_805"}
+      ]
     }
   ],
   "health": {

@@ -28,7 +28,7 @@ active AS (
 ),
 leads AS (
   SELECT o.opportunity_id, o.state, o.routing_tier, o.property_id, o.assigned_agent_id, ag.name AS assigned_name, ag.role AS assigned_role,
-    o.created_at, o.assigned_at, o.accepted_at, o.expires_at, o.v3_night_queued_at, o.v3_night_released_at,
+    o.created_at, o.assigned_at, o.accepted_at, o.expires_at, o.unassigned_at, o.v3_night_queued_at, o.v3_night_released_at,
     COALESCE(NULLIF(c.lead_name,''), NULLIF(e.offer_context->>'name',''), e.offer_context->>'lead_name') AS lead_name,
     COALESCE(NULLIF(c.lead_phone,''), o.e164_phone, e.offer_context->>'phone') AS lead_phone,
     COALESCE(e.offer_context->>'property_title', NULLIF(concat_ws(' · ', e.offer_context->>'property', e.offer_context->>'address'),''), c.current_property) AS property_title,
@@ -38,7 +38,7 @@ leads AS (
      FROM public.lead_routing_delivery_attempts a LEFT JOIN public.agents ta ON ta.agent_id=a.target_agent_id WHERE a.opportunity_id=o.opportunity_id) AS attempts,
     (SELECT json_agg(json_build_object('type',ev.event_type,'actor',COALESCE(ea.name,ev.actor_id),'at',ev.occurred_at,'reason',COALESCE(ev.metadata->>'reason','')) ORDER BY ev.occurred_at)
      FROM public.lead_routing_events ev LEFT JOIN public.agents ea ON ea.agent_id=ev.actor_id
-     WHERE ev.opportunity_id=o.opportunity_id AND ev.event_type IN ('detected','i24_contacted','route_dispatched','delivery_requested','delivery_confirmed','accepted','claim_accepted','escalated','manager_assigned','missing_owner_data','route_dispatch_manual_review','route_dispatch_failed','night_queue_activated','assigned_notice_delivered','unassigned_alerted')) AS events,
+     WHERE ev.opportunity_id=o.opportunity_id AND ev.event_type IN ('detected','i24_contacted','route_dispatched','delivery_requested','delivery_confirmed','accepted','claim_accepted','escalated','manager_assigned','missing_owner_data','route_dispatch_manual_review','route_dispatch_failed','night_queue_activated','assigned_notice_delivered','unassigned_alerted','left_unassigned')) AS events,
     (SELECT json_agg(json_build_object('kind',fx.effect_kind,'ok',fx.ok,'at',fx.finished_at,'status',fx.evidence->>'status','eb_request_id',fx.eb_request_id) ORDER BY fx.finished_at)
      FROM public.easybroker_i24_request_links l JOIN public.easybroker_effect_attempts fx ON fx.eb_request_id=l.eb_request_id WHERE l.opportunity_id=o.opportunity_id) AS eb_effects
   FROM active x
@@ -51,7 +51,7 @@ leads AS (
 health AS (
   SELECT (SELECT max(completed_at) FROM public.scrape_logs WHERE status='ok') AS scraper_last_ok,
     (SELECT count(*) FROM public.lead_routing_delivery_attempts WHERE delivery_kind='offer' AND status='requested' AND requested_at < now()-interval '3 minutes') AS stuck_requested,
-    (SELECT count(*) FROM public.lead_routing_opportunities WHERE assigned_agent_id IS NULL AND current_delivery_attempt_id IS NOT NULL AND expires_at IS NOT NULL AND expires_at < now()-interval '90 seconds') AS stuck_expired,
+    (SELECT count(*) FROM public.lead_routing_opportunities WHERE assigned_agent_id IS NULL AND state <> 'unassigned' AND current_delivery_attempt_id IS NOT NULL AND expires_at IS NOT NULL AND expires_at < now()-interval '90 seconds') AS stuck_expired,
     (SELECT count(*) FROM public.lead_routing_opportunities WHERE state='queued_night') AS queued_night,
     (SELECT count(*) FROM public.i24_capture_events WHERE route_dispatch_status='manual_review' AND happened_at >= (SELECT since FROM p)) AS manual_review_new
 )

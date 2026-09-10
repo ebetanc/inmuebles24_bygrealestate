@@ -24,7 +24,7 @@ if (Number(h.stuck_requested) > 0) alerts.push(h.stuck_requested + ' oferta(s) p
 if (Number(h.stuck_expired) > 0) alerts.push(h.stuck_expired + ' oferta(s) vencidas sin escalar (¿WF23 apagado?)');
 if (Number(h.manual_review_new) > 0) alerts.push(h.manual_review_new + ' solicitud(es) nuevas cayeron en revisión manual (sin ID EasyBroker)');
 
-let nNew = 0, nClaim = 0, nSandy = 0, nOpen = 0, nEbOk = 0, nProblem = 0;
+let nNew = 0, nClaim = 0, nSandy = 0, nUnassigned = 0, nOpen = 0, nEbOk = 0, nProblem = 0;
 const tcards = [];
 const cards = leads.map(l => {
   const attempts = l.attempts || [], events = l.events || [], effects = l.eb_effects || [];
@@ -59,6 +59,10 @@ const cards = leads.map(l => {
     if (claimed) nClaim++; else if (l.assigned_role === 'manager') nSandy++; else nClaim++;
     const how = claimed ? 'tocó Tomo' : (sandyEv ? 'nadie tomó → responsable final' + (sandyEv.reason ? ' (' + esc(sandyEv.reason) + ')' : '') : 'asignación directa');
     lines.push(`<b>Asignado a ${esc(l.assigned_name || l.assigned_agent_id)}</b> ${hhmm(l.assigned_at)} · ${how}`);
+  } else if (l.state === 'unassigned') {
+    nUnassigned++;
+    const ev = events.find(e => e.type === 'left_unassigned');
+    lines.push(`<b>SIN ASIGNACIÓN</b> ${hhmm(l.unassigned_at)} · nadie tomó${ev && ev.reason ? ' (' + esc(ev.reason) + ')' : ''}`);
   } else {
     nOpen++;
     lines.push(`${WAIT} Sin responsable todavía · estado <code>${esc(l.state)}</code>${l.routing_tier ? ' · turno de ' + tierName(l.routing_tier) : ''}`);
@@ -67,13 +71,19 @@ const cards = leads.map(l => {
   }
   const note = effects.filter(f => f.kind === 'note'), att = effects.filter(f => f.kind === 'attended');
   const noteOk = note.some(f => f.ok), attOk = att.some(f => f.ok);
+  const isUnassigned = l.state === 'unassigned';
   if (effects.length) {
-    if (noteOk && attOk) nEbOk++;
-    lines.push(`EasyBroker: nota RESPONSABLE ${noteOk ? OK + ' ' + hhmm(note.find(f => f.ok).at) : (note.length ? BAD + ' falló' : WAIT)} · Atendida ${attOk ? OK + ' ' + hhmm(att.find(f => f.ok).at) : (att.length ? BAD + ' falló' : WAIT)}`);
+    if (isUnassigned && noteOk && !att.length) {
+      nEbOk++;
+      lines.push(`EasyBroker: nota SIN ASIGNACIÓN ${OK} ${hhmm(note.find(f => f.ok).at)} · Atendida omitida`);
+    } else {
+      if (noteOk && attOk) nEbOk++;
+      lines.push(`EasyBroker: nota RESPONSABLE ${noteOk ? OK + ' ' + hhmm(note.find(f => f.ok).at) : (note.length ? BAD + ' falló' : WAIT)} · Atendida ${attOk ? OK + ' ' + hhmm(att.find(f => f.ok).at) : (att.length ? BAD + ' falló' : WAIT)}`);
+    }
     if (note.length && !noteOk) problems.push('Nota en EasyBroker falló');
     if (att.length && !attOk) problems.push('Marcar Atendida en EasyBroker falló');
-  } else if (l.assigned_agent_id) {
-    const age = mins(l.assigned_at, row.until);
+  } else if (l.assigned_agent_id || isUnassigned) {
+    const age = mins(l.assigned_at || l.unassigned_at, row.until);
     lines.push(`EasyBroker: ${age > 20 ? BAD + ' sin nota ' + age + ' min después de asignar' : WAIT + ' nota pendiente (worker cada 1 min)'}`);
     if (age > 20 && /^EB-/i.test(l.property_id || '')) problems.push('Sin nota en EasyBroker ' + age + ' min después de asignar');
   }
@@ -88,7 +98,7 @@ ${problems.length ? '<div style="color:#C8483B;font-weight:700;margin-bottom:6px
 
 const label = 'Reporte del día';
 const dayStr = new Date(row.until).toLocaleDateString('es-MX', {timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long'});
-const summary = `${leads.length} lead(s) con actividad · ${nClaim} tomado(s) por asesor/guardia · ${nSandy} a Sandy · ${nOpen} en oferta · ${nEbOk} con nota+Atendida en EasyBroker · ${nProblem} con problema`;
+const summary = `${leads.length} lead(s) con actividad · ${nClaim} tomado(s) por asesor/guardia · ${nUnassigned} sin asignación${nSandy ? ' · ' + nSandy + ' a Sandy' : ''} · ${nOpen} en oferta · ${nEbOk} con nota+Atendida en EasyBroker · ${nProblem} con problema`;
 const healthHtml = `<div style="font-size:13px;color:#5D6C79">Scraper último OK ${hhmm(h.scraper_last_ok)} (hace ${scraperAge ?? '?'} min) · en cola nocturna ${h.queued_night} · ofertas atoradas ${h.stuck_requested} · vencidas sin escalar ${h.stuck_expired}</div>`;
 const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:760px;color:#16232E">
 <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#5D6C79">Inmobiliaria24 · BYG · Lead Routing V3</div>
@@ -98,12 +108,9 @@ ${alerts.length ? '<div style="background:#F8E1DD;border:1px solid #C8483B;color
 ${healthHtml}
 ${leads.length ? cards.join('') : '<p style="color:#5D6C79">Sin leads con actividad en esta ventana.</p>'}
 <p style="font-size:11px;color:#5D6C79;margin-top:18px">Hechos leídos directamente de Supabase (oportunidades, intentos de entrega, eventos, efectos EasyBroker). Horas en CDMX. Generado por WF24.</p></div>`;
-const subject = `[V3] Reporte del día · ${leads.length} leads · ${nClaim + nSandy} asignados${nProblem ? ' · ' + nProblem + ' con problema' : ''}${alerts.length ? ' · ALERTA' : ''}`;
+const subject = `[V3] Reporte del día · ${leads.length} leads · ${nClaim} tomados · ${nUnassigned} sin asignación${nProblem ? ' · ' + nProblem + ' con problema' : ''}${alerts.length ? ' · ALERTA' : ''}`;
 
-// ponytail: "sin asignación" = nadie la tomó, incluidas las que cayeron a Sandy.
-// Cuando la fase 2 deje de asignar a Sandy por defecto, basta con quitar el OR.
-const unassigned = leads.filter(l => l.state === 'unassigned' || l.assigned_role === 'manager');
-const unassignedList = unassigned.map(l => `#${l.opportunity_id} ${l.lead_name || 'Sin nombre'} · ${l.lead_phone || ''} · ${l.property_id || 'sin ID EB'}`).join(' | ');
+const unassignedList = leads.filter(l => l.state === 'unassigned').map(l => `#${l.opportunity_id} ${l.lead_name || 'Sin nombre'} · ${l.lead_phone || ''} · ${l.property_id || 'sin ID EB'}`).join(' | ');
 
 const LIMIT = 4000;
 const FOOTER = 'Hechos leídos directamente de Supabase (oportunidades, intentos de entrega, eventos, efectos EasyBroker). Horas en CDMX. Generado por WF24.';
@@ -129,7 +136,7 @@ const tpl = [
   dayStr,
   String(leads.length),
   String(nClaim),
-  String(unassigned.length),
+  String(nUnassigned),
   String(nProblem),
   alerts.length ? clip(oneLine(alerts.join(' · ')), 200) : 'sanos',
   unassignedList ? clip(oneLine(unassignedList), 600) : 'Ninguno',
