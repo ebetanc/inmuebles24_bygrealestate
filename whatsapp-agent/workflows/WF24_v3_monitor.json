@@ -231,7 +231,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({messaging_product:'whatsapp',recipient_type:'individual',to:$json.phone,type:'template',template:{name:'reporte_diario_v3',language:{code:'es_MX'},components:[{type:'body',parameters:$('Armar correo').first().json.tpl.map(t=>({type:'text',text:t}))}]}}) }}",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"reporte_diario_v3\",\n    \"language\": { \"code\": \"es_MX\" },\n    \"components\": [{\n      \"type\": \"body\",\n      \"parameters\": [\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($('Armar correo').first().json.tpl[0] ?? '')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($('Armar correo').first().json.tpl[1] ?? '')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($('Armar correo').first().json.tpl[2] ?? '')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($('Armar correo').first().json.tpl[3] ?? '')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($('Armar correo').first().json.tpl[4] ?? '')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($('Armar correo').first().json.tpl[5] ?? '')) }} },\n        { \"type\": \"text\", \"text\": {{ JSON.stringify(String($('Armar correo').first().json.tpl[6] ?? '')) }} }\n      ]\n    }]\n  }\n}",
         "options": {
           "timeout": 10000
         }

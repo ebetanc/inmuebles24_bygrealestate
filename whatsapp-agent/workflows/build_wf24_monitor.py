@@ -59,6 +59,31 @@ SELECT $1 AS mode, (SELECT since FROM p) AS since, now() AS until,
   COALESCE((SELECT json_agg(l) FROM leads l), '[]'::json) AS leads,
   (SELECT row_to_json(h) FROM health h) AS health;"""
 
+# Cuerpo literal con islas {{ }}, como WF13: un `}}` dentro de una isla cierra la
+# expresión antes de tiempo y n8n falla con "invalid syntax" (probado en producción).
+WA_BODY = """={
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "{{ $json.phone }}",
+  "type": "template",
+  "template": {
+    "name": "reporte_diario_v3",
+    "language": { "code": "es_MX" },
+    "components": [{
+      "type": "body",
+      "parameters": [
+        { "type": "text", "text": {{ JSON.stringify(String($('Armar correo').first().json.tpl[0] ?? '')) }} },
+        { "type": "text", "text": {{ JSON.stringify(String($('Armar correo').first().json.tpl[1] ?? '')) }} },
+        { "type": "text", "text": {{ JSON.stringify(String($('Armar correo').first().json.tpl[2] ?? '')) }} },
+        { "type": "text", "text": {{ JSON.stringify(String($('Armar correo').first().json.tpl[3] ?? '')) }} },
+        { "type": "text", "text": {{ JSON.stringify(String($('Armar correo').first().json.tpl[4] ?? '')) }} },
+        { "type": "text", "text": {{ JSON.stringify(String($('Armar correo').first().json.tpl[5] ?? '')) }} },
+        { "type": "text", "text": {{ JSON.stringify(String($('Armar correo').first().json.tpl[6] ?? '')) }} }
+      ]
+    }]
+  }
+}"""
+
 RENDER_SRC = open(Path(__file__).with_name("wf24_render.js"), encoding="utf-8").read()
 JS = RENDER_SRC + "\nconst row = $input.first().json;\nreturn [{ json: { send: true, ...render(row) } }];\n"
 
@@ -111,7 +136,7 @@ nodes = [
           "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"},
                                               {"name": "Content-Type", "value": "application/json"}]},
           "sendBody": True, "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({messaging_product:'whatsapp',recipient_type:'individual',to:$json.phone,type:'template',template:{name:'reporte_diario_v3',language:{code:'es_MX'},components:[{type:'body',parameters:$('Armar correo').first().json.tpl.map(t=>({type:'text',text:t}))}]}}) }}",
+          "jsonBody": WA_BODY,
           "options": {"timeout": 10000}},
          [1920, 60], {"onError": "continueRegularOutput", "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 3000}),
     # Con onError el item de fallo trae `error` (objeto o texto) y ningún `messages`:
