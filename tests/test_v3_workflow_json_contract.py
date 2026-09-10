@@ -460,3 +460,29 @@ def test_wf1_routes_ver_detalle_button_to_the_stored_daily_report():
         assert '"type": "text"' in sender_body
         # Las llaves anidadas de JSON.stringify({...}) cierran la expresión {{ }} antes de tiempo.
         assert "JSON.stringify({" not in sender_body
+
+
+def test_wf3c_routes_left_unassigned_state_to_its_own_noop():
+    for path in PAIRS["WF3c"]:
+        workflow = load(path)
+        rules = node(workflow, "Route Transition")["parameters"]["rules"]["values"]
+        keys = [rule["outputKey"] for rule in rules]
+        assert keys.count("left_unassigned") == 1
+        index = keys.index("left_unassigned")
+        rule = rules[index]["conditions"]["conditions"][0]
+        assert rule["leftValue"] == "={{ $json.state }}"
+        assert rule["rightValue"] == "unassigned"
+
+        outputs = workflow["connections"]["Route Transition"]["main"]
+        assert len(outputs) == len(rules) + 1
+        assert outputs[index][0]["node"] == "V3 Unassigned Durable"
+        assert outputs[-1][0]["node"] == "Reject Unexpected Transition State"
+
+        reject_code = node(workflow, "Reject Unexpected Transition State")["parameters"]["jsCode"]
+        assert "'unassigned'" in reject_code
+
+
+def test_wf10_dedupe_treats_unassigned_as_active_opportunity():
+    for path in PAIRS["WF10"]:
+        query = node(load(path), "Verify V3 Dispatch Durable")["parameters"]["query"]
+        assert "'unassigned'" in query
