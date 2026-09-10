@@ -1,9 +1,7 @@
 """Build WF24 - V3 Monitor Diario (n8n JSON).
 
-Every 30 min 08:00-20:30 CDMX: email digest of every lead with activity in the
-window (offer sent/delivered, who tapped Tomo, assignment, EasyBroker note).
-20:45 CDMX: full-day report. Skips the email when a window has no activity and
-no health alert. Run: python build_wf24_monitor.py > WF24_v3_monitor.json
+20:45 CDMX: full-day report. Manual: GET webhook `v3-monitor-0902-k7q2x9`.
+Run: python build_wf24_monitor.py > WF24_v3_monitor.json
 """
 import json
 
@@ -13,9 +11,7 @@ TO = "esteban.betanc@gmail.com"
 
 SQL = r"""SET LOCAL statement_timeout = '20s';
 WITH p AS (
-  SELECT CASE WHEN $1 = 'day'
-    THEN (date_trunc('day', now() AT TIME ZONE 'America/Mexico_City')) AT TIME ZONE 'America/Mexico_City'
-    ELSE now() - interval '31 minutes' END AS since
+  SELECT (date_trunc('day', now() AT TIME ZONE 'America/Mexico_City')) AT TIME ZONE 'America/Mexico_City' AS since
 ),
 active AS (
   SELECT DISTINCT o.opportunity_id
@@ -144,7 +140,7 @@ ${problems.length ? '<div style="color:#C8483B;font-weight:700;margin-bottom:6px
 <div style="font-size:13px;line-height:1.6">${lines.join('<br>')}</div></div>`;
 });
 
-const label = mode === 'day' ? 'Reporte del día' : `Ventana ${hhmm(row.since)}–${hhmm(row.until)}`;
+const label = 'Reporte del día';
 const dayStr = new Date(row.until).toLocaleDateString('es-MX', {timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long'});
 const summary = `${leads.length} lead(s) con actividad · ${nClaim} tomado(s) por asesor/guardia · ${nSandy} a Sandy · ${nOpen} en oferta · ${nEbOk} con nota+Atendida en EasyBroker · ${nProblem} con problema`;
 const healthHtml = `<div style="font-size:13px;color:#5D6C79">Scraper último OK ${hhmm(h.scraper_last_ok)} (hace ${scraperAge ?? '?'} min) · en cola nocturna ${h.queued_night} · ofertas atoradas ${h.stuck_requested} · vencidas sin escalar ${h.stuck_expired}</div>`;
@@ -156,9 +152,8 @@ ${alerts.length ? '<div style="background:#F8E1DD;border:1px solid #C8483B;color
 ${healthHtml}
 ${leads.length ? cards.join('') : '<p style="color:#5D6C79">Sin leads con actividad en esta ventana.</p>'}
 <p style="font-size:11px;color:#5D6C79;margin-top:18px">Hechos leídos directamente de Supabase (oportunidades, intentos de entrega, eventos, efectos EasyBroker). Horas en CDMX. Generado por WF24.</p></div>`;
-const subject = `[V3] ${mode === 'day' ? 'Reporte del día' : hhmm(row.until)} · ${leads.length} leads · ${nClaim + nSandy} asignados${nProblem ? ' · ' + nProblem + ' con problema' : ''}${alerts.length ? ' · ALERTA' : ''}`;
-// Half-hour mail only when something needs eyes: new lead, live problem or health alert.
-const send = mode === 'day' || nNew > 0 || nProblem > 0 || alerts.length > 0;
+const subject = `[V3] Reporte del día · ${leads.length} leads · ${nClaim + nSandy} asignados${nProblem ? ' · ' + nProblem + ' con problema' : ''}${alerts.length ? ' · ALERTA' : ''}`;
+const send = true; // daily report always goes out
 return [{ json: { send, subject, html, mode, n_leads: leads.length, n_problem: nProblem, alerts } }];
 """
 
@@ -169,15 +164,11 @@ def node(name, type_, ver, params, pos, extra=None):
     return n
 
 nodes = [
-    node("Cada 30 min (08-20 CDMX)", "n8n-nodes-base.scheduleTrigger", 1.2,
-         {"rule": {"interval": [{"field": "cronExpression", "expression": "*/30 8-20 * * *"}]}}, [0, 0]),
     node("Fin del día 20:45", "n8n-nodes-base.scheduleTrigger", 1.2,
          {"rule": {"interval": [{"field": "cronExpression", "expression": "45 20 * * *"}]}}, [0, 240]),
     node("Prueba manual (webhook)", "n8n-nodes-base.webhook", 2,
          {"httpMethod": "GET", "path": "v3-monitor-0902-k7q2x9", "responseMode": "onReceived", "options": {}}, [0, 480],
          {"webhookId": "a7c1d2e3-0902-4a30-8b6d-0000000wf024"}),
-    node("Modo ventana", "n8n-nodes-base.set", 3.4,
-         {"assignments": {"assignments": [{"id": "a1", "name": "mode", "value": "window", "type": "string"}]}, "options": {}}, [240, 0]),
     node("Modo día", "n8n-nodes-base.set", 3.4,
          {"assignments": {"assignments": [{"id": "a2", "name": "mode", "value": "day", "type": "string"}]}, "options": {}}, [240, 240]),
     node("Leer actividad V3", "n8n-nodes-base.postgres", 2.5,
@@ -196,10 +187,8 @@ nodes = [
 ]
 
 connections = {
-    "Cada 30 min (08-20 CDMX)": {"main": [[{"node": "Modo ventana", "type": "main", "index": 0}]]},
     "Fin del día 20:45": {"main": [[{"node": "Modo día", "type": "main", "index": 0}]]},
     "Prueba manual (webhook)": {"main": [[{"node": "Modo día", "type": "main", "index": 0}]]},
-    "Modo ventana": {"main": [[{"node": "Leer actividad V3", "type": "main", "index": 0}]]},
     "Modo día": {"main": [[{"node": "Leer actividad V3", "type": "main", "index": 0}]]},
     "Leer actividad V3": {"main": [[{"node": "Armar correo", "type": "main", "index": 0}]]},
     "Armar correo": {"main": [[{"node": "¿Enviar?", "type": "main", "index": 0}]]},
