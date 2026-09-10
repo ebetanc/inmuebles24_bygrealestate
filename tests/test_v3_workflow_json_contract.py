@@ -430,3 +430,30 @@ def test_wf24_sends_the_daily_report_to_whatsapp_recipients():
     assert node(workflow, "Enviar WhatsApp")["onError"] == "continueRegularOutput"
     assert "v3_daily_reports" in node(workflow, "Guardar reporte")["parameters"]["query"]
     assert "v3_report_sends" in node(workflow, "Registrar envío")["parameters"]["query"]
+
+
+def test_wf1_routes_ver_detalle_button_to_the_stored_daily_report():
+    for path in PAIRS["WF1"]:
+        workflow = load(path)
+        classifier = node(workflow, "Classify & Route")["parameters"]["jsCode"]
+        assert "route: 'report_detail'" in classifier
+        # El botón puede llegar de un no-asesor, así que se evalúa antes del bloque is_agent.
+        assert classifier.index("route: 'report_detail'") < classifier.index("if (db.is_agent) {")
+
+        rules = node(workflow, "Switch")["parameters"]["rules"]["values"]
+        keys = [rule["outputKey"] for rule in rules]
+        assert keys.count("report_detail") == 1
+        index = keys.index("report_detail")
+
+        outputs = workflow["connections"]["Switch"]["main"]
+        assert len(outputs) == len(rules) + 1
+        assert outputs[index][0]["node"] == "Leer último reporte"
+        assert outputs[-1][0]["node"] == "End (Fallback)"
+
+        assert workflow["connections"]["Leer último reporte"]["main"][0][0]["node"] == "Expandir trozos"
+        assert workflow["connections"]["Expandir trozos"]["main"][0][0]["node"] == "Enviar detalle"
+
+        reader = node(workflow, "Leer último reporte")
+        assert reader.get("alwaysOutputData") is False
+        assert "v3_report_recipients" in reader["parameters"]["query"]
+        assert "type:'text'" in node(workflow, "Enviar detalle")["parameters"]["jsonBody"]
