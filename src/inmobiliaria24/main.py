@@ -421,6 +421,21 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                         logger.warning("V3 intake failed for lead {}: {}", lead_id, exc)
 
                 await _run_v3_contactado(page, all_leads)
+
+                # Notes for outcomes decided since the previous run: the ledger
+                # is durable, so a failure here only postpones the note.
+                if settings.i24_notes_enabled:
+                    try:
+                        from inmobiliaria24 import supa
+                        from inmobiliaria24.i24_notes import run_v3_i24_note_worker
+                        from inmobiliaria24.scraper import _capture_i24_status_evidence
+
+                        await run_v3_i24_note_worker(
+                            page, supa, evidence=_capture_i24_status_evidence
+                        )
+                    except Exception as exc:
+                        logger.warning("V3 nota interna worker failed: {}", exc)
+
                 # The route queue is durable and contains the full lead
                 # context. It remains the source of truth after Contactado
                 # removes a lead from the next portal scrape.

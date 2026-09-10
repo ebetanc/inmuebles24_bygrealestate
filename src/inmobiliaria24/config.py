@@ -21,6 +21,9 @@ class Settings:
 
     lead_routing_account_key: str = "default"
 
+    # Write "Nota interna: <responsable>" in the I24 conversation (off by default)
+    i24_notes_enabled: bool = False
+
     # Monitoring — Telegram (errors only)
     telegram_bot_token: str = ""
     telegram_alert_chat_id: str = ""
@@ -68,6 +71,7 @@ class Settings:
                 or os.environ.get("EASYBROKER_ACCOUNT_KEY")
                 or "default"
             ).strip() or "default",
+            i24_notes_enabled=os.environ.get("I24_NOTES", "0") == "1",
             telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
             telegram_alert_chat_id=os.environ.get("TELEGRAM_ALERT_CHAT_ID", "").strip(),
             webhook_health_url=os.environ.get(
