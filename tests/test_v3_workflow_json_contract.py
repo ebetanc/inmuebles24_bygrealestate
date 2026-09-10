@@ -415,3 +415,18 @@ def test_wf10_recurrent_notification_is_the_eight_field_v3_template():
         assert "lead_asignado_v3" in body
         assert body.count('"type": "text"') == 8
         assert '"type": "button"' not in body
+
+
+def test_wf24_sends_the_daily_report_to_whatsapp_recipients():
+    workflow = load("whatsapp-agent/workflows/WF24_v3_monitor.json")
+    assert len([n for n in workflow["nodes"] if n["type"] == "n8n-nodes-base.scheduleTrigger"]) == 1
+    chain = ["Enviar correo (Gmail)", "Guardar reporte", "Leer destinatarios", "Enviar WhatsApp", "Registrar envío"]
+    for source, target in zip(chain, chain[1:]):
+        node(workflow, target)
+        assert workflow["connections"][source]["main"][0][0]["node"] == target
+    assert "reporte_diario_v3" in node(workflow, "Enviar WhatsApp")["parameters"]["jsonBody"]
+    # Gmail caído no debe cortar la pata de WhatsApp.
+    assert node(workflow, "Enviar correo (Gmail)")["onError"] == "continueRegularOutput"
+    assert node(workflow, "Enviar WhatsApp")["onError"] == "continueRegularOutput"
+    assert "v3_daily_reports" in node(workflow, "Guardar reporte")["parameters"]["query"]
+    assert "v3_report_sends" in node(workflow, "Registrar envío")["parameters"]["query"]

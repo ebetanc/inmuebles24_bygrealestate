@@ -88,8 +88,40 @@ nodes = [
                          "combinator": "and"}, "options": {}}, [960, 120]),
     node("Enviar correo (Gmail)", "n8n-nodes-base.gmail", 2.1,
          {"sendTo": TO, "subject": "={{ $json.subject }}", "emailType": "html", "message": "={{ $json.html }}", "options": {}},
-         [1200, 60], {"credentials": GMAIL_CRED, "retryOnFail": True, "maxTries": 2, "waitBetweenTries": 5000}),
+         [1200, 60], {"credentials": GMAIL_CRED, "retryOnFail": True, "maxTries": 2, "waitBetweenTries": 5000,
+                      # Gmail caído no debe cancelar el envío por WhatsApp: las dos patas son independientes.
+                      "onError": "continueRegularOutput"}),
     node("Sin actividad", "n8n-nodes-base.noOp", 1, {}, [1200, 240]),
+    # ponytail: el array se manda como JSON y se expande en SQL; no dependemos de
+    # cómo el nodo Postgres serialice un array de JS en un parámetro text[].
+    node("Guardar reporte", "n8n-nodes-base.postgres", 2.5,
+         {"operation": "executeQuery",
+          "query": "INSERT INTO public.v3_daily_reports(report_date,text_chunks,summary) VALUES ((now() AT TIME ZONE 'America/Mexico_City')::date,(SELECT array_agg(x ORDER BY ord) FROM jsonb_array_elements_text($1::jsonb) WITH ORDINALITY t(x,ord)),$2::jsonb) ON CONFLICT (report_date) DO UPDATE SET text_chunks=EXCLUDED.text_chunks,summary=EXCLUDED.summary,updated_at=now() RETURNING report_date;",
+          "options": {"queryReplacement": "={{ [JSON.stringify($('Armar correo').first().json.text_chunks), JSON.stringify({tpl: $('Armar correo').first().json.tpl, subject: $('Armar correo').first().json.subject})] }}",
+                      "connectionTimeout": 15}},
+         [1440, 60], {"credentials": PG_CRED, "retryOnFail": True, "maxTries": 2, "waitBetweenTries": 5000}),
+    node("Leer destinatarios", "n8n-nodes-base.postgres", 2.5,
+         {"operation": "executeQuery", "query": "SELECT phone,name FROM public.v3_report_recipients WHERE active ORDER BY phone;",
+          "options": {"connectionTimeout": 15}},
+         [1680, 60], {"credentials": PG_CRED}),
+    node("Enviar WhatsApp", "n8n-nodes-base.httpRequest", 4.2,
+         {"method": "POST",
+          "url": "={{ $env.WA_CLOUD_API_BASE_URL + '/' + $env.WA_API_VERSION + '/' + $env.WA_PHONE_NUMBER_ID + '/messages' }}",
+          "sendHeaders": True,
+          "headerParameters": {"parameters": [{"name": "Authorization", "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"},
+                                              {"name": "Content-Type", "value": "application/json"}]},
+          "sendBody": True, "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({messaging_product:'whatsapp',recipient_type:'individual',to:$json.phone,type:'template',template:{name:'reporte_diario_v3',language:{code:'es_MX'},components:[{type:'body',parameters:$('Armar correo').first().json.tpl.map(t=>({type:'text',text:t}))}]}}) }}",
+          "options": {"timeout": 10000}},
+         [1920, 60], {"onError": "continueRegularOutput", "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 3000}),
+    # Con onError el item de fallo trae `error` (objeto o texto) y ningún `messages`:
+    # las dos formas caen en status='failed' con el cuerpo recortado a 500 chars.
+    node("Registrar envío", "n8n-nodes-base.postgres", 2.5,
+         {"operation": "executeQuery",
+          "query": "INSERT INTO public.v3_report_sends(report_date,phone,wamid,status,error) VALUES ((now() AT TIME ZONE 'America/Mexico_City')::date,$1,$2,$3,$4);",
+          "options": {"queryReplacement": "={{ [$('Leer destinatarios').item.json.phone, $json.messages?.[0]?.id || null, $json.messages?.[0]?.id ? 'accepted' : 'failed', $json.messages?.[0]?.id ? null : JSON.stringify($json.error || $json).slice(0,500)] }}",
+                      "connectionTimeout": 15}},
+         [2160, 60], {"credentials": PG_CRED}),
 ]
 
 connections = {
@@ -100,6 +132,10 @@ connections = {
     "Armar correo": {"main": [[{"node": "¿Enviar?", "type": "main", "index": 0}]]},
     "¿Enviar?": {"main": [[{"node": "Enviar correo (Gmail)", "type": "main", "index": 0}],
                           [{"node": "Sin actividad", "type": "main", "index": 0}]]},
+    "Enviar correo (Gmail)": {"main": [[{"node": "Guardar reporte", "type": "main", "index": 0}]]},
+    "Guardar reporte": {"main": [[{"node": "Leer destinatarios", "type": "main", "index": 0}]]},
+    "Leer destinatarios": {"main": [[{"node": "Enviar WhatsApp", "type": "main", "index": 0}]]},
+    "Enviar WhatsApp": {"main": [[{"node": "Registrar envío", "type": "main", "index": 0}]]},
 }
 
 wf = {
