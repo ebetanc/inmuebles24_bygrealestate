@@ -2,7 +2,7 @@
 --
 -- Client decision (2026-09-10): when no agent taps "Tomo", the opportunity
 -- reaches the terminal state 'unassigned'; no WhatsApp goes to the manager and
--- EasyBroker receives the note "RESPONSABLE: SIN ASIGNACION" but is NOT marked
+-- EasyBroker receives the note "RESPONSABLE: SIN ASIGNACIÓN" but is NOT marked
 -- Atendida.
 --
 -- v3_assign_sandy stays defined (unused) so the rollback is a single re-create
@@ -371,7 +371,7 @@ BEGIN
       (o.state IN ('assigned','closed_won')
        AND o.assigned_agent_id IS NOT NULL
        AND NULLIF(BTRIM(a.name),'') IS NOT NULL)
-      OR o.state='unassigned'
+      OR (o.state='unassigned' AND o.assigned_agent_id IS NULL)
     )
     AND NULLIF(BTRIM(e.property_public_id),'') IS NOT NULL
     AND UPPER(BTRIM(e.property_public_id)) ~ '^EB-[A-Z0-9]{4,}$'
@@ -430,7 +430,7 @@ BEGIN
 END;
 $$;
 
--- 7. Ledger promotion: the unassigned terminal resolves to "SIN ASIGNACION"
+-- 7. Ledger promotion: the unassigned terminal resolves to "SIN ASIGNACIÓN"
 -- with no agent, so the Atendida step is never due.
 CREATE OR REPLACE FUNCTION public.claim_v3_easybroker_effects(p_limit integer, p_now timestamp with time zone, p_lease_duration interval)
  RETURNS TABLE(eb_request_id bigint, opportunity_id bigint, responsible_first_name text, note_state text, attended_state text, lease_token uuid, lease_expires_at timestamp with time zone, note_due boolean, attended_due boolean, note_idempotency_key text, attended_idempotency_key text)
@@ -473,7 +473,7 @@ BEGIN
       (o.state IN ('assigned','closed_won')
        AND o.assigned_agent_id IS NOT NULL
        AND NULLIF(BTRIM(a.name), '') IS NOT NULL)
-      OR o.state = 'unassigned'
+      OR (o.state = 'unassigned' AND o.assigned_agent_id IS NULL)
     );
 
   FOR r IN

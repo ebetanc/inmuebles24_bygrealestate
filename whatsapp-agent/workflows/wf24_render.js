@@ -84,8 +84,9 @@ const cards = leads.map(l => {
     if (att.length && !attOk) problems.push('Marcar Atendida en EasyBroker falló');
   } else if (l.assigned_agent_id || isUnassigned) {
     const age = mins(l.assigned_at || l.unassigned_at, row.until);
-    lines.push(`EasyBroker: ${age > 20 ? BAD + ' sin nota ' + age + ' min después de asignar' : WAIT + ' nota pendiente (worker cada 1 min)'}`);
-    if (age > 20 && /^EB-/i.test(l.property_id || '')) problems.push('Sin nota en EasyBroker ' + age + ' min después de asignar');
+    const afterWord = isUnassigned ? 'después de quedar sin asignación' : 'después de asignar';
+    lines.push(`EasyBroker: ${age > 20 ? BAD + ' sin nota ' + age + ' min ' + afterWord : WAIT + ' nota pendiente (worker cada 1 min)'}`);
+    if (age > 20 && /^EB-/i.test(l.property_id || '')) problems.push('Sin nota en EasyBroker ' + age + ' min ' + afterWord);
   }
   if (problems.length) nProblem++;
   const title = `#${l.opportunity_id} · ${esc(l.lead_name || 'Sin nombre')} · ${esc(l.lead_phone || '')} · ${esc(l.property_id || 'sin ID EB')}${l.property_title ? ' · ' + esc(l.property_title) : ''}`;
@@ -98,7 +99,7 @@ ${problems.length ? '<div style="color:#C8483B;font-weight:700;margin-bottom:6px
 
 const label = 'Reporte del día';
 const dayStr = new Date(row.until).toLocaleDateString('es-MX', {timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long'});
-const summary = `${leads.length} lead(s) con actividad · ${nClaim} tomado(s) por asesor/guardia · ${nUnassigned} sin asignación${nSandy ? ' · ' + nSandy + ' a Sandy' : ''} · ${nOpen} en oferta · ${nEbOk} con nota+Atendida en EasyBroker · ${nProblem} con problema`;
+const summary = `${leads.length} lead(s) con actividad · ${nClaim} tomado(s) por asesor/guardia · ${nUnassigned} sin asignación${nSandy ? ' · ' + nSandy + ' a Sandy' : ''} · ${nOpen} en oferta · ${nEbOk} con EasyBroker cerrado · ${nProblem} con problema`;
 const healthHtml = `<div style="font-size:13px;color:#5D6C79">Scraper último OK ${hhmm(h.scraper_last_ok)} (hace ${scraperAge ?? '?'} min) · en cola nocturna ${h.queued_night} · ofertas atoradas ${h.stuck_requested} · vencidas sin escalar ${h.stuck_expired}</div>`;
 const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:760px;color:#16232E">
 <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#5D6C79">Inmobiliaria24 · BYG · Lead Routing V3</div>
