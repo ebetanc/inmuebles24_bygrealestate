@@ -88,6 +88,12 @@ const cards = leads.map(l => {
     lines.push(`EasyBroker: ${age > 20 ? BAD + ' sin nota ' + age + ' min ' + afterWord : WAIT + ' nota pendiente (worker cada 1 min)'}`);
     if (age > 20 && /^EB-/i.test(l.property_id || '')) problems.push('Sin nota en EasyBroker ' + age + ' min ' + afterWord);
   }
+  const n24 = l.i24_note;
+  if (n24) {
+    if (n24.state === 'succeeded') lines.push(`Nota en Inmuebles24 ${OK} ${hhmm(n24.at)} · <i>${esc(n24.text)}</i>`);
+    else if (n24.state === 'manual_review') { lines.push(`Nota en Inmuebles24 ${BAD} agotó ${n24.attempts} intentos`); problems.push('Nota en Inmuebles24 no se pudo escribir'); }
+    else lines.push(`Nota en Inmuebles24 ${WAIT} pendiente${n24.attempts ? ' (' + n24.attempts + ' intento(s))' : ''} · <i>${esc(n24.text)}</i>`);
+  }
   if (problems.length) nProblem++;
   const title = `#${l.opportunity_id} · ${esc(l.lead_name || 'Sin nombre')} · ${esc(l.lead_phone || '')} · ${esc(l.property_id || 'sin ID EB')}${l.property_title ? ' · ' + esc(l.property_title) : ''}`;
   tcards.push([stripHtml(title), ...(problems.length ? ['⚠ ' + problems.join(' · ')] : []), ...lines.map(stripHtml)].join('\n'));

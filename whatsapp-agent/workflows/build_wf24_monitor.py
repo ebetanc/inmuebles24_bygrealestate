@@ -40,7 +40,9 @@ leads AS (
      FROM public.lead_routing_events ev LEFT JOIN public.agents ea ON ea.agent_id=ev.actor_id
      WHERE ev.opportunity_id=o.opportunity_id AND ev.event_type IN ('detected','i24_contacted','route_dispatched','delivery_requested','delivery_confirmed','accepted','claim_accepted','escalated','manager_assigned','missing_owner_data','route_dispatch_manual_review','route_dispatch_failed','night_queue_activated','assigned_notice_delivered','unassigned_alerted','left_unassigned')) AS events,
     (SELECT json_agg(json_build_object('kind',fx.effect_kind,'ok',fx.ok,'at',fx.finished_at,'status',fx.evidence->>'status','eb_request_id',fx.eb_request_id) ORDER BY fx.finished_at)
-     FROM public.easybroker_i24_request_links l JOIN public.easybroker_effect_attempts fx ON fx.eb_request_id=l.eb_request_id WHERE l.opportunity_id=o.opportunity_id) AS eb_effects
+     FROM public.easybroker_i24_request_links l JOIN public.easybroker_effect_attempts fx ON fx.eb_request_id=l.eb_request_id WHERE l.opportunity_id=o.opportunity_id) AS eb_effects,
+    (SELECT json_build_object('state',nl.state,'text',nl.note_text,'at',nl.updated_at,'attempts',nl.attempts)
+     FROM public.i24_note_ledger nl WHERE nl.opportunity_id=o.opportunity_id) AS i24_note
   FROM active x
   JOIN public.lead_routing_opportunities o ON o.opportunity_id=x.opportunity_id
   LEFT JOIN public.agents ag ON ag.agent_id=o.assigned_agent_id

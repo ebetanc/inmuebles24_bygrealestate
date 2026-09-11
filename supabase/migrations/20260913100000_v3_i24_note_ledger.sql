@@ -2,8 +2,9 @@
 -- ("Nota interna: Gina") becomes a durable, leased job.
 --
 -- Every V3 opportunity that reaches a final outcome enqueues exactly one note:
---   state='assigned'   -> the responsible's first name (from agents.name)
---   state='unassigned' -> the literal 'SIN ASIGNACIÓN'
+--   state='assigned'   -> '<PrimerNombre> · V3 HH:MM'  (agents.name, CDMX time)
+--   state='unassigned' -> 'SIN ASIGNACIÓN · V3 HH:MM'
+-- The 'V3' marker is what tells an automatic note from a manual one.
 -- The Inmuebles24 conversation is i24_capture_events.external_event_id; without
 -- one there is nothing to write on, so nothing is enqueued.
 --
@@ -60,6 +61,10 @@ BEGIN
   ORDER BY e.capture_event_id DESC
   LIMIT 1;
   IF v_capture IS NULL THEN RETURN NULL; END IF;
+
+  v_note := v_note || ' · V3 ' || to_char(
+    COALESCE(NEW.assigned_at, NEW.unassigned_at, now()) AT TIME ZONE 'America/Mexico_City',
+    'HH24:MI');
 
   INSERT INTO public.i24_note_ledger(
     opportunity_id, capture_event_id, i24_lead_id, note_text

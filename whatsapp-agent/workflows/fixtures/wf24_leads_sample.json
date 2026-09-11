@@ -1,267 +1,404 @@
 {
-  "mode": "day",
-  "since": "2026-09-09T06:00:00.000Z",
-  "until": "2026-09-10T02:45:00.000Z",
-  "leads": [
+ "mode": "day",
+ "since": "2026-09-09T06:00:00.000Z",
+ "until": "2026-09-10T02:45:00.000Z",
+ "leads": [
+  {
+   "opportunity_id": 801,
+   "state": "claimed",
+   "routing_tier": "owner",
+   "property_id": "EB-AB1201",
+   "assigned_agent_id": "agent_gina",
+   "assigned_name": "Gina Rueda",
+   "assigned_role": "agent",
+   "created_at": "2026-09-09T16:02:11.000Z",
+   "assigned_at": "2026-09-09T16:06:48.000Z",
+   "accepted_at": "2026-09-09T16:06:48.000Z",
+   "expires_at": "2026-09-09T16:08:30.000Z",
+   "unassigned_at": null,
+   "v3_night_queued_at": null,
+   "v3_night_released_at": null,
+   "lead_name": "Fernanda Robles",
+   "lead_phone": "5215512340001",
+   "property_title": "Casa en Vista Hermosa · Av. Palmas 120",
+   "route_dispatch_status": "dispatched",
+   "contactado_status": "verified",
+   "attempts": [
     {
-      "opportunity_id": 801,
-      "state": "claimed",
-      "routing_tier": "owner",
-      "property_id": "EB-AB1201",
-      "assigned_agent_id": "agent_gina",
-      "assigned_name": "Gina Rueda",
-      "assigned_role": "agent",
-      "created_at": "2026-09-09T16:02:11.000Z",
-      "assigned_at": "2026-09-09T16:06:48.000Z",
-      "accepted_at": "2026-09-09T16:06:48.000Z",
-      "expires_at": "2026-09-09T16:08:30.000Z",
-      "unassigned_at": null,
-      "v3_night_queued_at": null,
-      "v3_night_released_at": null,
-      "lead_name": "Fernanda Robles",
-      "lead_phone": "5215512340001",
-      "property_title": "Casa en Vista Hermosa · Av. Palmas 120",
-      "route_dispatch_status": "dispatched",
-      "contactado_status": "verified",
-      "attempts": [
-        {
-          "tier": "owner",
-          "kind": "offer",
-          "to": "Gina Rueda",
-          "to_id": "agent_gina",
-          "status": "claimed",
-          "requested_at": "2026-09-09T16:03:30.000Z",
-          "sent_at": "2026-09-09T16:03:33.000Z",
-          "delivered_at": "2026-09-09T16:03:41.000Z",
-          "claimed_at": "2026-09-09T16:06:48.000Z",
-          "failed_at": null
-        },
-        {
-          "tier": "owner",
-          "kind": "assigned_notice",
-          "to": "Gina Rueda",
-          "to_id": "agent_gina",
-          "status": "delivered",
-          "requested_at": "2026-09-09T16:06:55.000Z",
-          "sent_at": "2026-09-09T16:06:57.000Z",
-          "delivered_at": "2026-09-09T16:07:03.000Z",
-          "claimed_at": null,
-          "failed_at": null
-        }
-      ],
-      "events": [
-        {"type": "detected", "actor": "scraper", "at": "2026-09-09T16:02:11.000Z", "reason": ""},
-        {"type": "i24_contacted", "actor": "scraper", "at": "2026-09-09T16:02:40.000Z", "reason": ""},
-        {"type": "route_dispatched", "actor": "wf12", "at": "2026-09-09T16:03:25.000Z", "reason": ""},
-        {"type": "delivery_confirmed", "actor": "wf22", "at": "2026-09-09T16:03:41.000Z", "reason": ""},
-        {"type": "claim_accepted", "actor": "Gina Rueda", "at": "2026-09-09T16:06:48.000Z", "reason": ""}
-      ],
-      "eb_effects": [
-        {"kind": "note", "ok": true, "at": "2026-09-09T16:07:40.000Z", "status": "ok", "eb_request_id": "ebr_801"},
-        {"kind": "attended", "ok": true, "at": "2026-09-09T16:07:52.000Z", "status": "ok", "eb_request_id": "ebr_801"}
-      ]
+     "tier": "owner",
+     "kind": "offer",
+     "to": "Gina Rueda",
+     "to_id": "agent_gina",
+     "status": "claimed",
+     "requested_at": "2026-09-09T16:03:30.000Z",
+     "sent_at": "2026-09-09T16:03:33.000Z",
+     "delivered_at": "2026-09-09T16:03:41.000Z",
+     "claimed_at": "2026-09-09T16:06:48.000Z",
+     "failed_at": null
     },
     {
-      "opportunity_id": 802,
-      "state": "unassigned",
-      "routing_tier": "primary_guard",
-      "property_id": "EB-CD3345",
-      "assigned_agent_id": null,
-      "assigned_name": null,
-      "assigned_role": null,
-      "created_at": "2026-09-09T18:31:04.000Z",
-      "assigned_at": null,
-      "accepted_at": null,
-      "expires_at": "2026-09-09T18:44:12.000Z",
-      "unassigned_at": "2026-09-09T18:44:12.000Z",
-      "v3_night_queued_at": null,
-      "v3_night_released_at": null,
-      "lead_name": "Ricardo Peña",
-      "lead_phone": "5215512340002",
-      "property_title": "Departamento Condesa · Amsterdam 45",
-      "route_dispatch_status": "dispatched",
-      "contactado_status": "verified",
-      "attempts": [
-        {
-          "tier": "owner",
-          "kind": "offer",
-          "to": "Olga Cervantes",
-          "to_id": "agent_olga",
-          "status": "expired",
-          "requested_at": "2026-09-09T18:32:02.000Z",
-          "sent_at": "2026-09-09T18:32:05.000Z",
-          "delivered_at": "2026-09-09T18:32:14.000Z",
-          "claimed_at": null,
-          "failed_at": null
-        },
-        {
-          "tier": "primary_guard",
-          "kind": "offer",
-          "to": "Vicky Lara",
-          "to_id": "agent_vicky",
-          "status": "expired",
-          "requested_at": "2026-09-09T18:38:40.000Z",
-          "sent_at": "2026-09-09T18:38:43.000Z",
-          "delivered_at": "2026-09-09T18:38:51.000Z",
-          "claimed_at": null,
-          "failed_at": null
-        }
-      ],
-      "events": [
-        {"type": "detected", "actor": "scraper", "at": "2026-09-09T18:31:04.000Z", "reason": ""},
-        {"type": "i24_contacted", "actor": "scraper", "at": "2026-09-09T18:31:35.000Z", "reason": ""},
-        {"type": "escalated", "actor": "wf23", "at": "2026-09-09T18:38:40.000Z", "reason": "owner_timeout"},
-        {"type": "left_unassigned", "actor": "wf3c", "at": "2026-09-09T18:44:12.000Z", "reason": "guard_expired"}
-      ],
-      "eb_effects": [
-        {"kind": "note", "ok": true, "at": "2026-09-09T18:45:10.000Z", "status": "ok", "eb_request_id": "ebr_802"}
-      ]
-    },
-    {
-      "opportunity_id": 803,
-      "state": "captured",
-      "routing_tier": "primary_guard",
-      "property_id": "EB-EF7788",
-      "assigned_agent_id": null,
-      "assigned_name": null,
-      "assigned_role": null,
-      "created_at": "2026-09-10T02:41:09.000Z",
-      "assigned_at": null,
-      "accepted_at": null,
-      "expires_at": "2026-09-10T02:49:30.000Z",
-      "unassigned_at": null,
-      "v3_night_queued_at": null,
-      "v3_night_released_at": null,
-      "lead_name": "Marisol Aguirre",
-      "lead_phone": "5215512340003",
-      "property_title": "Terreno Tepoztlán · Camino Real 8",
-      "route_dispatch_status": "dispatched",
-      "contactado_status": "verified",
-      "attempts": [
-        {
-          "tier": "primary_guard",
-          "kind": "offer",
-          "to": "Carol Vega",
-          "to_id": "agent_carol",
-          "status": "delivered",
-          "requested_at": "2026-09-10T02:43:50.000Z",
-          "sent_at": "2026-09-10T02:43:53.000Z",
-          "delivered_at": "2026-09-10T02:44:01.000Z",
-          "claimed_at": null,
-          "failed_at": null
-        }
-      ],
-      "events": [
-        {"type": "detected", "actor": "scraper", "at": "2026-09-10T02:41:09.000Z", "reason": ""},
-        {"type": "i24_contacted", "actor": "scraper", "at": "2026-09-10T02:41:44.000Z", "reason": ""},
-        {"type": "route_dispatched", "actor": "wf12", "at": "2026-09-10T02:43:45.000Z", "reason": ""}
-      ],
-      "eb_effects": null
-    },
-    {
-      "opportunity_id": 804,
-      "state": "assigned",
-      "routing_tier": "owner",
-      "property_id": "EB-XX1234",
-      "assigned_agent_id": "agent_milena",
-      "assigned_name": "Milena Ortiz",
-      "assigned_role": "agent",
-      "created_at": "2026-09-10T01:58:22.000Z",
-      "assigned_at": "2026-09-10T02:10:00.000Z",
-      "accepted_at": "2026-09-10T02:10:00.000Z",
-      "expires_at": "2026-09-10T02:12:00.000Z",
-      "unassigned_at": null,
-      "v3_night_queued_at": null,
-      "v3_night_released_at": null,
-      "lead_name": "Hugo Lemus",
-      "lead_phone": "5215512340004",
-      "property_title": "Casa Lomas Verdes · Circuito Norte 33",
-      "route_dispatch_status": "dispatched",
-      "contactado_status": "verified",
-      "attempts": [
-        {
-          "tier": "owner",
-          "kind": "offer",
-          "to": "Milena Ortiz",
-          "to_id": "agent_milena",
-          "status": "claimed",
-          "requested_at": "2026-09-10T02:00:05.000Z",
-          "sent_at": "2026-09-10T02:00:08.000Z",
-          "delivered_at": "2026-09-10T02:00:19.000Z",
-          "claimed_at": "2026-09-10T02:10:00.000Z",
-          "failed_at": null
-        }
-      ],
-      "events": [
-        {"type": "detected", "actor": "scraper", "at": "2026-09-10T01:58:22.000Z", "reason": ""},
-        {"type": "i24_contacted", "actor": "scraper", "at": "2026-09-10T01:58:55.000Z", "reason": ""},
-        {"type": "claim_accepted", "actor": "Milena Ortiz", "at": "2026-09-10T02:10:00.000Z", "reason": ""}
-      ],
-      "eb_effects": null
-    },
-    {
-      "opportunity_id": 805,
-      "state": "assigned",
-      "routing_tier": "sandy",
-      "property_id": "EB-GH9900",
-      "assigned_agent_id": "agent_manager",
-      "assigned_name": "Sandy Mora",
-      "assigned_role": "manager",
-      "created_at": "2026-09-09T17:05:12.000Z",
-      "assigned_at": "2026-09-09T17:18:40.000Z",
-      "accepted_at": null,
-      "expires_at": "2026-09-09T17:18:40.000Z",
-      "unassigned_at": null,
-      "v3_night_queued_at": null,
-      "v3_night_released_at": null,
-      "lead_name": "Norma Vidal",
-      "lead_phone": "5215512340005",
-      "property_title": "Departamento Condesa · Amsterdam 45",
-      "route_dispatch_status": "dispatched",
-      "contactado_status": "verified",
-      "attempts": [
-        {
-          "tier": "owner",
-          "kind": "offer",
-          "to": "Vicky Lara",
-          "to_id": "agent_vicky",
-          "status": "expired",
-          "requested_at": "2026-09-09T17:06:02.000Z",
-          "sent_at": "2026-09-09T17:06:05.000Z",
-          "delivered_at": "2026-09-09T17:06:14.000Z",
-          "claimed_at": null,
-          "failed_at": null
-        },
-        {
-          "tier": "sandy",
-          "kind": "assigned_notice",
-          "to": "Sandy Mora",
-          "to_id": "agent_manager",
-          "status": "delivered",
-          "requested_at": "2026-09-09T17:18:48.000Z",
-          "sent_at": "2026-09-09T17:18:51.000Z",
-          "delivered_at": "2026-09-09T17:18:59.000Z",
-          "claimed_at": null,
-          "failed_at": null
-        }
-      ],
-      "events": [
-        {"type": "detected", "actor": "scraper", "at": "2026-09-09T17:05:12.000Z", "reason": ""},
-        {"type": "i24_contacted", "actor": "scraper", "at": "2026-09-09T17:05:44.000Z", "reason": ""},
-        {"type": "manager_assigned", "actor": "wf3c", "at": "2026-09-09T17:18:40.000Z", "reason": "guard_expired"},
-        {"type": "assigned_notice_delivered", "actor": "wf22", "at": "2026-09-09T17:18:59.000Z", "reason": ""}
-      ],
-      "eb_effects": [
-        {"kind": "note", "ok": true, "at": "2026-09-09T17:19:30.000Z", "status": "ok", "eb_request_id": "ebr_805"},
-        {"kind": "attended", "ok": true, "at": "2026-09-09T17:19:42.000Z", "status": "ok", "eb_request_id": "ebr_805"}
-      ]
+     "tier": "owner",
+     "kind": "assigned_notice",
+     "to": "Gina Rueda",
+     "to_id": "agent_gina",
+     "status": "delivered",
+     "requested_at": "2026-09-09T16:06:55.000Z",
+     "sent_at": "2026-09-09T16:06:57.000Z",
+     "delivered_at": "2026-09-09T16:07:03.000Z",
+     "claimed_at": null,
+     "failed_at": null
     }
-  ],
-  "health": {
-    "scraper_last_ok": "2026-09-10T02:30:00.000Z",
-    "stuck_requested": 0,
-    "stuck_expired": 0,
-    "queued_night": 0,
-    "manual_review_new": 0
+   ],
+   "events": [
+    {
+     "type": "detected",
+     "actor": "scraper",
+     "at": "2026-09-09T16:02:11.000Z",
+     "reason": ""
+    },
+    {
+     "type": "i24_contacted",
+     "actor": "scraper",
+     "at": "2026-09-09T16:02:40.000Z",
+     "reason": ""
+    },
+    {
+     "type": "route_dispatched",
+     "actor": "wf12",
+     "at": "2026-09-09T16:03:25.000Z",
+     "reason": ""
+    },
+    {
+     "type": "delivery_confirmed",
+     "actor": "wf22",
+     "at": "2026-09-09T16:03:41.000Z",
+     "reason": ""
+    },
+    {
+     "type": "claim_accepted",
+     "actor": "Gina Rueda",
+     "at": "2026-09-09T16:06:48.000Z",
+     "reason": ""
+    }
+   ],
+   "eb_effects": [
+    {
+     "kind": "note",
+     "ok": true,
+     "at": "2026-09-09T16:07:40.000Z",
+     "status": "ok",
+     "eb_request_id": "ebr_801"
+    },
+    {
+     "kind": "attended",
+     "ok": true,
+     "at": "2026-09-09T16:07:52.000Z",
+     "status": "ok",
+     "eb_request_id": "ebr_801"
+    }
+   ]
+  },
+  {
+   "opportunity_id": 802,
+   "state": "unassigned",
+   "routing_tier": "primary_guard",
+   "property_id": "EB-CD3345",
+   "assigned_agent_id": null,
+   "assigned_name": null,
+   "assigned_role": null,
+   "created_at": "2026-09-09T18:31:04.000Z",
+   "assigned_at": null,
+   "accepted_at": null,
+   "expires_at": "2026-09-09T18:44:12.000Z",
+   "unassigned_at": "2026-09-09T18:44:12.000Z",
+   "v3_night_queued_at": null,
+   "v3_night_released_at": null,
+   "lead_name": "Ricardo Peña",
+   "lead_phone": "5215512340002",
+   "property_title": "Departamento Condesa · Amsterdam 45",
+   "route_dispatch_status": "dispatched",
+   "contactado_status": "verified",
+   "attempts": [
+    {
+     "tier": "owner",
+     "kind": "offer",
+     "to": "Olga Cervantes",
+     "to_id": "agent_olga",
+     "status": "expired",
+     "requested_at": "2026-09-09T18:32:02.000Z",
+     "sent_at": "2026-09-09T18:32:05.000Z",
+     "delivered_at": "2026-09-09T18:32:14.000Z",
+     "claimed_at": null,
+     "failed_at": null
+    },
+    {
+     "tier": "primary_guard",
+     "kind": "offer",
+     "to": "Vicky Lara",
+     "to_id": "agent_vicky",
+     "status": "expired",
+     "requested_at": "2026-09-09T18:38:40.000Z",
+     "sent_at": "2026-09-09T18:38:43.000Z",
+     "delivered_at": "2026-09-09T18:38:51.000Z",
+     "claimed_at": null,
+     "failed_at": null
+    }
+   ],
+   "events": [
+    {
+     "type": "detected",
+     "actor": "scraper",
+     "at": "2026-09-09T18:31:04.000Z",
+     "reason": ""
+    },
+    {
+     "type": "i24_contacted",
+     "actor": "scraper",
+     "at": "2026-09-09T18:31:35.000Z",
+     "reason": ""
+    },
+    {
+     "type": "escalated",
+     "actor": "wf23",
+     "at": "2026-09-09T18:38:40.000Z",
+     "reason": "owner_timeout"
+    },
+    {
+     "type": "left_unassigned",
+     "actor": "wf3c",
+     "at": "2026-09-09T18:44:12.000Z",
+     "reason": "guard_expired"
+    }
+   ],
+   "eb_effects": [
+    {
+     "kind": "note",
+     "ok": true,
+     "at": "2026-09-09T18:45:10.000Z",
+     "status": "ok",
+     "eb_request_id": "ebr_802"
+    }
+   ],
+   "i24_note": {
+    "state": "pending",
+    "text": "SIN ASIGNACIÓN · V3 10:20",
+    "at": null,
+    "attempts": 0
+   }
+  },
+  {
+   "opportunity_id": 803,
+   "state": "captured",
+   "routing_tier": "primary_guard",
+   "property_id": "EB-EF7788",
+   "assigned_agent_id": null,
+   "assigned_name": null,
+   "assigned_role": null,
+   "created_at": "2026-09-10T02:41:09.000Z",
+   "assigned_at": null,
+   "accepted_at": null,
+   "expires_at": "2026-09-10T02:49:30.000Z",
+   "unassigned_at": null,
+   "v3_night_queued_at": null,
+   "v3_night_released_at": null,
+   "lead_name": "Marisol Aguirre",
+   "lead_phone": "5215512340003",
+   "property_title": "Terreno Tepoztlán · Camino Real 8",
+   "route_dispatch_status": "dispatched",
+   "contactado_status": "verified",
+   "attempts": [
+    {
+     "tier": "primary_guard",
+     "kind": "offer",
+     "to": "Carol Vega",
+     "to_id": "agent_carol",
+     "status": "delivered",
+     "requested_at": "2026-09-10T02:43:50.000Z",
+     "sent_at": "2026-09-10T02:43:53.000Z",
+     "delivered_at": "2026-09-10T02:44:01.000Z",
+     "claimed_at": null,
+     "failed_at": null
+    }
+   ],
+   "events": [
+    {
+     "type": "detected",
+     "actor": "scraper",
+     "at": "2026-09-10T02:41:09.000Z",
+     "reason": ""
+    },
+    {
+     "type": "i24_contacted",
+     "actor": "scraper",
+     "at": "2026-09-10T02:41:44.000Z",
+     "reason": ""
+    },
+    {
+     "type": "route_dispatched",
+     "actor": "wf12",
+     "at": "2026-09-10T02:43:45.000Z",
+     "reason": ""
+    }
+   ],
+   "eb_effects": null
+  },
+  {
+   "opportunity_id": 804,
+   "state": "assigned",
+   "routing_tier": "owner",
+   "property_id": "EB-XX1234",
+   "assigned_agent_id": "agent_milena",
+   "assigned_name": "Milena Ortiz",
+   "assigned_role": "agent",
+   "created_at": "2026-09-10T01:58:22.000Z",
+   "assigned_at": "2026-09-10T02:10:00.000Z",
+   "accepted_at": "2026-09-10T02:10:00.000Z",
+   "expires_at": "2026-09-10T02:12:00.000Z",
+   "unassigned_at": null,
+   "v3_night_queued_at": null,
+   "v3_night_released_at": null,
+   "lead_name": "Hugo Lemus",
+   "lead_phone": "5215512340004",
+   "property_title": "Casa Lomas Verdes · Circuito Norte 33",
+   "route_dispatch_status": "dispatched",
+   "contactado_status": "verified",
+   "attempts": [
+    {
+     "tier": "owner",
+     "kind": "offer",
+     "to": "Milena Ortiz",
+     "to_id": "agent_milena",
+     "status": "claimed",
+     "requested_at": "2026-09-10T02:00:05.000Z",
+     "sent_at": "2026-09-10T02:00:08.000Z",
+     "delivered_at": "2026-09-10T02:00:19.000Z",
+     "claimed_at": "2026-09-10T02:10:00.000Z",
+     "failed_at": null
+    }
+   ],
+   "events": [
+    {
+     "type": "detected",
+     "actor": "scraper",
+     "at": "2026-09-10T01:58:22.000Z",
+     "reason": ""
+    },
+    {
+     "type": "i24_contacted",
+     "actor": "scraper",
+     "at": "2026-09-10T01:58:55.000Z",
+     "reason": ""
+    },
+    {
+     "type": "claim_accepted",
+     "actor": "Milena Ortiz",
+     "at": "2026-09-10T02:10:00.000Z",
+     "reason": ""
+    }
+   ],
+   "eb_effects": null,
+   "i24_note": {
+    "state": "succeeded",
+    "text": "Gina · V3 11:57",
+    "at": "2026-09-10T02:10:00.000Z",
+    "attempts": 1
+   }
+  },
+  {
+   "opportunity_id": 805,
+   "state": "assigned",
+   "routing_tier": "sandy",
+   "property_id": "EB-GH9900",
+   "assigned_agent_id": "agent_manager",
+   "assigned_name": "Sandy Mora",
+   "assigned_role": "manager",
+   "created_at": "2026-09-09T17:05:12.000Z",
+   "assigned_at": "2026-09-09T17:18:40.000Z",
+   "accepted_at": null,
+   "expires_at": "2026-09-09T17:18:40.000Z",
+   "unassigned_at": null,
+   "v3_night_queued_at": null,
+   "v3_night_released_at": null,
+   "lead_name": "Norma Vidal",
+   "lead_phone": "5215512340005",
+   "property_title": "Departamento Condesa · Amsterdam 45",
+   "route_dispatch_status": "dispatched",
+   "contactado_status": "verified",
+   "attempts": [
+    {
+     "tier": "owner",
+     "kind": "offer",
+     "to": "Vicky Lara",
+     "to_id": "agent_vicky",
+     "status": "expired",
+     "requested_at": "2026-09-09T17:06:02.000Z",
+     "sent_at": "2026-09-09T17:06:05.000Z",
+     "delivered_at": "2026-09-09T17:06:14.000Z",
+     "claimed_at": null,
+     "failed_at": null
+    },
+    {
+     "tier": "sandy",
+     "kind": "assigned_notice",
+     "to": "Sandy Mora",
+     "to_id": "agent_manager",
+     "status": "delivered",
+     "requested_at": "2026-09-09T17:18:48.000Z",
+     "sent_at": "2026-09-09T17:18:51.000Z",
+     "delivered_at": "2026-09-09T17:18:59.000Z",
+     "claimed_at": null,
+     "failed_at": null
+    }
+   ],
+   "events": [
+    {
+     "type": "detected",
+     "actor": "scraper",
+     "at": "2026-09-09T17:05:12.000Z",
+     "reason": ""
+    },
+    {
+     "type": "i24_contacted",
+     "actor": "scraper",
+     "at": "2026-09-09T17:05:44.000Z",
+     "reason": ""
+    },
+    {
+     "type": "manager_assigned",
+     "actor": "wf3c",
+     "at": "2026-09-09T17:18:40.000Z",
+     "reason": "guard_expired"
+    },
+    {
+     "type": "assigned_notice_delivered",
+     "actor": "wf22",
+     "at": "2026-09-09T17:18:59.000Z",
+     "reason": ""
+    }
+   ],
+   "eb_effects": [
+    {
+     "kind": "note",
+     "ok": true,
+     "at": "2026-09-09T17:19:30.000Z",
+     "status": "ok",
+     "eb_request_id": "ebr_805"
+    },
+    {
+     "kind": "attended",
+     "ok": true,
+     "at": "2026-09-09T17:19:42.000Z",
+     "status": "ok",
+     "eb_request_id": "ebr_805"
+    }
+   ]
   }
+ ],
+ "health": {
+  "scraper_last_ok": "2026-09-10T02:30:00.000Z",
+  "stuck_requested": 0,
+  "stuck_expired": 0,
+  "queued_night": 0,
+  "manual_review_new": 0
+ }
 }

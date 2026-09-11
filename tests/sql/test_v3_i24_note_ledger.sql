@@ -7,10 +7,13 @@ DECLARE
   cap1 bigint; cap2 bigint; cap3 bigint;
   tok1 uuid; tok2 uuid; expected text;
   t0 timestamptz := clock_timestamp() - interval '1 hour';
+  suffix text;
 BEGIN
+ suffix := ' · V3 ' || to_char(t0 AT TIME ZONE 'America/Mexico_City', 'HH24:MI');
  SELECT split_part(regexp_replace(BTRIM(a.name), '\s+', ' ', 'g'), ' ', 1)
    INTO expected FROM public.agents a WHERE a.agent_id='agent_gina';
  IF expected IS NULL THEN RAISE EXCEPTION 'missing agent_gina seed'; END IF;
+ expected := expected || suffix;
 
  -- (a) a claimed lead enqueues the responsible's first name
  SELECT * INTO r FROM public.v3_intake(
@@ -42,7 +45,7 @@ BEGIN
  UPDATE public.lead_routing_opportunities SET state='unassigned', unassigned_at=t0
  WHERE opportunity_id=op2;
  SELECT * INTO r FROM public.i24_note_ledger WHERE opportunity_id=op2;
- IF NOT FOUND OR r.note_text<>'SIN ASIGNACIÓN' THEN
+ IF NOT FOUND OR r.note_text<>'SIN ASIGNACIÓN'||suffix THEN
    RAISE EXCEPTION 'unassigned lead enqueued %', r.note_text; END IF;
 
  -- (c) re-stamping the same state is a no-op, not an error and not a duplicate

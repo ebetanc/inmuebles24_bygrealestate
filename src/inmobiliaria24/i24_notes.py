@@ -5,8 +5,8 @@ The team used to type "Nota interna: <nombre>" by hand once a lead had an owner.
 worker is the hand that types it, once per scraper run, on the same logged-in
 browser that already flips the status to Contactado.
 
-Selectors are provisional until docs/i24-notas-selectors.md is written from a
-real DOM dump — keep every one of them in this block so the fix is one edit.
+Selectors verified against the live DOM on 2026-09-11 (docs/i24-notas-selectors.md);
+keep every one of them in this block so a portal change is one edit.
 """
 from __future__ import annotations
 
@@ -16,7 +16,8 @@ from loguru import logger
 
 from .scraper import INTERESADOS_URL, _navigate_spa
 
-NOTES_TAB_SELECTORS = ("role=tab[name='Notas']", "text=/^\\s*Notas\\s*$/")
+# The tab is a plain <button><div><span>Notas</span></div></button>: no role, no id.
+NOTES_TAB_SELECTORS = ("text=/^\\s*Notas\\s*$/",)
 NOTE_INPUT = "textarea[placeholder^='Escribí una nota interna']"
 NOTE_SUBMIT = "button:has-text('Anotar')"
 NOTE_ROW_TEMPLATE = "text=/^\\s*Nota interna:\\s*{text}\\s*$/"

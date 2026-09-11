@@ -20,6 +20,8 @@ const joined = out.text_chunks.join('\n');
 assert.ok(joined.includes('SIN ASIGNACIÓN'), 'missing SIN ASIGNACIÓN line');
 assert.ok(joined.includes('(guard_expired)'), 'missing left_unassigned reason');
 assert.ok(joined.includes('Atendida omitida'), 'missing Atendida omitida');
+assert.ok(joined.includes('Nota en Inmuebles24 ✔') && joined.includes('Gina · V3 11:57'), 'missing i24 note line');
+assert.ok(joined.includes('Nota en Inmuebles24 ⌛ pendiente'), 'missing pending i24 note line');
 assert.ok(joined.includes('1 a Sandy'), 'legacy Sandy fallback lost from summary');
 assert.ok(out.subject.includes('1 sin asignación'), out.subject);
 out.text_chunks.forEach(c => assert.ok(c.length <= 4000, 'chunk over 4000'));
