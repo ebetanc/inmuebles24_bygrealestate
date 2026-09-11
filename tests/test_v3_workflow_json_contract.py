@@ -439,6 +439,12 @@ def test_wf1_routes_ver_detalle_button_to_the_stored_daily_report():
         assert "route: 'report_detail'" in classifier
         # El botón puede llegar de un no-asesor, así que se evalúa antes del bloque is_agent.
         assert classifier.index("route: 'report_detail'") < classifier.index("if (db.is_agent) {")
+        # La etiqueta del botón de la plantilla no es de fiar: enruta cualquier quick reply
+        # que no sea un claim (el "Tomo" de lead_subasta_v3 manda payload claim:v3:<opp>:<attempt>).
+        assert "String(parsed.message_type || '') === 'button'" in classifier
+        assert "!/^claim:/i.test(String(parsed.interactive_id || ''))" in classifier
+        assert "if (isReportButton ||" in classifier
+        assert "/^ver detalle$/i.test(String(text || ''))" in classifier
 
         rules = node(workflow, "Switch")["parameters"]["rules"]["values"]
         keys = [rule["outputKey"] for rule in rules]
