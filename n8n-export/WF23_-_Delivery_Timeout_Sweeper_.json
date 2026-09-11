@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-05T14:08:24.000Z",
+  "updatedAt": "2026-09-07T16:02:36.000Z",
   "createdAt": "2026-08-13T17:04:29.524Z",
   "id": "MjfHw3tYE2qYgJfM",
   "name": "WF23 - Delivery Timeout Sweeper",
@@ -191,8 +191,10 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT *, reason AS alert_kind, 'day_deadline_missed' AS state, 'Revisar etapa detenida; no reofertar automaticamente' AS required_action FROM public.v3_day_claim_alerts();",
-        "options": {}
+        "query": "SET LOCAL statement_timeout='8s'; SELECT *, CASE reason WHEN 'portal_already_contacted_without_capture' THEN 'I24 muestra Contactado sin responsable confirmado' WHEN 'contactado_not_verified' THEN 'Plazo de 15 minutos: Contactado sin confirmar' WHEN 'route_not_dispatched' THEN 'Plazo de 15 minutos: entrega al asesor pendiente' WHEN 'responsible_not_assigned' THEN 'Plazo de 15 minutos: sin responsable confirmado' ELSE 'Plazo de 15 minutos: cierre o entrega sin confirmar' END AS alert_kind, 'Requiere revision' AS state, 'La automatizacion de esta consulta quedo detenida. Revisar su atencion.' AS required_action FROM public.v3_day_claim_alerts();",
+        "options": {
+          "connectionTimeout": 5
+        }
       },
       "id": "claim-day-deadline-alerts",
       "name": "Claim Day Deadline Alerts",
@@ -250,9 +252,10 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE public.v3_day_incidents SET notification_state=CASE WHEN NULLIF($3::text,'') IS NOT NULL THEN 'accepted' ELSE 'unknown' END,provider_message_id=NULLIF($3::text,''),notified_at=clock_timestamp() WHERE capture_event_id=$1::bigint AND notification_token=$2::uuid AND notification_state='claimed' RETURNING capture_event_id,notification_state;",
+        "query": "SET LOCAL statement_timeout='8s'; UPDATE public.v3_day_incidents SET notification_state=CASE WHEN NULLIF($3::text,'') IS NOT NULL THEN 'accepted' ELSE 'unknown' END,provider_message_id=NULLIF($3::text,''),notified_at=clock_timestamp() WHERE capture_event_id=$1::bigint AND notification_token=$2::uuid AND notification_state='claimed' RETURNING capture_event_id,notification_state;",
         "options": {
-          "queryReplacement": "={{ [$('Claim Day Deadline Alerts').item.json.capture_event_id, $('Claim Day Deadline Alerts').item.json.notification_token, $json.messages?.[0]?.id || null] }}"
+          "queryReplacement": "={{ [$('Claim Day Deadline Alerts').item.json.capture_event_id, $('Claim Day Deadline Alerts').item.json.notification_token, $json.messages?.[0]?.id || null] }}",
+          "connectionTimeout": 5
         }
       },
       "id": "save-day-alert-receipt",
@@ -272,6 +275,38 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid-day-alert",
+              "leftValue": "={{ Number.isSafeInteger(Number($json.capture_event_id)) && Number($json.capture_event_id) > 0 && !!$json.notification_token && !!$json.manager_phone }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-day-deadline-alert",
+      "name": "Has Day Deadline Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1350,
+        1050
+      ]
     }
   ],
   "connections": {
@@ -346,7 +381,7 @@
       "main": [
         [
           {
-            "node": "Send Day Deadline Alert",
+            "node": "Has Day Deadline Alert?",
             "type": "main",
             "index": 0
           }
@@ -363,6 +398,18 @@
           }
         ]
       ]
+    },
+    "Has Day Deadline Alert?": {
+      "main": [
+        [
+          {
+            "node": "Send Day Deadline Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
     }
   },
   "settings": {
@@ -370,8 +417,8 @@
     "executionOrder": "v1",
     "executionTimeout": 20,
     "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "none",
-    "saveExecutionProgress": false,
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
     "saveManualExecutions": false,
     "timezone": "America/Mexico_City"
   },
@@ -388,9 +435,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "1ddc6d9d-32eb-43b0-8b04-7b009c95baba",
-  "activeVersionId": "1ddc6d9d-32eb-43b0-8b04-7b009c95baba",
-  "versionCounter": 23,
+  "versionId": "9469b537-e2f3-4af9-bfc3-de3d67b638cf",
+  "activeVersionId": "9469b537-e2f3-4af9-bfc3-de3d67b638cf",
+  "versionCounter": 26,
   "triggerCount": 1,
   "sourceWorkflowId": null,
   "tags": [],

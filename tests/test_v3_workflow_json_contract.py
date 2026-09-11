@@ -111,6 +111,11 @@ def test_wf10_and_wf12_fail_closed_without_email_storm_or_whatsapp():
         manual = node(workflow, "Route Missing Owner Data")["parameters"]["query"]
         assert "route_dispatch_status='manual_review'" in manual
         assert "easybroker_public_url_missing" in manual
+        # Without an owner the V3 router must still request the guard offer
+        # itself: the V2 route_missing_owner_data path relied on a WF3c node
+        # that no longer has a trigger (opps 827/832 stuck on 2026-09-10).
+        assert "v3_route_ready_opportunity($1::bigint,$2::bigint,ARRAY[]::text[],NOW())" in manual
+        assert "route_missing_owner_data" not in manual
 
 
 def test_wf13_is_owner_or_primary_and_uses_v3_offer():

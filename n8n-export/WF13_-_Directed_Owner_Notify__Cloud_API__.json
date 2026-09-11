@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-02T15:32:57.000Z",
+  "updatedAt": "2026-09-07T15:42:25.000Z",
   "createdAt": "2026-06-25T06:13:15.896Z",
   "id": "Bo2YbbUpmBzRbhDa",
   "name": "WF13 - Directed Owner Notify",
@@ -434,7 +434,7 @@
       "credentials": {
         "postgres": {
           "id": "dEHKygi1neTNvPtH",
-          "name": "Postgres - Supabase"
+          "name": "Postgres account BYG project"
         }
       },
       "retryOnFail": false
@@ -472,7 +472,7 @@
       "credentials": {
         "postgres": {
           "id": "dEHKygi1neTNvPtH",
-          "name": "Postgres - Supabase"
+          "name": "Postgres account BYG project"
         }
       },
       "retryOnFail": false
@@ -724,9 +724,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "5ed3d363-0096-47fb-8c8a-eb665f96dd01",
-  "activeVersionId": "5ed3d363-0096-47fb-8c8a-eb665f96dd01",
-  "versionCounter": 51,
+  "versionId": "1093fffe-6ea1-4878-9e44-77957e917de6",
+  "activeVersionId": "1093fffe-6ea1-4878-9e44-77957e917de6",
+  "versionCounter": 52,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],
