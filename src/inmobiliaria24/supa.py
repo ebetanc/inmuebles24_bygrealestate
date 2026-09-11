@@ -259,3 +259,42 @@ async def finish_v3_route_dispatch(
         )
         response.raise_for_status()
     return response.json() is True
+
+
+async def claim_v3_i24_notes(limit: int = 10) -> list[dict]:
+    """Lease pending internal notes for the logged-in I24 browser."""
+    cfg = _supa_cfg()
+    if not cfg:
+        return []
+    url, key = cfg
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"{url}/rest/v1/rpc/claim_v3_i24_notes",
+            json={"p_limit": limit, "p_now": datetime.now(timezone.utc).isoformat()},
+            headers=_headers(key),
+        )
+        response.raise_for_status()
+    return _v3_rpc_rows(response.json())
+
+
+async def finish_v3_i24_note(
+    opportunity_id: int, token: str, ok: bool, evidence: dict | None = None
+) -> bool:
+    """Commit or retry exactly one leased Inmuebles24 internal note."""
+    cfg = _supa_cfg()
+    if not cfg:
+        return False
+    url, key = cfg
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(
+            f"{url}/rest/v1/rpc/finish_v3_i24_note",
+            json={
+                "p_opportunity_id": opportunity_id,
+                "p_token": token,
+                "p_ok": ok,
+                "p_evidence": evidence or {},
+            },
+            headers=_headers(key),
+        )
+        response.raise_for_status()
+    return response.json() is True

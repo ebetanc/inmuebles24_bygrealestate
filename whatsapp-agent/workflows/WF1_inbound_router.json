@@ -72,7 +72,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Route normalized messages. V3 claims require a Meta button payload; V2 remains drain-only.\nconst parsed = $('Parse Evolution Payload').first().json;\nconst db = $input.first().json;\nconst phone = parsed.phone, text = parsed.text, pushName = parsed.pushName, messageId = parsed.messageId;\nif (db.is_agent) {\n  const v3ClaimMatch = String(parsed.interactive_id || '').match(/^claim:v3:(\\d+):(\\d+)$/);\n  if (v3ClaimMatch) {\n    const opportunityId = Number(v3ClaimMatch[1]), attemptId = Number(v3ClaimMatch[2]);\n    if (!Number.isSafeInteger(opportunityId) || opportunityId <= 0 || !Number.isSafeInteger(attemptId) || attemptId <= 0 || !Number.isSafeInteger(Number(parsed.webhook_event_id)) || Number(parsed.webhook_event_id) <= 0) return [{ json: { route: 'ignore', reason: 'invalid_v3_claim_payload' } }];\n    return [{ json: { route: 'agent_claim', claim_version: 'v3', webhook_event_id: Number(parsed.webhook_event_id), agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, opportunity_id: opportunityId, attempt_id: attemptId, routing_tier: null, context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: parsed.interactive_id, messageId } }];\n  }\n  if (!db.new_message_id && db.new_message_id !== 0) return [{ json: { route: 'ignore', reason: 'duplicate_message' } }];\n  const claimMatch = String(parsed.interactive_id || '').match(/^claim:(\\d+):(owner|primary_guard|backup_guard)$/);\n  if (claimMatch) {\n    const opportunityId = Number(claimMatch[1]);\n    if (!Number.isSafeInteger(opportunityId) || opportunityId <= 0) return [{ json: { route: 'ignore', reason: 'invalid_v2_claim_payload' } }];\n    return [{ json: { route: 'agent_claim', claim_version: 'v2_drain', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, opportunity_id: opportunityId, routing_tier: claimMatch[2], context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: parsed.interactive_id, messageId } }];\n  }\n  const textClaimMatch = String(text || '').trim().match(/^TOMO-V2-(\\d+)-(O|P|B)$/i);\n  if (textClaimMatch) {\n    const opportunityId = Number(textClaimMatch[1]);\n    if (!Number.isSafeInteger(opportunityId) || opportunityId <= 0) return [{ json: { route: 'ignore', reason: 'invalid_v2_claim_text' } }];\n    const tierByCode = { O: 'owner', P: 'primary_guard', B: 'backup_guard' };\n    return [{ json: { route: 'agent_claim', claim_version: 'v2_drain', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, opportunity_id: opportunityId, routing_tier: tierByCode[textClaimMatch[2].toUpperCase()], context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: text, messageId } }];\n  }\n  const tomoMatch = String(text || '').match(/^TOMO-([A-Z0-9]{4})$/i);\n  if (tomoMatch) return [{ json: { route: 'agent_claim', claim_version: 'v2_drain', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, short_code: tomoMatch[1].toUpperCase(), context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: text, messageId } }];\n  return [{ json: { route: 'agent_followup_reply', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, text, messageId } }];\n}\nif (!db.new_message_id && db.new_message_id !== 0) return [{ json: { route: 'ignore', reason: 'duplicate_message' } }];\nif (!db.conversation_id) return [{ json: { route: 'new_lead', phone, pushName, text, messageId } }];\nconst mode = db.conv_mode;\nif (mode === 'ai') return [{ json: { route: 'ai_conversation', conversation_id: db.conversation_id, phone, pushName, text, messageId, current_property: db.current_property, assigned_agent_id: db.assigned_agent_id } }];\nif (mode === 'human') return [{ json: { route: 'human_forward', conversation_id: db.conversation_id, phone, pushName, text, messageId, assigned_agent_id: db.assigned_agent_id, assigned_agent_phone: db.assigned_agent_phone } }];\nif (mode === 'pending_assignment') return [{ json: { route: 'pending', conversation_id: db.conversation_id, phone, pushName, text, messageId } }];\nreturn [{ json: { route: 'ignore', reason: 'unknown_mode' } }];"
+        "jsCode": "// Route normalized messages. V3 claims require a Meta button payload; V2 remains drain-only.\nconst parsed = $('Parse Evolution Payload').first().json;\nconst db = $input.first().json;\nconst phone = parsed.phone, text = parsed.text, pushName = parsed.pushName, messageId = parsed.messageId;\nconst isReportButton = String(parsed.message_type || '') === 'button' && !/^claim:/i.test(String(parsed.interactive_id || ''));\nif (isReportButton || /^ver detalle$/i.test(String(text || '')) || /^report:detail$/i.test(String(parsed.interactive_id || ''))) {\n  return [{ json: { route: 'report_detail', phone, messageId } }];\n}\nif (db.is_agent) {\n  const v3ClaimMatch = String(parsed.interactive_id || '').match(/^claim:v3:(\\d+):(\\d+)$/);\n  if (v3ClaimMatch) {\n    const opportunityId = Number(v3ClaimMatch[1]), attemptId = Number(v3ClaimMatch[2]);\n    if (!Number.isSafeInteger(opportunityId) || opportunityId <= 0 || !Number.isSafeInteger(attemptId) || attemptId <= 0 || !Number.isSafeInteger(Number(parsed.webhook_event_id)) || Number(parsed.webhook_event_id) <= 0) return [{ json: { route: 'ignore', reason: 'invalid_v3_claim_payload' } }];\n    return [{ json: { route: 'agent_claim', claim_version: 'v3', webhook_event_id: Number(parsed.webhook_event_id), agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, opportunity_id: opportunityId, attempt_id: attemptId, routing_tier: null, context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: parsed.interactive_id, messageId } }];\n  }\n  if (!db.new_message_id && db.new_message_id !== 0) return [{ json: { route: 'ignore', reason: 'duplicate_message' } }];\n  const claimMatch = String(parsed.interactive_id || '').match(/^claim:(\\d+):(owner|primary_guard|backup_guard)$/);\n  if (claimMatch) {\n    const opportunityId = Number(claimMatch[1]);\n    if (!Number.isSafeInteger(opportunityId) || opportunityId <= 0) return [{ json: { route: 'ignore', reason: 'invalid_v2_claim_payload' } }];\n    return [{ json: { route: 'agent_claim', claim_version: 'v2_drain', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, opportunity_id: opportunityId, routing_tier: claimMatch[2], context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: parsed.interactive_id, messageId } }];\n  }\n  const textClaimMatch = String(text || '').trim().match(/^TOMO-V2-(\\d+)-(O|P|B)$/i);\n  if (textClaimMatch) {\n    const opportunityId = Number(textClaimMatch[1]);\n    if (!Number.isSafeInteger(opportunityId) || opportunityId <= 0) return [{ json: { route: 'ignore', reason: 'invalid_v2_claim_text' } }];\n    const tierByCode = { O: 'owner', P: 'primary_guard', B: 'backup_guard' };\n    return [{ json: { route: 'agent_claim', claim_version: 'v2_drain', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, opportunity_id: opportunityId, routing_tier: tierByCode[textClaimMatch[2].toUpperCase()], context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: text, messageId } }];\n  }\n  const tomoMatch = String(text || '').match(/^TOMO-([A-Z0-9]{4})$/i);\n  if (tomoMatch) return [{ json: { route: 'agent_claim', claim_version: 'v2_drain', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, short_code: tomoMatch[1].toUpperCase(), context_id: parsed.context_id || null, reply_to_wamid: parsed.context_id || null, wamid: messageId, raw_message: text, messageId } }];\n  return [{ json: { route: 'agent_followup_reply', agent_id: db.agent_id, agent_name: db.agent_name, agent_phone: phone, text, messageId } }];\n}\nif (!db.new_message_id && db.new_message_id !== 0) return [{ json: { route: 'ignore', reason: 'duplicate_message' } }];\nif (!db.conversation_id) return [{ json: { route: 'new_lead', phone, pushName, text, messageId } }];\nconst mode = db.conv_mode;\nif (mode === 'ai') return [{ json: { route: 'ai_conversation', conversation_id: db.conversation_id, phone, pushName, text, messageId, current_property: db.current_property, assigned_agent_id: db.assigned_agent_id } }];\nif (mode === 'human') return [{ json: { route: 'human_forward', conversation_id: db.conversation_id, phone, pushName, text, messageId, assigned_agent_id: db.assigned_agent_id, assigned_agent_phone: db.assigned_agent_phone } }];\nif (mode === 'pending_assignment') return [{ json: { route: 'pending', conversation_id: db.conversation_id, phone, pushName, text, messageId } }];\nreturn [{ json: { route: 'ignore', reason: 'unknown_mode' } }];"
       },
       "id": "249f2966-93e8-4a93-a6bc-35e166b4dbb3",
       "name": "Classify & Route",
@@ -392,6 +392,31 @@
               },
               "renameOutput": true,
               "outputKey": "agent_followup_reply"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c0ffee00-0003-4000-8000-000000000003",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "report_detail",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "report_detail"
             }
           ]
         },
@@ -675,6 +700,87 @@
         1100,
         300
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT r.text_chunks FROM public.v3_daily_reports r WHERE EXISTS (SELECT 1 FROM public.v3_report_recipients p WHERE p.phone=$1 AND p.active) ORDER BY r.report_date DESC LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [$json.phone] }}",
+          "connectionTimeout": 15
+        }
+      },
+      "id": "wf1-report-detail-read",
+      "name": "Leer último reporte",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1560,
+        980
+      ],
+      "alwaysOutputData": false,
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres - Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const phone = $('Classify & Route').first().json.phone; const first = $input.first(); const chunks = (first && first.json && Array.isArray(first.json.text_chunks)) ? first.json.text_chunks : []; return chunks.map((c, i) => ({ json: { phone, text: c, idx: i } }));"
+      },
+      "id": "wf1-report-detail-expand",
+      "name": "Expandir trozos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        980
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WA_CLOUD_API_BASE_URL + '/' + $env.WA_API_VERSION + '/' + $env.WA_PHONE_NUMBER_ID + '/messages' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WA_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": { \"preview_url\": false, \"body\": {{ JSON.stringify($json.text) }} }\n}",
+        "options": {
+          "timeout": 10000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 800
+            }
+          }
+        }
+      },
+      "id": "wf1-report-detail-send",
+      "name": "Enviar detalle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        980
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
     }
   ],
   "connections": {
@@ -819,6 +925,13 @@
         ],
         [
           {
+            "node": "Leer último reporte",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "End (Fallback)",
             "type": "main",
             "index": 0
@@ -918,6 +1031,28 @@
         [
           {
             "node": "Parse Evolution Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer último reporte": {
+      "main": [
+        [
+          {
+            "node": "Expandir trozos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expandir trozos": {
+      "main": [
+        [
+          {
+            "node": "Enviar detalle",
             "type": "main",
             "index": 0
           }

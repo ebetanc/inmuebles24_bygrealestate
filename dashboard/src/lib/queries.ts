@@ -252,7 +252,8 @@ export async function getV3Kpis(): Promise<V3KPIs> {
     total: rows.length,
     claimed: rows.filter((r) => r.assignment_method === "claim").length,
     sandy: rows.filter((r) => r.assignment_method === "sandy_fallback").length,
-    open: rows.filter((r) => r.assigned_agent_id === null).length,
+    unassigned: rows.filter((r) => r.assignment_method === "unassigned").length,
+    open: rows.filter((r) => r.assigned_agent_id === null && r.assignment_method !== "unassigned").length,
     withProblem: rows.filter((r) => r.has_problem).length,
     avgMinutesToClaim: claimTimes.length
       ? Math.round(claimTimes.reduce((a, b) => a + b, 0) / claimTimes.length)

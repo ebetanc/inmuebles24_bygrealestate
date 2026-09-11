@@ -96,6 +96,29 @@
               },
               "renameOutput": true,
               "outputKey": "unassigned"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "route-left-unassigned",
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "unassigned",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "left_unassigned"
             }
           ]
         },
@@ -116,7 +139,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const state = String($json.state || 'missing');\nconst opportunityId = $json.opportunity_id == null ? 'missing' : String($json.opportunity_id);\nif (!['guard_delivery_pending', 'unassigned_alerted', 'open', 'awaiting_delivery_timeout', 'missing_delivery_attempt', 'missing_capture_context', 'missing'].includes(state)) {\n  throw new Error(`unexpected_routing_transition_state state=${state} opportunity_id=${opportunityId}`);\n}\nreturn [{ json: $json }];"
+        "jsCode": "const state = String($json.state || 'missing');\nconst opportunityId = $json.opportunity_id == null ? 'missing' : String($json.opportunity_id);\nif (!['guard_delivery_pending', 'unassigned_alerted', 'open', 'awaiting_delivery_timeout', 'missing_delivery_attempt', 'missing_capture_context', 'missing', 'unassigned'].includes(state)) {\n  throw new Error(`unexpected_routing_transition_state state=${state} opportunity_id=${opportunityId}`);\n}\nreturn [{ json: $json }];"
       },
       "id": "a1a2a3a4-0014-4000-8000-000000000014",
       "name": "Reject Unexpected Transition State",
@@ -297,6 +320,18 @@
       ]
     },
     {
+      "parameters": {},
+      "id": "wf3c-unassigned-durable",
+      "name": "V3 Unassigned Durable",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        720
+      ],
+      "notes": "Lead left unassigned by SQL (v3_mark_unassigned); nothing to send."
+    },
+    {
       "parameters": {
         "inputSource": "passthrough"
       },
@@ -346,6 +381,13 @@
         [
           {
             "node": "V3 Sandy Assignment Durable",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "V3 Unassigned Durable",
             "type": "main",
             "index": 0
           }

@@ -415,3 +415,80 @@ def test_wf10_recurrent_notification_is_the_eight_field_v3_template():
         assert "lead_asignado_v3" in body
         assert body.count('"type": "text"') == 8
         assert '"type": "button"' not in body
+
+
+def test_wf24_sends_the_daily_report_to_whatsapp_recipients():
+    workflow = load("whatsapp-agent/workflows/WF24_v3_monitor.json")
+    assert len([n for n in workflow["nodes"] if n["type"] == "n8n-nodes-base.scheduleTrigger"]) == 1
+    chain = ["Enviar correo (Gmail)", "Guardar reporte", "Leer destinatarios", "Enviar WhatsApp", "Registrar envío"]
+    for source, target in zip(chain, chain[1:]):
+        node(workflow, target)
+        assert workflow["connections"][source]["main"][0][0]["node"] == target
+    assert "reporte_diario_v3" in node(workflow, "Enviar WhatsApp")["parameters"]["jsonBody"]
+    # Gmail caído no debe cortar la pata de WhatsApp.
+    assert node(workflow, "Enviar correo (Gmail)")["onError"] == "continueRegularOutput"
+    assert node(workflow, "Enviar WhatsApp")["onError"] == "continueRegularOutput"
+    assert "v3_daily_reports" in node(workflow, "Guardar reporte")["parameters"]["query"]
+    assert "v3_report_sends" in node(workflow, "Registrar envío")["parameters"]["query"]
+
+
+def test_wf1_routes_ver_detalle_button_to_the_stored_daily_report():
+    for path in PAIRS["WF1"]:
+        workflow = load(path)
+        classifier = node(workflow, "Classify & Route")["parameters"]["jsCode"]
+        assert "route: 'report_detail'" in classifier
+        # El botón puede llegar de un no-asesor, así que se evalúa antes del bloque is_agent.
+        assert classifier.index("route: 'report_detail'") < classifier.index("if (db.is_agent) {")
+        # La etiqueta del botón de la plantilla no es de fiar: enruta cualquier quick reply
+        # que no sea un claim (el "Tomo" de lead_subasta_v3 manda payload claim:v3:<opp>:<attempt>).
+        assert "String(parsed.message_type || '') === 'button'" in classifier
+        assert "!/^claim:/i.test(String(parsed.interactive_id || ''))" in classifier
+        assert "if (isReportButton ||" in classifier
+        assert "/^ver detalle$/i.test(String(text || ''))" in classifier
+
+        rules = node(workflow, "Switch")["parameters"]["rules"]["values"]
+        keys = [rule["outputKey"] for rule in rules]
+        assert keys.count("report_detail") == 1
+        index = keys.index("report_detail")
+
+        outputs = workflow["connections"]["Switch"]["main"]
+        assert len(outputs) == len(rules) + 1
+        assert outputs[index][0]["node"] == "Leer último reporte"
+        assert outputs[-1][0]["node"] == "End (Fallback)"
+
+        assert workflow["connections"]["Leer último reporte"]["main"][0][0]["node"] == "Expandir trozos"
+        assert workflow["connections"]["Expandir trozos"]["main"][0][0]["node"] == "Enviar detalle"
+
+        reader = node(workflow, "Leer último reporte")
+        assert reader.get("alwaysOutputData") is False
+        assert "v3_report_recipients" in reader["parameters"]["query"]
+        sender_body = node(workflow, "Enviar detalle")["parameters"]["jsonBody"]
+        assert '"type": "text"' in sender_body
+        # Las llaves anidadas de JSON.stringify({...}) cierran la expresión {{ }} antes de tiempo.
+        assert "JSON.stringify({" not in sender_body
+
+
+def test_wf3c_routes_left_unassigned_state_to_its_own_noop():
+    for path in PAIRS["WF3c"]:
+        workflow = load(path)
+        rules = node(workflow, "Route Transition")["parameters"]["rules"]["values"]
+        keys = [rule["outputKey"] for rule in rules]
+        assert keys.count("left_unassigned") == 1
+        index = keys.index("left_unassigned")
+        rule = rules[index]["conditions"]["conditions"][0]
+        assert rule["leftValue"] == "={{ $json.state }}"
+        assert rule["rightValue"] == "unassigned"
+
+        outputs = workflow["connections"]["Route Transition"]["main"]
+        assert len(outputs) == len(rules) + 1
+        assert outputs[index][0]["node"] == "V3 Unassigned Durable"
+        assert outputs[-1][0]["node"] == "Reject Unexpected Transition State"
+
+        reject_code = node(workflow, "Reject Unexpected Transition State")["parameters"]["jsCode"]
+        assert "'unassigned'" in reject_code
+
+
+def test_wf10_dedupe_treats_unassigned_as_active_opportunity():
+    for path in PAIRS["WF10"]:
+        query = node(load(path), "Verify V3 Dispatch Durable")["parameters"]["query"]
+        assert "'unassigned'" in query

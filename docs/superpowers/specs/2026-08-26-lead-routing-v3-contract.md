@@ -10,7 +10,7 @@ Convertir cada solicitud nueva detectada en Inmuebles24 en una atención trazabl
 
 1. capturarla de forma durable;
 2. marcarla `Contactado` en Inmuebles24;
-3. asignarla al ejecutivo correcto mediante propietario, guardia o Sandy;
+3. asignarla al ejecutivo correcto mediante propietario, guardia o cierre SIN ASIGNACIÓN;
 4. registrar una sola nota final en la solicitud exacta de EasyBroker;
 5. marcar esa solicitud `Atendida`;
 6. conservar evidencia de cada decisión y efecto.
@@ -51,7 +51,7 @@ Si una definición local de n8n contradice la versión activa publicada, la vers
 | Intento de entrega | Envío individual de WhatsApp a un destinatario dentro de una ronda, con identidad y WAMID propios. |
 | Propietario | Ejecutivo indicado por el único tag de la propiedad en EasyBroker. Sandy puede ser propietaria aunque también sea manager. |
 | Guardia | Única persona válida que está de guardia al momento de escalar. |
-| Responsable final | Primera persona que gana válidamente o Sandy cuando se activa el fallback. Es inmutable. |
+| Responsable final | Primera persona que gana válidamente, o el estado `unassigned` ("SIN ASIGNACIÓN") cuando vence la ronda de guardia sin ganador. Es inmutable. |
 | Cierre EasyBroker | Una nota `RESPONSABLE: <primer nombre>` más estado `Atendida` en la solicitud exacta. |
 
 ## 4. Invariantes no negociables
@@ -66,7 +66,7 @@ Si una definición local de n8n contradice la versión activa publicada, la vers
 8. La nota sólo se escribe cuando ya existe responsable final.
 9. El estado `Atendida` sólo se aplica a la solicitud EasyBroker exacta; nunca se adivina la solicitud.
 10. Un error posterior de EasyBroker no reabre la subasta ni cambia al responsable.
-11. Un error de entrega del aviso informativo a Sandy no revierte su asignación.
+11. Un error de entrega del aviso informativo a Sandy (asignación directa o recurrente) no revierte su asignación.
 12. Los reintentos ejecutan únicamente el efecto faltante y nunca duplican los efectos ya confirmados.
 
 ## 5. Flujo principal
@@ -124,7 +124,7 @@ Reglas complementarias:
 
 La única escalera válida es:
 
-`Propietario → una guardia vigente → Sandy`
+`Propietario → una guardia vigente → SIN ASIGNACIÓN`
 
 Reglas temporales:
 
@@ -133,8 +133,8 @@ Reglas temporales:
 - Un estado Meta `failed`, incluidos errores que representen rechazo del proveedor, escala inmediatamente. `rejected` sólo puede conservarse como alias interno si el adaptador real lo emite.
 - Un callback `read` cuenta como prueba de entrega cuando se perdió `delivered`, pero nunca reinicia ni extiende un `expires_at` ya fijado.
 - Un mensaje aceptado/enviado sin callback concluyente vence técnicamente a los 2 minutos desde `provider_accepted_at`; el sweeper ejecuta la escalación en su siguiente ciclo y registra por separado esa latencia de detección.
-- Si propietario y guardia son la misma persona, no se envía una segunda ronda a esa persona y se pasa a Sandy.
-- Si no existe guardia válida, turno válido o teléfono válido, se asigna Sandy inmediatamente.
+- Si propietario y guardia son la misma persona, no se envía una segunda ronda a esa persona y se cierra SIN ASIGNACIÓN.
+- Si no existe guardia válida, turno válido o teléfono válido, se cierra SIN ASIGNACIÓN inmediatamente.
 - No existe ronda de guardia de respaldo en V3.
 
 ### 5.6 Aceptación
@@ -153,12 +153,11 @@ claim:v3:<opportunity_id>:<delivery_attempt_id>
 - Respuesta a un clic fuera de vigencia: `La oferta ya expiró`.
 - Escribir manualmente `TOMO`, usar códigos V2 o reutilizar botones viejos no permite reclamar una oferta V3.
 
-### 5.7 Fallback Sandy
+### 5.7 Cierre SIN ASIGNACIÓN
 
-- Cuando termina la ronda de guardia sin ganador, o no existe una ronda válida, Sandy se convierte en responsable final de forma automática.
-- Primero se confirma la asignación en la base de datos; después se intenta el aviso informativo.
-- El aviso a Sandy contiene la información completa del lead y no incluye botón de toma.
-- La entrega del aviso no es condición para cerrar EasyBroker.
+- Cuando termina la ronda de guardia sin ganador, o no existe una ronda válida, la oportunidad se cierra automáticamente en el estado `unassigned` ("SIN ASIGNACIÓN") vía `v3_mark_unassigned`.
+- Sandy no recibe WhatsApp por este cierre.
+- EasyBroker recibe la nota `RESPONSABLE: SIN ASIGNACIÓN`, pero la solicitud no se marca `Atendida` (`attended_state='skipped'`).
 
 ### 5.8 Lead recurrente ya asignado
 
@@ -186,7 +185,7 @@ EasyBroker: <URL>
 Tienes 5 minutos para aceptarlo.
 ```
 
-Sandy fallback y un responsable recurrente reciben `lead_asignado_v3`, sin botones:
+Una asignación directa (Sandy como propietaria, entre otras) y un responsable recurrente reciben `lead_asignado_v3`, sin botones:
 
 ```text
 🏠 Lead asignado
@@ -224,8 +223,18 @@ Reglas:
 - los campos largos se truncan de forma determinista para respetar los límites aprobados por Meta;
 - no se envía ningún mensaje automatizado al prospecto;
 - `lead_subasta_v3` se usa sólo para propietario/guardia y contiene el botón `Tomo`;
-- `lead_asignado_v3` contiene los mismos datos, la indicación de que el lead ya fue asignado y no tiene botones; se usa para Sandy fallback y recurrentes;
+- `lead_asignado_v3` contiene los mismos datos, la indicación de que el lead ya fue asignado y no tiene botones; se usa para asignación directa y recurrentes, ya no para el fallback (que ahora cierra SIN ASIGNACIÓN sin WhatsApp);
 - `alerta_routing_v3` es un template sin botones y separado de los mensajes de lead; se usa para incidentes dirigidos a Sandy;
+- `reporte_diario_v3` (utility, es_MX, aprobado por Meta 2026-09-10) envía el reporte diario de WF24 a las 20:45 CDMX a `public.v3_report_recipients`, con botón de respuesta rápida "Ver detalle":
+
+  ```text
+  📋 Reporte del día · {{1}}
+  Leads: {{2}} · Tomados: {{3}} · Sin asignación: {{4}} · Con problema: {{5}}
+  Motores: {{6}}
+  Sin asignación: {{7}}
+  Toca "Ver detalle" para recibir el reporte completo.
+  ```
+
 - ningún template V3 sustituye al anterior ni se usa hasta estar aprobado por Meta.
 
 ## 7. Correlación con la solicitud exacta de EasyBroker
@@ -324,9 +333,9 @@ Política de reintento acordada para errores técnicos: intento inicial y deadli
 | Propietario llega a `read` sin `delivered` previo | Tratar como entregado sin reiniciar/extender el reloj existente. |
 | Propietario sin callback al cumplirse 2 minutos desde aceptación del proveedor | Ir a guardia con motivo técnico en el siguiente ciclo del sweeper. |
 | Guardia toma primero | Asignar guardia y cerrar rondas. |
-| Guardia no toma | Asignar Sandy. |
-| Guardia inválida o inexistente | Asignar Sandy inmediatamente. |
-| Propietario y guardia son la misma persona | Omitir ronda duplicada; asignar Sandy al vencer propietario. |
+| Guardia no toma | Cerrar SIN ASIGNACIÓN. |
+| Guardia inválida o inexistente | Cerrar SIN ASIGNACIÓN inmediatamente. |
+| Propietario y guardia son la misma persona | Omitir ronda duplicada; cerrar SIN ASIGNACIÓN al vencer propietario. |
 | Sandy es propietaria y toma | Sandy gana como propietaria. |
 | Sandy es propietaria y no toma | Continuar a guardia; sólo vuelve como fallback si nadie toma. |
 | Dos clics simultáneos | Sólo el primer commit válido gana. |
@@ -344,7 +353,7 @@ Un lead es `CORRECTO` sólo cuando existe evidencia verificable de:
 
 1. captura durable;
 2. Inmuebles24 en `Contactado`;
-3. una sola decisión final: propietario, guardia o Sandy;
+3. una sola decisión final: propietario, guardia o SIN ASIGNACIÓN;
 4. evidencia real de la ruta de WhatsApp aplicable, incluidos delivery/clic/escalación;
 5. vínculo con el `contact_request.id` exacto de EasyBroker;
 6. una sola nota `RESPONSABLE: <nombre>`;
