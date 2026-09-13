@@ -10,48 +10,22 @@ Rules:
 
 ## Proyecto
 
-Lead Routing V3 en producción (desde 2026-09-02). Ver `README.md` para el detalle.
-
-Flujo vivo: scraper en Raspberry Pi (`/opt/inmobiliaria24`, `inmobiliaria24.timer`
-cada 15 min 24/7) lee 3 bandejas de Inmuebles24 → `v3_intake` en Supabase → marca
-`Contactado` (verificado) → `POST https://n8n.srv856940.hstgr.cloud/webhook/scraper-leads`
-→ WF10 → WF12 (dueño por tag de EasyBroker) → WF13 (plantilla Meta `lead_subasta_v3`,
-botón único "Tomo", requiere URL pública de EB) → callbacks Meta → WF22 (HMAC, inbox
-durable) → WF1 → WF3b (primer clic válido gana, atómico). WF23 (cron 30 s) es el
-**único** motor de tiempos: 2 min sin `delivered` o 5 min tras `delivered` → WF3c →
-guardia del turno → 5 min → SIN ASIGNACIÓN (`v3_mark_unassigned`, estado `unassigned`,
-sin WhatsApp a Sandy; EB nota `RESPONSABLE: SIN ASIGNACIÓN` sin Atendida).
-Noche 20:00–08:00 CDMX: `queued_night`, liberado por WF7 a las 08:05. El worker
-`src/easybroker` (cada minuto) escribe nota `RESPONSABLE: <nombre>` + `Atendida` en la
-solicitud EB exacta. WF24 corre solo a las 20:45 CDMX y manda el reporte diario por
-email y por WhatsApp (plantilla `reporte_diario_v3`, botón "Ver detalle" que WF1
-(`report_detail`) responde con el texto completo).
-
-Workflows vivos (13): WF10 `Obr38705ZZYS3FB8`, WF12 `w7yJr7naWoxPq6Pw`,
-WF13 `Bo2YbbUpmBzRbhDa`, WF22 `Z89IQDw1fgWlqXEW`, WF1 `snF6Sr9CBJIevMVD`,
-WF3b `JM2HxJxl53k4zlki`, WF23 `MjfHw3tYE2qYgJfM`, WF3c `UNIKqyAvIUAZkNIs`,
-WF7 `xzBG0GIsHCUd44DC`, WF20 `pYV88ntxI0Lc4NCB`, WF21 `He95yJflKVspGFyb`,
-WF24 `WF24V3MonitorDia`, WF17 `YkhDEps0WbqaszMX`.
+Lead Routing V3 en producción (desde 2026-09-02). Flujo, IDs de los 13 workflows vivos y
+horarios: `README.md` (sección «Flujo» y tabla de workflows).
 
 Reglas de operación:
 
-- **n8n solo por CLI.** La API key está muerta. `ssh root@69.62.108.2`, contenedor
-  `root-n8n-1`: `docker exec root-n8n-1 n8n export:workflow --id=<ID> --output=/tmp/x.json`,
-  `import:workflow --input=` (el JSON **debe** traer `id`), y como el import desactiva,
-  siempre `publish:workflow --id=` + `docker restart root-n8n-1`.
-  **Los JSON del repo traen credenciales placeholder** (`REPLACE_WITH_POSTGRES_CREDENTIAL_ID`):
-  nunca importes el JSON del repo tal cual; parte del export vivo y aplica solo el cambio.
+- **n8n solo por CLI.** La API key está muerta. Receta exacta (export/import/publish,
+  restart): skill `ops-deploy`. **Los JSON del repo traen credenciales placeholder**
+  (`REPLACE_WITH_POSTGRES_CREDENTIAL_ID`): nunca importes el JSON del repo tal cual;
+  parte del export vivo y aplica solo el cambio.
 - En la tabla `execution_entity` de n8n, las filas `running` con `deletedAt` NO son ejecuciones
   colgadas: son ejecuciones exitosas soft-deleted (`saveDataSuccessExecution: none`) esperando
   al pruner. Antes de declarar "cuelgue", mira `deletedAt` y el consumo de memoria.
 - **Nunca modifiques producción sin exportar primero el workflow vivo y compararlo
   contra `whatsapp-agent/workflows/`.** Producción puede haber divergido del repo.
   `scripts/n8n_control.py` hace el diff/dry-run offline.
-- Pi: `ssh esteban@100.88.225.103` (Tailscale). Deploy: `sudo bash /opt/inmobiliaria24/deploy/deploy.sh`
-  (git pull + pip install + restart de `inmobiliaria24.timer`); `easybroker.timer` se
-  reinicia aparte.
-- Tests: `PYTHONPATH=src python -m pytest -q` (357 passed, 2 xfailed); en sandboxes
-  de Windows agrega `--basetemp=<dir>`.
+- Pi y tests: accesos y comandos en el skill `ops-deploy`.
 - **En expresiones de n8n nunca uses `JSON.stringify({...})` con llaves anidadas
   (`}}` cierra la expresión):** cuerpo JSON literal con islas `{{ }}`.
 
