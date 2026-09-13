@@ -86,7 +86,7 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
 | WF23 | `MjfHw3tYE2qYgJfM` | Cron cada 30 s | Único motor de tiempos: detecta vencimientos |
 | WF3c | `UNIKqyAvIUAZkNIs` | Sub-workflow (WF23) | `v3_advance_routing_tier` / `v3_assign_sandy` |
 | WF7 | `xzBG0GIsHCUd44DC` | Cron 08:05 `America/Mexico_City` | `v3_release_night_queue` + reporte matutino |
-| WF20 | `pYV88ntxI0Lc4NCB` | Cron | Watchdog: scraper sin corrida, errores, silencios |
+| WF20 | `pYV88ntxI0Lc4NCB` | Cron diario 09:00 CDMX | Watchdog: scraper sin corrida, errores, silencios |
 | WF21 | `He95yJflKVspGFyb` | Error trigger global | Email de error con throttling |
 | WF24 | `WF24V3MonitorDia` | 20:45 CDMX | Reporte diario V3 por email y WhatsApp (`reporte_diario_v3`, botón "Ver detalle") (se genera con `build_wf24_monitor.py`) |
 | WF17 | `YkhDEps0WbqaszMX` | Lunes 08:00 CDMX | Reporte semanal por email — **todavía lee datos V1** |

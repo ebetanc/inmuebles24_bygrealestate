@@ -8,16 +8,19 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "*/5 * * * *"
+              "expression": "0 9 * * *"
             }
           ]
         }
       },
       "id": "9a1b0c1e-1111-4a1a-8000-000000000001",
-      "name": "Cada 5 min (routing watchdog)",
+      "name": "Diario 09:00 (watchdog)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {},
@@ -25,19 +28,27 @@
       "name": "Manual (prueba)",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [0, 160]
+      "position": [
+        0,
+        160
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "SET LOCAL statement_timeout = '8s'; WITH i24 AS (\n  SELECT max(completed_at) AS last_ok\n  FROM scrape_logs\n  WHERE status='ok' AND (metadata->>'source'='inmuebles24' OR metadata->>'source' IS NULL)\n),\neb AS (\n  SELECT max(completed_at) AS last_ok\n  FROM scrape_logs\n  WHERE status='ok' AND metadata->>'source'='easybroker'\n),\nerrs AS (\n  SELECT count(*) AS n\n  FROM scrape_logs\n  WHERE status IN ('error','auth_error') AND completed_at > now() - interval '1 hour'\n)\nSELECT\n  i24.last_ok AS i24_last_ok,\n  EXTRACT(EPOCH FROM (now() - i24.last_ok))/60 AS i24_minutes_since,\n  eb.last_ok AS eb_last_ok,\n  EXTRACT(EPOCH FROM (now() - eb.last_ok))/60 AS eb_minutes_since,\n  errs.n AS recent_error_count,\n  ((now() AT TIME ZONE 'America/Mexico_City')::time BETWEEN time '08:45' AND time '20:45') AS i24_active_window\nFROM i24, eb, errs;",
-        "options": {"connectionTimeout": 8}
+        "options": {
+          "connectionTimeout": 8
+        }
       },
       "id": "9a1b0c1e-1111-4a1a-8000-000000000002",
       "name": "Check scraper health",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [224, 16],
+      "position": [
+        224,
+        16
+      ],
       "credentials": {
         "postgres": {
           "id": "dEHKygi1neTNvPtH",
@@ -53,7 +64,10 @@
       "name": "Evaluar estado",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [448, 0]
+      "position": [
+        448,
+        0
+      ]
     },
     {
       "parameters": {
@@ -84,7 +98,10 @@
       "name": "Alertar?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [672, 0]
+      "position": [
+        672,
+        0
+      ]
     },
     {
       "parameters": {
@@ -97,7 +114,10 @@
       "name": "Enviar alerta (Gmail)",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [896, -80],
+      "position": [
+        896,
+        -80
+      ],
       "credentials": {
         "gmailOAuth2": {
           "id": "Hx7tXWjVzyLEwMnJ",
@@ -134,19 +154,27 @@
       "name": "Run scraper check?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [528, -432]
+      "position": [
+        528,
+        -432
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "SET LOCAL statement_timeout = '8s'; WITH recent_failures AS (\n  SELECT event_id, occurred_at,\n         COALESCE(metadata->>'reason', event_type) AS reason\n  FROM public.lead_routing_events\n  WHERE event_type IN ('delivery_failed', 'unassigned_alerted')\n    AND occurred_at > now() - interval '10 minutes'\n  ORDER BY occurred_at\n)\nSELECT r.event_id, r.occurred_at,\n       s.status, s.reason, s.entered_at, s.operational_owner, s.acknowledged, s.just_entered\nFROM recent_failures r,\nLATERAL public.report_routing_failure(r.reason, 'wf20:' || r.event_id, r.occurred_at) s;",
-        "options": {"connectionTimeout": 8}
+        "options": {
+          "connectionTimeout": 8
+        }
       },
       "id": "c8e08a5a-4571-4f07-a067-c96779fd7beb",
       "name": "Revisar Fallos de Routing",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [528, 48],
+      "position": [
+        528,
+        48
+      ],
       "credentials": {
         "postgres": {
           "id": "dEHKygi1neTNvPtH",
@@ -183,7 +211,10 @@
       "name": "Modo Seguro Activo?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [752, 48]
+      "position": [
+        752,
+        48
+      ]
     },
     {
       "parameters": {
@@ -196,7 +227,10 @@
       "name": "Alertar Modo Seguro (Gmail)",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [976, -32],
+      "position": [
+        976,
+        -32
+      ],
       "credentials": {
         "gmailOAuth2": {
           "id": "Hx7tXWjVzyLEwMnJ",
@@ -208,13 +242,18 @@
       "parameters": {
         "operation": "executeQuery",
         "query": "SET LOCAL statement_timeout = '8s'; WITH unassigned AS (\n  SELECT opportunity_id FROM public.routing_v2_ops_view WHERE is_unassigned\n)\nSELECT u.opportunity_id, a.alert_id, a.is_new, a.acknowledged\nFROM unassigned u,\nLATERAL public.record_unassigned_alert(u.opportunity_id, 'wf20-unassigned:' || u.opportunity_id::text) a;",
-        "options": {"connectionTimeout": 8}
+        "options": {
+          "connectionTimeout": 8
+        }
       },
       "id": "3e7b7c5b-7372-4cb1-ba2b-99b5c859de0f",
       "name": "Revisar Casos Sin Asignar",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [528, 176],
+      "position": [
+        528,
+        176
+      ],
       "credentials": {
         "postgres": {
           "id": "dEHKygi1neTNvPtH",
@@ -251,7 +290,10 @@
       "name": "Caso Nuevo Sin Asignar?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [752, 176]
+      "position": [
+        752,
+        176
+      ]
     },
     {
       "parameters": {
@@ -264,7 +306,10 @@
       "name": "Alertar Caso Sin Asignar (Gmail)",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [976, 176],
+      "position": [
+        976,
+        176
+      ],
       "credentials": {
         "gmailOAuth2": {
           "id": "Hx7tXWjVzyLEwMnJ",
@@ -274,50 +319,128 @@
     }
   ],
   "connections": {
-    "Cada 5 min (routing watchdog)": {
-      "main": [[
-        { "node": "Run scraper check?", "type": "main", "index": 0 },
-        { "node": "Revisar Fallos de Routing", "type": "main", "index": 0 },
-        { "node": "Revisar Casos Sin Asignar", "type": "main", "index": 0 }
-      ]]
-    },
     "Manual (prueba)": {
-      "main": [[{ "node": "Check scraper health", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Check scraper health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Check scraper health": {
-      "main": [[{ "node": "Evaluar estado", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Evaluar estado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Evaluar estado": {
-      "main": [[{ "node": "Alertar?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Alertar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Alertar?": {
       "main": [
-        [{ "node": "Enviar alerta (Gmail)", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Enviar alerta (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Run scraper check?": {
       "main": [
-        [{ "node": "Check scraper health", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Check scraper health",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Revisar Fallos de Routing": {
-      "main": [[{ "node": "Modo Seguro Activo?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Modo Seguro Activo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Modo Seguro Activo?": {
       "main": [
-        [{ "node": "Alertar Modo Seguro (Gmail)", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Alertar Modo Seguro (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Revisar Casos Sin Asignar": {
-      "main": [[{ "node": "Caso Nuevo Sin Asignar?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Caso Nuevo Sin Asignar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Caso Nuevo Sin Asignar?": {
       "main": [
-        [{ "node": "Alertar Caso Sin Asignar (Gmail)", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Alertar Caso Sin Asignar (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
+      ]
+    },
+    "Diario 09:00 (watchdog)": {
+      "main": [
+        [
+          {
+            "node": "Run scraper check?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Revisar Fallos de Routing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Revisar Casos Sin Asignar",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
