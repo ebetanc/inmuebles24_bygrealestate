@@ -115,7 +115,9 @@ nodes = [
                          "combinator": "and"}, "options": {}}, [960, 120]),
     node("Enviar correo (Gmail)", "n8n-nodes-base.gmail", 2.1,
          {"sendTo": TO, "subject": "={{ $json.subject }}", "emailType": "html", "message": "={{ $json.html }}", "options": {}},
-         [1200, 60], {"credentials": GMAIL_CRED, "retryOnFail": True, "maxTries": 2, "waitBetweenTries": 5000,
+         # Correo apagado a petición del usuario (2026-09-13): solo llega el WhatsApp.
+         # Nodo deshabilitado deja pasar el item a "Guardar reporte".
+         [1200, 60], {"credentials": GMAIL_CRED, "disabled": True, "retryOnFail": True, "maxTries": 2, "waitBetweenTries": 5000,
                       # Gmail caído no debe cancelar el envío por WhatsApp: las dos patas son independientes.
                       "onError": "continueRegularOutput"}),
     node("Sin actividad", "n8n-nodes-base.noOp", 1, {}, [1200, 240]),
