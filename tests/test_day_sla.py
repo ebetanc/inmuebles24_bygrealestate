@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from inmobiliaria24.day_sla import is_day, parse_time, require_time
-from inmobiliaria24.fast_inbox import normalize_row
+from inmobiliaria24.fast_inbox import normalize_row, replay_headers
 
 
 def test_arrival_uses_portal_lead_time_not_advisor_reply():
@@ -120,3 +120,9 @@ def test_n8n_empty_sql_success_row_cannot_reach_alert_send():
     assert json.loads(result.stdout) == [False, False, True]
     assert workflow["connections"]["Claim Day Deadline Alerts"]["main"][0][0]["node"] == gate["name"]
     assert workflow["connections"][gate["name"]]["main"][1] == []
+
+
+def test_replay_headers_drops_http2_pseudo_headers():
+    raw = {":authority": "www.inmuebles24.com", ":method": "GET", "sec-fetch-mode": "cors",
+           "cookie": "x", "sessionid": "abc", "x-requested-with": "XMLHttpRequest", "accept": "*/*"}
+    assert replay_headers(raw) == {"sessionid": "abc", "x-requested-with": "XMLHttpRequest", "accept": "*/*"}

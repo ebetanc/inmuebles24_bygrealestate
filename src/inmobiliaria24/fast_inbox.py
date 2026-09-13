@@ -31,6 +31,15 @@ def next_page_request(request, paging: dict) -> dict:
             "method": request.method, "body": json.dumps(body) if body is not None else None}
 
 
+_DROP_HEADERS = {'host','cookie','content-length','origin','referer','user-agent','connection','accept-encoding'}
+
+
+def replay_headers(headers: dict) -> dict:
+    """Headers safe to pass to fetch(): drop browser-managed ones and HTTP/2 pseudo-headers (":authority")."""
+    return {k: v for k, v in headers.items()
+            if k.lower() not in _DROP_HEADERS and not k.lower().startswith(('sec-', ':'))}
+
+
 def normalize_row(row: dict, tab: str) -> dict:
     user, posting = row.get("lead_user") or {}, row.get("posting") or {}
     lead_id = str(row.get("contact_publisher_user_id") or "")
@@ -111,10 +120,7 @@ async def read_fast_inbox(page, *, since: datetime, initial_responses=()) -> lis
                 or any(parse_time(str(r["last_lead_date"])) < since for r in rows)):
                 break
             req = next_page_request(response.request, paging)
-            headers = await response.request.all_headers()
-            req["headers"] = {k:v for k,v in headers.items() if k.lower() not in {
-                'host','cookie','content-length','origin','referer','user-agent','connection','accept-encoding'
-            } and not k.lower().startswith('sec-')}
+            req["headers"] = replay_headers(await response.request.all_headers())
             result = await page.evaluate("""async ({url,method,body,headers}) => {
                 const r=await fetch(url,{method,credentials:'include',
                     headers,body});
