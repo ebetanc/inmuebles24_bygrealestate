@@ -194,7 +194,8 @@
           "value": "={{ $env.WF1_WORKFLOW_ID }}",
           "mode": "id"
         },
-        "options": {}
+        "options": {},
+        "mode": "each"
       },
       "id": "wf22-call-wf1",
       "name": "Call WF1 Inbound Router",

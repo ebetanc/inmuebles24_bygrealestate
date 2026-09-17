@@ -251,6 +251,9 @@ def test_wf22_flattens_batches_and_fails_closed_with_http_branches():
         assert "incoming.binary?.data?.data" in verify
         assert "item.binary" not in verify
         assert "Array.isArray(body.entry)" in dispatch and "statuses" in dispatch and "messages" in dispatch
+        # WF1 only parses $input.first(); a batched call silently drops every
+        # other claimed event, so the sub-workflow call must fan out per item.
+        assert node(workflow, "Call WF1 Inbound Router")["parameters"]["mode"] == "each"
         assert webhook["responseMode"] == "responseNode"
         assert node(workflow, "WA Status Webhook").get("webhookId")
         assert "401" in str(node(workflow, "Reject Invalid Signature")["parameters"]["options"]["responseCode"])
