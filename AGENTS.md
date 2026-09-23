@@ -16,16 +16,17 @@ Rules:
 Lead Routing V3 en producción (desde 2026-09-02). Ver `README.md` para el detalle.
 
 Flujo vivo: scraper en Raspberry Pi (`/opt/inmobiliaria24`, `inmobiliaria24.timer`
-cada 15 min 24/7) lee 3 bandejas de Inmuebles24 → `v3_intake` en Supabase → marca
+cada minuto de día y cada 15 min de noche) lee 3 bandejas de Inmuebles24 → `v3_intake` en Supabase → marca
 `Contactado` (verificado) → `POST https://n8n.srv856940.hstgr.cloud/webhook/scraper-leads`
 → WF10 → WF12 (dueño por tag de EasyBroker) → WF13 (plantilla Meta `lead_subasta_v3`,
 botón único "Tomo", requiere URL pública de EB) → callbacks Meta → WF22 (HMAC, inbox
 durable) → WF1 → WF3b (primer clic válido gana, atómico). WF23 (cron 30 s) es el
 **único** motor de tiempos: 2 min sin `delivered` o 5 min tras `delivered` → WF3c →
-guardia del turno → 5 min → Sandy (`agent_manager`, plantilla `lead_asignado_v3`).
+guardia del turno → 5 min → `unassigned` (SIN ASIGNACIÓN, sin WhatsApp a Sandy).
 Noche 20:00–08:00 CDMX: `queued_night`, liberado por WF7 a las 08:05. El worker
-`src/easybroker` (cada minuto) escribe nota `RESPONSABLE: <nombre>` + `Atendida` en la
-solicitud EB exacta.
+`src/easybroker` (cada minuto) escribe `RESPONSABLE: <nombre>` + `Atendida` en la
+solicitud EB exacta cuando hay responsable; sin responsable escribe
+`RESPONSABLE: SIN ASIGNACIÓN` y deja `Atendida` sin marcar.
 
 Workflows vivos (13): WF10 `Obr38705ZZYS3FB8`, WF12 `w7yJr7naWoxPq6Pw`,
 WF13 `Bo2YbbUpmBzRbhDa`, WF22 `Z89IQDw1fgWlqXEW`, WF1 `snF6Sr9CBJIevMVD`,
