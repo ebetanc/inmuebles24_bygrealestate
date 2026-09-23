@@ -104,7 +104,7 @@ ambos.
 | WF8 / WF8b | Polling de EasyBroker como fuente de leads. Apagados. |
 | WF3a | Stub de subasta masiva. Apagado. |
 | WF14 / WF15 / WF16 | Seguimientos automáticos. Apagados. |
-| WF19 | Guard-direct. Sigue activo en el VPS pero **fuera del camino V3 → desactivar**. |
+| WF19 | Guard-direct. Inactivo en el snapshot vivo del 2026-09-23; fuera del camino V3. |
 | WF18 | EB owner sync. Solo existe en `n8n-export/`. |
 | Evolution API | Reemplazado por Meta Cloud API. |
 | Lead Routing V2 / LRV2 | Solo llegó a shadow, nunca se activó. `routing_safe_mode_state` es ignorado por V3. |
@@ -232,7 +232,6 @@ Copia `.env.example` a `.env`. Las claves que importan hoy en el Pi:
 - **WF17** (reporte semanal) sigue leyendo tablas V1.
 - El **dashboard es ciego a V3**: lee tablas V1/V2 (se está corrigiendo en una rama).
 - El host de n8n se traba a diario alrededor de la 01:05 CDMX.
-- WF19 sigue activo en el VPS aunque no forma parte del camino V3.
 
 ## Dónde está la verdad
 

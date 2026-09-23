@@ -53,8 +53,8 @@ Fuentes de verdad: `docs/superpowers/specs/2026-08-26-lead-routing-v3-contract.m
 `whatsapp-agent/workflows/*.json` (canónico) vs `n8n-export/*.json` (snapshot semanal).
 
 Legacy a ignorar: WF2/WF4/WF5 (bot IA), WF6, WF8/WF8b (polling EB), WF3a,
-WF14/WF15/WF16 (seguimientos), WF19 (guard-direct, sigue activo en el VPS pero fuera
-del camino V3 → desactivar), Evolution API, Lead Routing V2/LRV2 (solo shadow,
+WF14/WF15/WF16 (seguimientos), WF19 (guard-direct, inactivo en el snapshot vivo
+del 2026-09-23 y fuera del camino V3), Evolution API, Lead Routing V2/LRV2 (solo shadow,
 `routing_safe_mode_state` es ignorado por V3), adaptador HubSpot, bot de calificación
 en `src/inmobiliaria24/whatsapp`, `whatsapp-agent/migrations/` (V1/V2), y los planes
 históricos movidos a `docs/archive/`.
