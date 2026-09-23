@@ -51,3 +51,10 @@ el ruteo WhatsApp, pero la creación de la solicitud EB y la nota del responsabl
 solo respetan `day_hold_reason` (`v3_day_not_held`). Ensayo previo con ROLLBACK:
 ningún claim devolvió filas viejas. Registrada con `rollback` (definiciones previas
 + `DROP FUNCTION public.v3_day_not_held`).
+
+El 2026-09-23 se aplicó `20260923190000_v3_weekly_lead_report.sql` (SHA-256
+`b1fc0b5122e87b1d488c977c27dcd2f3234a254ab88c449956ef40dadfffa23f`): WF17 reportaba
+0 leads en una semana con 65 porque la función leía tablas V1. Ahora lee
+`v3_leads_dashboard` con el mismo JSON y ya no la ejecutan `anon`/`authenticated`.
+Registrada con `rollback`. Ese día también se sacó #938 de V3 (`v3_enabled=false`),
+igual que #926/#940.

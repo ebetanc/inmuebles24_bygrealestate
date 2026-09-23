@@ -89,7 +89,7 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
 | WF20 | `pYV88ntxI0Lc4NCB` | Cron diario 09:00 CDMX | Watchdog: scraper sin corrida, errores, silencios |
 | WF21 | `He95yJflKVspGFyb` | Error trigger global | Email de error con throttling |
 | WF24 | `WF24V3MonitorDia` | 20:45 CDMX | Reporte diario V3 por email y WhatsApp (`reporte_diario_v3`, botón "Ver detalle") (se genera con `build_wf24_monitor.py`) |
-| WF17 | `YkhDEps0WbqaszMX` | Lunes 08:00 CDMX | Reporte semanal por email — **todavía lee datos V1** |
+| WF17 | `YkhDEps0WbqaszMX` | Lunes 08:00 CDMX | Reporte semanal por email (datos V3) |
 
 `whatsapp-agent/workflows/` es la fuente de verdad del repo; `n8n-export/` es el
 snapshot semanal de producción. `tests/test_v3_workflow_json_contract.py` compara
@@ -228,10 +228,10 @@ Copia `.env.example` a `.env`. Las claves que importan hoy en el Pi:
 - Leads **sin ID de propiedad de EasyBroker** caen en `manual_review` en silencio.
   No hay WhatsApp posible porque las plantillas exigen la URL pública de EB.
 - **Secretos nunca rotados.** Ver `SECURITY-ROTATION.md`.
-- **Respaldo de Supabase**: `pg_dump` diario 03:20 CDMX desde el VPS (`deploy/supabase-backup.timer`, retención 14 días, ver `docs/ops/supabase-backup.md`). Restauración aún no ensayada.
-- **WF17** (reporte semanal) sigue leyendo tablas V1.
-- El **dashboard es ciego a V3**: lee tablas V1/V2 (se está corrigiendo en una rama).
-- El host de n8n se traba a diario alrededor de la 01:05 CDMX.
+- **Respaldo de Supabase**: `pg_dump` diario 03:20 CDMX desde el VPS (`deploy/supabase-backup.timer`, retención 14 días, ver `docs/ops/supabase-backup.md`). Restauración ensayada el 2026-09-23 en un `postgres:17-alpine` desechable: conteos idénticos a producción.
+- **WF17** lee `weekly_lead_report()` sobre `v3_leads_dashboard` desde el 2026-09-23; su sección "Lead Routing v2 (piloto)" sale vacía.
+- En el **dashboard** solo la página "Leads V3" lee V3; "Vista General" y "Leads en Vivo" siguen en tablas V1/V2.
+- El host de n8n se traba a diario alrededor de la 01:05 CDMX (WF23 ~10 errores `connection timeout`, con la cola nocturna; sin efecto en leads).
 
 ## Dónde está la verdad
 
