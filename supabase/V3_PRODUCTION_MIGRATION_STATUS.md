@@ -43,3 +43,11 @@ la reconciliación anterior.
 La función de creación automática ahora exige que la captura sea posterior a
 `2026-09-23T02:00:00Z` y tenga menos de 24 horas. Los casos anteriores quedan
 en la cola histórica para revisión, sin un nuevo POST automático a EasyBroker.
+
+El 2026-09-23 ~17:01 UTC se aplicó `20260923180000_v3_easybroker_ignores_day_deadline.sql`
+(SHA-256 `c59ed81fc1dc33461f49f03a2e653d8de383d7e3a0f397eee8627adb584d1c29`),
+generado desde las definiciones vivas. El plazo día de 15 minutos sigue deteniendo
+el ruteo WhatsApp, pero la creación de la solicitud EB y la nota del responsable ya
+solo respetan `day_hold_reason` (`v3_day_not_held`). Ensayo previo con ROLLBACK:
+ningún claim devolvió filas viejas. Registrada con `rollback` (definiciones previas
++ `DROP FUNCTION public.v3_day_not_held`).

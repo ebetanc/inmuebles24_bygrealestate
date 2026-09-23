@@ -66,6 +66,22 @@ def test_creation_claim_excludes_stale_captures():
     assert body.count("e.happened_at >= TIMESTAMPTZ '2026-09-23T02:00:00Z'") == 2
 
 
+EB_IGNORES_DEADLINE = ROOT / "supabase" / "migrations" / "20260923180000_v3_easybroker_ignores_day_deadline.sql"
+
+
+@pytest.mark.parametrize("fn,gates", [("claim_v3_easybroker_request_creations", 2),
+                                      ("reserve_v3_easybroker_request_creation", 1),
+                                      ("claim_v3_easybroker_effects", 1)])
+def test_easybroker_gates_honor_hold_but_not_day_deadline(fn, gates):
+    sql = EB_IGNORES_DEADLINE.read_text(encoding="utf-8")
+    start = sql.index(f"CREATE OR REPLACE FUNCTION public.{fn}(")
+    body = sql[start:sql.index("$function$;", start)]
+    assert "v3_day_allowed(" not in body
+    assert body.count("public.v3_day_not_held(") == gates
+    if fn == "claim_v3_easybroker_request_creations":
+        assert body.count("e.happened_at >= p_now - INTERVAL '24 hours'") == 2
+
+
 def _constraint(sql: str, name: str) -> str:
     """The `ADD CONSTRAINT <name> CHECK (...)` statement text."""
     m = re.search(rf"ADD CONSTRAINT {name}\s+CHECK.*?;", sql, re.S)

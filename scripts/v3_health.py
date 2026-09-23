@@ -24,8 +24,8 @@ for raw in (ROOT / ".env").read_text(encoding="utf-8-sig").splitlines():
 HEALTH = """
 SELECT (SELECT max(completed_at) FROM public.scrape_logs WHERE status='ok') AS scraper_last_ok,
   (SELECT round(extract(epoch FROM now()-max(completed_at))/60) FROM public.scrape_logs WHERE status='ok') AS scraper_age_min,
-  (SELECT count(*) FROM public.lead_routing_delivery_attempts WHERE status='requested' AND requested_at < now()-interval '3 minutes') AS stuck_requested,
-  (SELECT count(*) FROM public.lead_routing_opportunities WHERE assigned_agent_id IS NULL AND current_delivery_attempt_id IS NOT NULL AND expires_at IS NOT NULL AND expires_at < now()-interval '90 seconds') AS stuck_expired,
+  (SELECT count(*) FROM public.lead_routing_delivery_attempts a JOIN public.lead_routing_opportunities o USING (opportunity_id) WHERE o.v3_enabled AND a.status='requested' AND a.requested_at < now()-interval '3 minutes') AS stuck_requested,
+  (SELECT count(*) FROM public.lead_routing_opportunities WHERE v3_enabled AND assigned_agent_id IS NULL AND current_delivery_attempt_id IS NOT NULL AND expires_at IS NOT NULL AND expires_at < now()-interval '90 seconds') AS stuck_expired,
   (SELECT count(*) FROM public.lead_routing_opportunities WHERE state='queued_night') AS queued_night,
   (SELECT count(*) FROM public.i24_capture_events WHERE route_dispatch_status='manual_review' AND happened_at >= now()-make_interval(mins=>%(m)s)) AS manual_review_new,
   (SELECT count(*) FROM public.easybroker_effect_ledger WHERE close_state IN ('manual_review','exhausted') AND updated_at >= now()-make_interval(mins=>%(m)s)) AS eb_effects_failed,
