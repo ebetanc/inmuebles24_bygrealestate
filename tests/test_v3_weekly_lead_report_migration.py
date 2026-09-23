@@ -6,9 +6,10 @@ SQL = (Path(__file__).parents[1] / "supabase" / "migrations"
 
 
 def test_reads_v3_not_v1_tables():
-    assert "FROM v3_leads_dashboard" in SQL
-    assert "conversations" not in SQL.split("AS $function$")[1]
-    assert "auctions" not in SQL
+    body = SQL.split("AS $function$")[1]
+    assert "FROM v3_leads_dashboard" in body
+    assert "conversations" not in body
+    assert "auctions" not in body
 
 
 def test_keeps_keys_wf17_renders():
