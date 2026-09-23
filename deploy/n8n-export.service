@@ -1,13 +1,14 @@
 [Unit]
-Description=Weekly snapshot of BYG n8n workflows into git (n8n-export/)
+Description=Weekly private snapshot of BYG n8n workflows on Pi
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 User=root
+Environment=VPS_SSH_KEY=/root/.ssh/id_ed25519_i24_n8n_export
 WorkingDirectory=/opt/inmobiliaria24
-ExecStart=/opt/inmobiliaria24/scripts/export-n8n-workflows.sh
+ExecStart=/bin/bash /opt/inmobiliaria24/scripts/export-n8n-workflows.sh
 TimeoutStartSec=300
 
 [Install]

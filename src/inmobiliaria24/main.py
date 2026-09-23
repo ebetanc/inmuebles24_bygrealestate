@@ -483,7 +483,7 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
 
             except AuthenticationError as e:
                 status = "auth_error"
-                error_message = str(e)
+                error_message = str(e) or type(e).__name__
                 logger.error("Authentication failed: {}", str(e))
                 print(f"AUTH FAILED: {e}")
                 await send_error_alert(
@@ -497,7 +497,7 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
 
             except Exception as e:
                 status = "error"
-                error_message = str(e)
+                error_message = str(e) or type(e).__name__
                 logger.exception("Unexpected error: {}", str(e))
                 await send_error_alert(
                     settings.telegram_bot_token,

@@ -12,6 +12,7 @@ import pytest
 
 ROOT = Path(__file__).parents[1]
 MIGRATION = ROOT / "supabase" / "migrations" / "20260912100000_v3_unassigned.sql"
+TERMINAL_GUARD = ROOT / "supabase" / "migrations" / "20260923000000_v3_terminal_route_guard.sql"
 
 
 @pytest.fixture(scope="module")
@@ -52,6 +53,17 @@ def test_routing_functions_no_longer_call_sandy(sql, fn):
 def test_advance_routing_tier_treats_unassigned_as_terminal(sql):
     body = _body(sql, "v3_advance_routing_tier")
     assert re.search(r"v_opp\.state\s*=\s*'unassigned'", body)
+
+
+def test_route_ready_preserves_unassigned_terminal_before_night_queue():
+    body = _body(TERMINAL_GUARD.read_text(encoding="utf-8"), "v3_route_ready_opportunity")
+    assert body.index("v_opp.state = 'unassigned'") < body.index("v_is_night :=")
+
+
+def test_creation_claim_excludes_stale_captures():
+    body = _body(TERMINAL_GUARD.read_text(encoding="utf-8"), "claim_v3_easybroker_request_creations")
+    assert body.count("e.happened_at >= p_now - INTERVAL '24 hours'") == 2
+    assert body.count("e.happened_at >= TIMESTAMPTZ '2026-09-23T02:00:00Z'") == 2
 
 
 def _constraint(sql: str, name: str) -> str:

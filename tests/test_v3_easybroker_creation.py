@@ -269,6 +269,34 @@ async def test_preexisting_request_skips_post(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_awaiting_responsible_completes_creation(monkeypatch):
+    settings = SimpleNamespace(easybroker_create_requests=True, supabase_url="https://supa",
+                               supabase_service_key="key", api_key="eb", account_key="default")
+    claim = {"capture_event_id": 107, "opportunity_id": 588, "lease_token": "lease",
+             "property_public_id": "EB-ABCD1", "normalized_email": "a@b.test",
+             "e164_phone": "+525511112222", "correlation_window_start_at": "2026-08-28T10:00:00Z",
+             "correlation_horizon_at": "2026-08-29T10:00:00Z", "offer_context": {"name": "Lead"}}
+    row = {"id": 40506164, "property_id": "EB-ABCD1", "email": "a@b.test",
+           "phone_e164": "+525511112222", "happened_at": "2026-08-28T11:00:00Z"}
+    monkeypatch.setattr(supa, "claim_v3_easybroker_request_creations", lambda *a, **k: _async([claim]))
+    monkeypatch.setattr(supa, "fetch_contact_requests", lambda *a, **k: _async([supa.sanitize_contact_request(row)]))
+    monkeypatch.setattr(supa, "ingest_contact_request_batch", lambda *a, **k: _async({"ok": True}))
+    monkeypatch.setattr(supa, "correlate_easybroker_request", lambda *a, **k: _async({"ok": True, "state": "already_linked"}))
+    monkeypatch.setattr(supa, "enqueue_v3_easybroker_effect", lambda *a, **k: _async({"ok": False, "state": "awaiting_responsible"}))
+    calls = []
+
+    async def finish(*args, **kwargs):
+        calls.append(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(supa, "finish_v3_easybroker_request_creation", finish)
+    result = await supa.create_pending_easybroker_requests(settings)
+    assert result[0]["state"] == "preexisting"
+    assert calls[0]["state"] == "created"
+    assert calls[0]["remote_request_id"] == 40506164
+
+
+@pytest.mark.asyncio
 async def test_exact_link_without_effect_enqueue_stays_recoverable(monkeypatch):
     settings = SimpleNamespace(easybroker_create_requests=True, supabase_url="https://supa",
                                supabase_service_key="key", api_key="eb", account_key="default")

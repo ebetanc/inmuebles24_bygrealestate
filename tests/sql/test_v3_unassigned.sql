@@ -3,6 +3,7 @@
 DO $$
 DECLARE
   r record; op bigint; cap bigint; op2 bigint; cap2 bigint; op3 bigint; cap3 bigint;
+  op4 bigint; cap4 bigint;
   n integer; res jsonb; tok uuid; changed boolean;
   t0 timestamptz := clock_timestamp() - interval '1 hour';
   deadline timestamptz := clock_timestamp() - interval '30 minutes';
@@ -40,6 +41,17 @@ BEGIN
  IF EXISTS(SELECT 1 FROM public.lead_routing_delivery_attempts
     WHERE opportunity_id=op AND delivery_kind='assigned_notice') THEN
    RAISE EXCEPTION 'Sandy was notified about an unassigned lead'; END IF;
+
+ -- Retried dispatch must not reopen the terminal, even during night hours.
+ UPDATE public.i24_capture_events
+ SET contactado_status='verified', contactado_verified_at=t0,
+     route_dispatch_status='dispatched', route_dispatched_at=t0
+ WHERE capture_event_id=cap;
+ res := public.v3_route_ready_opportunity(op,cap,ARRAY[]::text[],clock_timestamp());
+ IF res->>'state'<>'unassigned' THEN
+   RAISE EXCEPTION 'route_ready reopened an unassigned lead: %', res; END IF;
+ IF (SELECT state FROM public.lead_routing_opportunities WHERE opportunity_id=op)<>'unassigned' THEN
+   RAISE EXCEPTION 'route_ready changed the terminal state'; END IF;
 
  -- (b) idempotent
  IF public.v3_mark_unassigned(op,'guard_expired',cap,clock_timestamp()) THEN
@@ -112,6 +124,23 @@ BEGIN
  IF r.responsible_first_name<>'SIN ASIGNACIÓN' OR r.attended_due THEN
    RAISE EXCEPTION 'created request resolved to %/attended_due=%',
      r.responsible_first_name, r.attended_due; END IF;
+
+ -- Stale leads with no day deadline must not enter automatic creation.
+ SELECT * INTO r FROM public.v3_intake(
+   p_account_key=>'unassigned-rollback',p_idempotency_key=>gen_random_uuid()::text,
+   p_external_id=>'9999990004',p_property_public_id=>'EB-QJ4964',
+   p_email=>gen_random_uuid()::text||'@example.invalid',
+   p_offer_context=>jsonb_build_object('name','Solicitud antigua'));
+ op4:=r.opportunity_id; cap4:=r.capture_event_id;
+ PERFORM public.v3_mark_unassigned(op4,'guard_expired',cap4,t0);
+ UPDATE public.i24_capture_events
+ SET happened_at=clock_timestamp()-interval '2 days',
+     contactado_status='verified', contactado_verified_at=t0,
+     route_dispatch_status='dispatched', route_dispatched_at=t0
+ WHERE capture_event_id=cap4;
+ IF EXISTS(SELECT 1 FROM public.claim_v3_easybroker_request_creations(50,clock_timestamp(),interval '2 minutes') c
+    WHERE c.capture_event_id=cap4) THEN
+   RAISE EXCEPTION 'stale lead entered automatic EasyBroker creation'; END IF;
 
  -- (e) day SLA: unassigned before the deadline plus a closed ledger is a close
  UPDATE public.i24_capture_events

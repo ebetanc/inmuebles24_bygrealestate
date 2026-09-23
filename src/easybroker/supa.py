@@ -353,7 +353,12 @@ async def create_pending_easybroker_requests(
                     )
                 except Exception as exc:
                     logger.warning("EasyBroker effect enqueue failed for {}: {}", request_id, exc)
-            confirmed = confirmed and effect.get("ok") is True
+            # awaiting_responsible is a durable effect ledger entry. The
+            # effect worker promotes it when routing reaches a final state.
+            confirmed = confirmed and (
+                effect.get("ok") is True
+                or effect.get("state") == "awaiting_responsible"
+            )
             if not confirmed:
                 saved = await finish_v3_easybroker_request_creation(
                     settings, capture_event_id=capture_id, lease_token=token,

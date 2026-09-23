@@ -145,7 +145,13 @@ systemctl list-timers | grep -E 'inmobiliaria24|easybroker|n8n-export'
 
 Timers en el Pi: `inmobiliaria24.timer` (cada minuto de 08:05 a 20:00 CDMX; 15 min de noche),
 `easybroker.timer` (cada minuto), `reporte-semanal.timer`,
-`n8n-export.timer` (domingo 03:00 CDMX, snapshot de solo lectura a `n8n-export/`).
+`n8n-export.timer` (domingo 03:00 CDMX, snapshot privado en
+`/var/backups/inmobiliaria24/n8n-export/` de la Pi).
+
+Estado 2026-09-23: la Pi usa una clave SSH dedicada que en el VPS solo puede
+ejecutar el exportador de los 29 workflows permitidos. Los snapshots nuevos
+quedan en la Pi con permisos de root; no se suben a GitHub porque `origin` es
+público. `n8n-export/` conserva las instantáneas históricas del repositorio.
 
 ## Tocar n8n — solo por CLI
 
@@ -234,7 +240,7 @@ Copia `.env.example` a `.env`. Las claves que importan hoy en el Pi:
 |------|---------|
 | Contrato funcional V3 | `docs/superpowers/specs/2026-08-26-lead-routing-v3-contract.md` |
 | Plan de ejecución V3 | `docs/superpowers/plans/2026-08-26-lead-routing-v3-execution-plan.md` |
-| Estado de migraciones | `supabase/V3_PRODUCTION_MIGRATION_STATUS.md` (22 migraciones aplicadas) |
+| Estado de migraciones | `supabase/V3_PRODUCTION_MIGRATION_STATUS.md` (registro reconciliado el 2026-09-23) |
 | Worker EasyBroker | `src/easybroker/README.md` |
 | Workflows (canónico) | `whatsapp-agent/workflows/*.json` |
 | Workflows (producción) | `n8n-export/*.json` |
