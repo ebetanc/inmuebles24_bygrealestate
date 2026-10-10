@@ -67,9 +67,11 @@ def test_intake_contract():
     trigger = _node("Correo de Tokko")["parameters"]
     assert trigger["filters"] == {"q": 'from:notifier@tokkobroker.com "nueva consulta"', "readStatus": "both"}
     assert trigger["simple"] is False
-    # Every notice is logged, routable or not.
-    assert "ON CONFLICT (gmail_message_id) DO NOTHING" in _node("Guardar sombra")["parameters"]["query"]
-    assert {c["node"] for c in WF["connections"]["Leer aviso"]["main"][0]} == {"Guardar sombra", "¿Datos completos?"}
+    # Every notice is logged; only a first-seen one (insert returned a row) goes on, so a re-read
+    # email after an import/restart cannot notify an agent twice.
+    assert "ON CONFLICT (gmail_message_id) DO NOTHING RETURNING *" in _node("Guardar sombra")["parameters"]["query"]
+    assert WF["connections"]["Leer aviso"]["main"] == [[{"node": "Guardar sombra", "type": "main", "index": 0}]]
+    assert WF["connections"]["Guardar sombra"]["main"] == [[{"node": "¿Datos completos?", "type": "main", "index": 0}]]
     # Only complete notices (contact + EB ref) reach V3; the false branch goes nowhere.
     assert _node("¿Datos completos?")["parameters"]["conditions"]["conditions"][0]["leftValue"] == "={{ $json.parse_ok }}"
     assert WF["connections"]["¿Datos completos?"]["main"] == [[{"node": "Crear lead V3", "type": "main", "index": 0}], []]

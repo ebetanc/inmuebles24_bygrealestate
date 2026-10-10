@@ -50,7 +50,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO public.tokko_shadow_leads(gmail_message_id,received_at,subject,webcontact_id,portal,kind,tags,lead_name,phone,email,eb_ref,i24_listing_id,property_title,message,parse_ok) SELECT gmail_message_id,received_at,subject,webcontact_id,portal,kind,tags,lead_name,phone,email,eb_ref,i24_listing_id,property_title,message,parse_ok FROM jsonb_populate_record(NULL::public.tokko_shadow_leads, $1::jsonb) ON CONFLICT (gmail_message_id) DO NOTHING;",
+        "query": "INSERT INTO public.tokko_shadow_leads(gmail_message_id,received_at,subject,webcontact_id,portal,kind,tags,lead_name,phone,email,eb_ref,i24_listing_id,property_title,message,parse_ok) SELECT gmail_message_id,received_at,subject,webcontact_id,portal,kind,tags,lead_name,phone,email,eb_ref,i24_listing_id,property_title,message,parse_ok FROM jsonb_populate_record(NULL::public.tokko_shadow_leads, $1::jsonb) ON CONFLICT (gmail_message_id) DO NOTHING RETURNING *;",
         "options": {
           "queryReplacement": "={{ [JSON.stringify($json)] }}",
           "queryBatching": "independently",
@@ -157,7 +157,13 @@
             "node": "Guardar sombra",
             "type": "main",
             "index": 0
-          },
+          }
+        ]
+      ]
+    },
+    "Guardar sombra": {
+      "main": [
+        [
           {
             "node": "¿Datos completos?",
             "type": "main",
