@@ -12,11 +12,11 @@ fue reemplazado; ver [Legacy](#legacy--apagado-o-fuera-del-camino-v3).
 ## Arquitectura V3
 
 ```
-Inmuebles24 (3 bandejas) --1 min dia / 15 min noche--> scraper (Raspberry Pi)
-      |                                  |
-      | marca "Contactado" (verificado)   +--> v3_intake (Supabase)
-      v                                            |
-  POST /webhook/scraper-leads ----> WF10 --> WF12 (dueño por tag EasyBroker)
+Portales --> Tokko --> correo (Gmail Marusa, filtro reenvía a esteban.betanc)
+                              |
+                WF25 (Gmail cada minuto) --> v3_tokko_intake (Supabase)
+                                                   |
+  despachador Pi --> POST /webhook/scraper-leads --> WF10 --> WF12 (dueño por tag EasyBroker)
                                      |
                                      v
                               WF13 --> Meta Cloud API: plantilla "lead_subasta_v3"
@@ -45,12 +45,17 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
 
 ## Flujo, paso a paso
 
-1. **Captura.** El scraper (`src/inmobiliaria24/`) recorre las 3 bandejas de
-   Inmuebles24 cada minuto en horario diurno (15 minutos de noche), y persiste cada solicitud en `v3_intake`
-   antes de tocar nada más. Reintentar el mismo evento no crea otra oportunidad.
-2. **Contactado.** El scraper cambia el estado en Inmuebles24 de `Pendiente` a
-   `Contactado` y **verifica** el efecto. Ninguna oferta sale antes de eso.
-3. **Intake.** `POST https://n8n.srv856940.hstgr.cloud/webhook/scraper-leads`
+1. **Captura (desde 2026-10-10).** Tokko manda un correo por consulta (Inmuebles24,
+   JamesEdition…). Un filtro en el Gmail de Marusa (`from:notifier@tokkobroker.com "nueva consulta"`)
+   lo reenvía a esteban.betanc@gmail.com; WF25 lo lee cada minuto, lo guarda en
+   `tokko_shadow_leads` y, si trae contacto + `Ref: EB-…`, llama `v3_tokko_intake`.
+   Los dos avisos de un mismo lead (Consulta + WhatsApp) son una sola oportunidad.
+2. **Sin Contactado.** Ya no se marca nada en Inmuebles24 ni se escriben notas ahí:
+   la captura de Tokko nace verificada. El scraper de la Pi está apagado
+   (`inmobiliaria24.timer` y `gost-proxy` deshabilitados; rollback: re-habilitarlos,
+   `ENABLE TRIGGER v3_enqueue_i24_note` y desconectar «Crear lead V3» en WF25).
+3. **Intake.** El despachador de la Pi (`inmobiliaria24-dispatch.timer`, sin navegador) hace
+   `POST https://n8n.srv856940.hstgr.cloud/webhook/scraper-leads`
    → WF10, que crea/reusa la oportunidad y decide si es de día o de noche.
 4. **Dueño.** WF12 resuelve la propiedad por su ID público de EasyBroker y toma
    el tag de la propiedad (nombre del ejecutivo) contra `property_agent_alias`.
@@ -86,7 +91,8 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
 | WF23 | `MjfHw3tYE2qYgJfM` | Cron cada 30 s | Único motor de tiempos: detecta vencimientos |
 | WF3c | `UNIKqyAvIUAZkNIs` | Sub-workflow (WF23) | `v3_advance_routing_tier` / `v3_assign_sandy` |
 | WF7 | `xzBG0GIsHCUd44DC` | Cron 08:05 `America/Mexico_City` | `v3_release_night_queue` + reporte matutino |
-| WF20 | `pYV88ntxI0Lc4NCB` | Cron diario 09:00 CDMX | Watchdog: scraper sin corrida, errores, silencios |
+| WF25 | `TokkoWF25Shadow1` | Gmail cada minuto | Lee avisos de Tokko → `tokko_shadow_leads` + `v3_tokko_intake` |
+| WF20 | `pYV88ntxI0Lc4NCB` | Cron diario 09:00 CDMX | Watchdog: 24 h sin avisos de Tokko, errores, silencios |
 | WF21 | `He95yJflKVspGFyb` | Error trigger global | Email de error con throttling |
 | WF24 | `WF24V3MonitorDia` | 20:45 CDMX | Reporte diario V3 por email y WhatsApp (`reporte_diario_v3`, botón "Ver detalle") (se genera con `build_wf24_monitor.py`) |
 | WF17 | `YkhDEps0WbqaszMX` | Lunes 08:00 CDMX | Reporte semanal por email (datos V3) |
@@ -143,7 +149,8 @@ sudo systemctl restart easybroker.timer reporte-semanal.timer
 systemctl list-timers | grep -E 'inmobiliaria24|easybroker|n8n-export'
 ```
 
-Timers en el Pi: `inmobiliaria24.timer` (cada minuto de 08:05 a 20:00 CDMX; 15 min de noche),
+Timers en el Pi: `inmobiliaria24.timer` (APAGADO desde 2026-10-10, lo reemplaza Tokko/WF25),
+`inmobiliaria24-dispatch.timer` (cada minuto),
 `easybroker.timer` (cada minuto), `reporte-semanal.timer`,
 `n8n-export.timer` (domingo 03:00 CDMX, snapshot privado en
 `/var/backups/inmobiliaria24/n8n-export/` de la Pi).
@@ -215,7 +222,7 @@ Copia `.env.example` a `.env`. Las claves que importan hoy en el Pi:
 
 ## Monitoreo
 
-- **WF20** watchdog: alerta si el scraper deja de correr o si hay silencios.
+- **WF20** watchdog: alerta si en 24 h no llega ningún aviso de Tokko o si hay silencios.
 - **WF21** error handler: captura cualquier ejecución fallida y manda email
   (con throttling para no inundar).
 - **WF24** monitor V3: reporte del día a las 20:45 CDMX por email y WhatsApp

@@ -1,4 +1,4 @@
-"""WF25 (Tokko intake, shadow): the Code node parses real Tokko notices (anonymized fixtures)."""
+"""WF25 (Tokko intake): parses real Tokko notices (anonymized fixtures) and feeds V3."""
 
 import json
 import shutil
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parents[1]
-WF = json.loads((ROOT / "whatsapp-agent/workflows/WF25_tokko_intake_shadow.json").read_text(encoding="utf-8"))
+WF = json.loads((ROOT / "whatsapp-agent/workflows/WF25_tokko_intake.json").read_text(encoding="utf-8"))
 FIX = ROOT / "tests/fixtures/tokko"
 needs_node = pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
 
@@ -63,13 +63,29 @@ def test_unparseable_notice_is_kept_but_flagged():
     assert row["parse_ok"] is False and row["gmail_message_id"] == "x"
 
 
-def test_shadow_contract():
+def test_intake_contract():
     trigger = _node("Correo de Tokko")["parameters"]
     assert trigger["filters"] == {"q": 'from:notifier@tokkobroker.com "nueva consulta"', "readStatus": "both"}
     assert trigger["simple"] is False
+    # Every notice is logged, routable or not.
     assert "ON CONFLICT (gmail_message_id) DO NOTHING" in _node("Guardar sombra")["parameters"]["query"]
+    assert {c["node"] for c in WF["connections"]["Leer aviso"]["main"][0]} == {"Guardar sombra", "¿Datos completos?"}
+    # Only complete notices (contact + EB ref) reach V3; the false branch goes nowhere.
+    assert _node("¿Datos completos?")["parameters"]["conditions"]["conditions"][0]["leftValue"] == "={{ $json.parse_ok }}"
+    assert WF["connections"]["¿Datos completos?"]["main"] == [[{"node": "Crear lead V3", "type": "main", "index": 0}], []]
+    intake = _node("Crear lead V3")["parameters"]["query"]
+    assert "public.v3_tokko_intake(" in intake
+    # One lead per contact + property + CDMX day: Consulta and WhatsApp notices collapse.
+    assert "'tokko:' || COALESCE(s.j->>'email', s.j->>'phone') || ':' || (s.j->>'eb_ref')" in intake
     # Polls every minute: never keep successful executions (n8n sqlite bloat).
     assert WF["settings"]["saveDataSuccessExecution"] == "none"
-    # Shadow: nothing may call WF10/WF13 or send anything.
+    # Routing happens downstream (Pi dispatcher -> WF10); WF25 itself never sends anything.
     assert {n["type"] for n in WF["nodes"]} == {
-        "n8n-nodes-base.gmailTrigger", "n8n-nodes-base.code", "n8n-nodes-base.postgres"}
+        "n8n-nodes-base.gmailTrigger", "n8n-nodes-base.code", "n8n-nodes-base.postgres", "n8n-nodes-base.if"}
+
+
+def test_tokko_capture_skips_contactado_and_i24_notes():
+    sql = (ROOT / "supabase/migrations/20261010210000_v3_tokko_intake.sql").read_text(encoding="utf-8")
+    assert "FROM public.v3_intake(" in sql
+    assert "SET contactado_status = 'verified'" in sql and "IF r.disposition <> 'non_routable'" in sql
+    assert "DISABLE TRIGGER v3_enqueue_i24_note" in sql

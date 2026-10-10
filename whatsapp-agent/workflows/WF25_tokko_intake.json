@@ -1,6 +1,6 @@
 {
   "id": "TokkoWF25Shadow1",
-  "name": "WF25 - Tokko Intake (sombra)",
+  "name": "WF25 - Tokko Intake",
   "active": false,
   "nodes": [
     {
@@ -74,6 +74,68 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6f0b8f0e-25a1-4c11-9a01-25a1c00000c1",
+              "leftValue": "={{ $json.parse_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "¿Datos completos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        200
+      ],
+      "id": "6f0b8f0e-25a1-4c11-9a01-25a1c0000004"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT t.*\nFROM (SELECT $1::jsonb AS j) s,\nLATERAL public.v3_tokko_intake(\n  $2,\n  'tokko:' || COALESCE(s.j->>'email', s.j->>'phone') || ':' || (s.j->>'eb_ref') || ':' || ((now() AT TIME ZONE 'America/Mexico_City')::date)::text,\n  'tokko:' || COALESCE(s.j->>'webcontact_id', s.j->>'gmail_message_id'),\n  s.j->>'eb_ref', s.j->>'email', s.j->>'phone',\n  jsonb_strip_nulls(jsonb_build_object(\n    'origin', 'tokko', 'portal', s.j->>'portal', 'kind', s.j->>'kind',\n    'lead_id', 'tokko:' || COALESCE(s.j->>'webcontact_id', s.j->>'gmail_message_id'),\n    'tokko_webcontact_id', s.j->>'webcontact_id', 'name', s.j->>'lead_name',\n    'phone', s.j->>'phone', 'email', s.j->>'email', 'message', s.j->>'message',\n    'property', s.j->>'property_title', 'property_public_id', s.j->>'eb_ref',\n    'listing_id', s.j->>'i24_listing_id')),\n  now()) t;",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json), $env.V3_ACCOUNT_KEY || $env.EASYBROKER_ACCOUNT_KEY || 'default'] }}",
+          "queryBatching": "independently",
+          "connectionTimeout": 15
+        }
+      },
+      "name": "Crear lead V3",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        720,
+        200
+      ],
+      "id": "6f0b8f0e-25a1-4c11-9a01-25a1c0000005",
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     }
   ],
   "connections": {
@@ -95,8 +157,25 @@
             "node": "Guardar sombra",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "¿Datos completos?",
+            "type": "main",
+            "index": 0
           }
         ]
+      ]
+    },
+    "¿Datos completos?": {
+      "main": [
+        [
+          {
+            "node": "Crear lead V3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     }
   },
