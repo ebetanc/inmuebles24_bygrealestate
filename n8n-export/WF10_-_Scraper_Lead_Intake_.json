@@ -557,7 +557,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH manual AS (\n  UPDATE public.i24_capture_events\n  SET route_dispatch_status='manual_review',\n      route_dispatch_last_error_code=$3,\n      route_dispatch_lease_token=NULL,\n      route_dispatch_lease_expires_at=NULL,\n      route_dispatch_next_attempt_at=NULL\n  WHERE capture_event_id=$2::bigint\n    AND $3 IN ('property_public_id_required','easybroker_public_url_missing')\n    AND route_dispatch_status IN ('pending','leased','failed')\n  RETURNING capture_event_id, opportunity_id\n), routed AS (\n  SELECT public.v3_route_ready_opportunity($1::bigint,$2::bigint,ARRAY[]::text[],NOW()) AS result\n  WHERE $3 NOT IN ('property_public_id_required','easybroker_public_url_missing')\n)\nSELECT jsonb_build_object('state','manual_review','capture_event_id',capture_event_id,'opportunity_id',opportunity_id,'reason',$3) AS result\nFROM manual\nUNION ALL\nSELECT result FROM routed;",
+        "query": "WITH manual AS (\n  UPDATE public.i24_capture_events\n  SET route_dispatch_status='manual_review',\n      route_dispatch_last_error_code=$3,\n      route_dispatch_lease_token=NULL,\n      route_dispatch_lease_expires_at=NULL,\n      route_dispatch_next_attempt_at=NULL\n  WHERE capture_event_id=$2::bigint\n    AND $3 IN ('property_public_id_required','easybroker_public_url_missing')\n    AND route_dispatch_status IN ('pending','leased','failed')\n  RETURNING capture_event_id, opportunity_id\n)\nSELECT jsonb_build_object('state','manual_review','capture_event_id',capture_event_id,'opportunity_id',opportunity_id,'reason',$3) AS result\nFROM manual;",
         "options": {
           "queryReplacement": "={{ [$json.opportunity_id, $json.capture_event_id, $json.reason || 'missing_owner_data'] }}"
         }
@@ -772,7 +772,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const owner = $input.item.json; const lead = $('Restore V3 Dispatch Context').item.json; const easybrokerUrl = String(owner.easybroker_url || '').trim(); if (!/^https:\\/\\/(?:www\\.)?easybroker\\.com\\//i.test(easybrokerUrl)) throw new Error('easybroker_public_url_required'); return [{ json: { conversation_id: lead.conversation_id, opportunity_id: lead.opportunity_id, capture_event_id: lead.capture_event_id, property_tags: owner.tags || [], property_id: lead.listing_id, property_public_id: owner.property_public_id || lead.property_public_id, property_title: owner.property_title || lead.property_title, operation_type: owner.operation_type || lead.operation_type || '', property_zone: owner.property_zone || lead.property_zone || '', property_price: owner.property_price || lead.property_price, easybroker_url: easybrokerUrl, lead_name: lead.name, lead_phone: lead.identity_phone, owner_agent_id: owner.owner_agent_id, owner_name: owner.owner_name, owner_number: owner.owner_number, routing_tier: 'owner' } }];"
+        "jsCode": "const owner = $input.item.json; const lead = $('Restore V3 Dispatch Context').item.json; const easybrokerUrl = String(owner.easybroker_url || '').trim(); if (!/^https:\\/\\/(?:www\\.)?easybroker\\.com\\//i.test(easybrokerUrl)) throw new Error('easybroker_public_url_required'); return [{ json: { conversation_id: lead.conversation_id, opportunity_id: lead.opportunity_id, capture_event_id: lead.capture_event_id, property_tags: owner.resolved === true ? (owner.tags || []) : [], property_id: lead.listing_id, property_public_id: owner.property_public_id || lead.property_public_id, property_title: owner.property_title || lead.property_title, operation_type: owner.operation_type || lead.operation_type || '', property_zone: owner.property_zone || lead.property_zone || '', property_price: owner.property_price || lead.property_price, easybroker_url: easybrokerUrl, lead_name: lead.name, lead_phone: lead.identity_phone, owner_agent_id: owner.owner_agent_id, owner_name: owner.owner_name, owner_number: owner.owner_number, routing_tier: owner.resolved === true ? 'owner' : 'primary_guard' } }];"
       },
       "id": "wf10-v3-owner-notify",
       "name": "Prepare V3 Owner Notify",
@@ -944,6 +944,39 @@
         280
       ],
       "notes": "Explicit non-2xx keeps the route lease retryable when no durable downstream effect exists."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "wf10-owner-manual-review-condition",
+              "leftValue": "={{ !/^https:\\/\\/(?:www\\.)?easybroker\\.com\\//i.test(String($json.easybroker_url || '')) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf10-owner-manual-review",
+      "name": "Owner Needs Manual Review?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2635,
+        340
+      ]
     }
   ],
   "connections": {
@@ -1238,7 +1271,7 @@
         ],
         [
           {
-            "node": "Route Missing Owner Data",
+            "node": "Owner Needs Manual Review?",
             "type": "main",
             "index": 0
           }
@@ -1363,6 +1396,24 @@
         [
           {
             "node": "End (Skip/Fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Owner Needs Manual Review?": {
+      "main": [
+        [
+          {
+            "node": "Route Missing Owner Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare V3 Owner Notify",
             "type": "main",
             "index": 0
           }

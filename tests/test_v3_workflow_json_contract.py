@@ -107,14 +107,23 @@ def test_wf10_and_wf12_fail_closed_without_email_storm_or_whatsapp():
         workflow = load(path)
         resolved = workflow["connections"]["Owner Resolved?"]["main"]
         assert resolved[0][0]["node"] == "Prepare V3 Owner Notify"
-        assert resolved[1][0]["node"] == "Route Missing Owner Data"
+        assert resolved[1][0]["node"] == "Owner Needs Manual Review?"
+        review = workflow["connections"]["Owner Needs Manual Review?"]["main"]
+        assert review[0][0]["node"] == "Route Missing Owner Data"
+        # Without an owner the guard offer must go through WF13, the only node
+        # that sends it: routing it in WF10 created the attempt but never sent
+        # it (opps 926/940/953, test opp 1175 on 2026-10-11).
+        assert review[1][0]["node"] == "Prepare V3 Owner Notify"
+        gate = node(workflow, "Owner Needs Manual Review?")["parameters"]["conditions"]["conditions"][0]["leftValue"]
+        # No EasyBroker URL (bad code, missing URL, EB lookup failed): WF13 cannot
+        # build the offer, so stay on the manual/retry path instead of throwing.
+        assert "easybroker\.com" in gate and gate.startswith("={{ !")
+        prepare = node(workflow, "Prepare V3 Owner Notify")["parameters"]["jsCode"]
+        assert "owner.resolved === true ? 'owner' : 'primary_guard'" in prepare
         manual = node(workflow, "Route Missing Owner Data")["parameters"]["query"]
         assert "route_dispatch_status='manual_review'" in manual
         assert "easybroker_public_url_missing" in manual
-        # Without an owner the V3 router must still request the guard offer
-        # itself: the V2 route_missing_owner_data path relied on a WF3c node
-        # that no longer has a trigger (opps 827/832 stuck on 2026-09-10).
-        assert "v3_route_ready_opportunity($1::bigint,$2::bigint,ARRAY[]::text[],NOW())" in manual
+        assert "v3_route_ready_opportunity" not in manual
         assert "route_missing_owner_data" not in manual
 
 
