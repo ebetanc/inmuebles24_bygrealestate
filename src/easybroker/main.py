@@ -74,13 +74,8 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
         if lease_key in seen_leases:
             break
         seen_leases.add(lease_key)
-        from inmobiliaria24.day_sla import get_deadline, require_time
-        deadline = await get_deadline(opportunity_id=claim.get("opportunity_id"), request_id=claim["eb_request_id"])
-        try:
-            require_time(deadline)
-        except TimeoutError:
-            failed = True
-            continue
+        # No day deadline here: EasyBroker bookkeeping only honors a manual hold,
+        # which the claim RPC already applies (cf1378d).
         request_id = int(claim["eb_request_id"])
         responsible = str(claim.get("responsible_first_name") or "").strip()
         lease_token = str(claim["lease_token"])
@@ -111,7 +106,6 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
                 note_done=False,
                 status_done=True,
                 allow_legacy_note=False,
-                deadline=deadline,
             ) if identity_ok else missing_identity
             note_ok = bool(result.get("found") and result.get("note_ok"))
             evidence = {
@@ -155,7 +149,6 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
                 note_done=True,
                 status_done=False,
                 allow_legacy_note=False,
-                deadline=deadline,
             ) if identity_ok else missing_identity
             status_ok = bool(result.get("found") and result.get("status_ok"))
             evidence = {

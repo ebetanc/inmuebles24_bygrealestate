@@ -126,3 +126,49 @@ def test_replay_headers_drops_http2_pseudo_headers():
     raw = {":authority": "www.inmuebles24.com", ":method": "GET", "sec-fetch-mode": "cors",
            "cookie": "x", "sessionid": "abc", "x-requested-with": "XMLHttpRequest", "accept": "*/*"}
     assert replay_headers(raw) == {"sessionid": "abc", "x-requested-with": "XMLHttpRequest", "accept": "*/*"}
+
+
+def test_eb_effects_ignore_day_deadline(monkeypatch):
+    # cf1378d exempted EasyBroker from the day deadline in SQL; the worker must
+    # not re-impose it, or late leads loop on their lease forever (998-1147).
+    import asyncio
+    from easybroker import main as eb_main
+    from inmobiliaria24 import day_sla
+
+    calls = []
+    claims = [[{"eb_request_id": 41131472, "opportunity_id": 998, "lease_token": "l",
+                "responsible_first_name": "SIN ASIGNACIÓN", "note_due": True, "attended_due": False}], []]
+
+    async def provider_rows(settings):
+        return [{"eb_request_id": 41131472, "property_public_id": "EB-AB1234", "e164_phone": "+525500000000"}]
+
+    async def claim(settings, limit):
+        return claims.pop(0)
+
+    async def attend(page, **kwargs):
+        calls.append(("attend", kwargs.get("deadline")))
+        return {"found": True, "note_ok": True, "note_changed": True, "match_method": "property+identity"}
+
+    async def finish(settings, **kwargs):
+        calls.append(("finish", kwargs["step"]))
+        return {"ok": True}
+
+    async def expired(**kwargs):
+        return (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+    monkeypatch.setenv("I24_FAST_DAY", "1")
+    monkeypatch.setattr(day_sla, "get_deadline", expired)
+    monkeypatch.setattr(eb_main, "fetch_contact_requests", provider_rows)
+    monkeypatch.setattr(eb_main, "claim_v3_easybroker_effects", claim)
+    monkeypatch.setattr(eb_main, "attend_lead", attend)
+    monkeypatch.setattr(eb_main, "finish_v3_easybroker_effect", finish)
+
+    assert asyncio.run(eb_main._run_v3_effect_worker(object(), object())) == (0, False)
+    assert calls == [("attend", None), ("finish", "note")]
+
+
+def test_eb_request_creation_ignores_day_deadline():
+    import inspect
+    from easybroker import supa
+
+    assert "get_deadline" not in inspect.getsource(supa.create_pending_easybroker_requests)
