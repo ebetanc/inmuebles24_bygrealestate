@@ -18,11 +18,15 @@ install -m 644 deploy/inmobiliaria24.timer /etc/systemd/system/inmobiliaria24.ti
 install -m 644 deploy/inmobiliaria24-dispatch.service /etc/systemd/system/inmobiliaria24-dispatch.service
 install -m 644 deploy/inmobiliaria24-dispatch.timer /etc/systemd/system/inmobiliaria24-dispatch.timer
 systemctl daemon-reload
-systemctl restart inmobiliaria24.timer
-systemctl enable inmobiliaria24.timer
+# The scraper is off since the Tokko cutover: only restart it if it is enabled.
+if systemctl is-enabled --quiet inmobiliaria24.timer; then
+  systemctl restart inmobiliaria24.timer
+else
+  echo "==> inmobiliaria24.timer disabled (scraper off): left stopped"
+fi
 systemctl enable --now inmobiliaria24-dispatch.timer
 
 echo "==> Timer status:"
-systemctl status inmobiliaria24.timer --no-pager
+systemctl status inmobiliaria24.timer inmobiliaria24-dispatch.timer --no-pager || true
 
 echo "==> Done!"

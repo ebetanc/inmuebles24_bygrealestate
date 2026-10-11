@@ -141,7 +141,8 @@ sudo bash /opt/inmobiliaria24/deploy/deploy.sh
 ```
 
 `deploy.sh` hace `git pull --ff-only origin main`, `pip install -e .` en el venv,
-`systemctl daemon-reload` y reinicia `inmobiliaria24.timer`. Si tocaste el worker
+`systemctl daemon-reload`, deja corriendo el despachador y reinicia `inmobiliaria24.timer`
+(scraper) solo si está habilitado; desde el corte a Tokko está deshabilitado y así se queda. Si tocaste el worker
 de EasyBroker o los reportes, reinicia también sus timers:
 
 ```bash
