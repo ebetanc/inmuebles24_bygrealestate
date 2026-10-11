@@ -395,7 +395,7 @@
   }
  ],
  "health": {
-  "scraper_last_ok": "2026-09-10T02:30:00.000Z",
+  "tokko_last": "2026-09-10T02:30:00.000Z",
   "stuck_requested": 0,
   "stuck_expired": 0,
   "queued_night": 0,

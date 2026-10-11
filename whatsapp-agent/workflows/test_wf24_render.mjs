@@ -25,6 +25,13 @@ assert.ok(joined.includes('Nota en Inmuebles24 ⌛ pendiente'), 'missing pending
 assert.ok(joined.includes('1 a Sandy'), 'legacy Sandy fallback lost from summary');
 assert.ok(out.subject.includes('1 sin asignación'), out.subject);
 out.text_chunks.forEach(c => assert.ok(c.length <= 4000, 'chunk over 4000'));
+
+// Tokko leads say where they came from instead of an Inmuebles24 Contactado they never get.
+const tokko = render({ ...row, leads: [{ ...row.leads[0], origin: 'tokko', portal: 'JamesEdition' }] });
+const tokkoText = tokko.text_chunks.join('\n');
+assert.ok(tokkoText.includes('vía Tokko (JamesEdition)'), 'missing vía Tokko');
+assert.ok(!tokkoText.includes('Contactado en Inmuebles24'), 'Tokko lead claims Contactado');
+assert.ok(!joined.includes('Scraper sin corrida'), 'scraper alert still rendered');
 for (const l of row.leads) assert.ok(joined.includes('#' + l.opportunity_id), 'missing #' + l.opportunity_id);
 assert.ok(!/<[a-z]/i.test(joined), 'HTML tag leaked into text');
 assert.ok(out.subject.startsWith('[V3] Reporte del día'), out.subject);

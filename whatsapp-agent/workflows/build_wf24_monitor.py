@@ -32,7 +32,7 @@ leads AS (
     COALESCE(NULLIF(c.lead_name,''), NULLIF(e.offer_context->>'name',''), e.offer_context->>'lead_name') AS lead_name,
     COALESCE(NULLIF(c.lead_phone,''), o.e164_phone, e.offer_context->>'phone') AS lead_phone,
     COALESCE(e.offer_context->>'property_title', NULLIF(concat_ws(' · ', e.offer_context->>'property', e.offer_context->>'address'),''), c.current_property) AS property_title,
-    e.route_dispatch_status, e.contactado_status,
+    e.route_dispatch_status, e.contactado_status, e.offer_context->>'origin' AS origin, e.offer_context->>'portal' AS portal,
     (SELECT json_agg(json_build_object('tier',a.routing_tier,'kind',a.delivery_kind,'to',COALESCE(ta.name,a.target_agent_id),'to_id',a.target_agent_id,'status',a.status,
         'requested_at',a.requested_at,'sent_at',a.provider_accepted_at,'delivered_at',a.delivered_at,'claimed_at',a.claimed_at,'failed_at',a.failed_at) ORDER BY a.requested_at)
      FROM public.lead_routing_delivery_attempts a LEFT JOIN public.agents ta ON ta.agent_id=a.target_agent_id WHERE a.opportunity_id=o.opportunity_id) AS attempts,
@@ -51,7 +51,7 @@ leads AS (
   ORDER BY o.opportunity_id
 ),
 health AS (
-  SELECT (SELECT max(completed_at) FROM public.scrape_logs WHERE status='ok') AS scraper_last_ok,
+  SELECT (SELECT max(created_at) FROM public.tokko_shadow_leads) AS tokko_last,
     (SELECT count(*) FROM public.lead_routing_delivery_attempts WHERE delivery_kind='offer' AND status='requested' AND requested_at < now()-interval '3 minutes') AS stuck_requested,
     (SELECT count(*) FROM public.lead_routing_opportunities WHERE assigned_agent_id IS NULL AND state <> 'unassigned' AND current_delivery_attempt_id IS NOT NULL AND expires_at IS NOT NULL AND expires_at < now()-interval '90 seconds') AS stuck_expired,
     (SELECT count(*) FROM public.lead_routing_opportunities WHERE state='queued_night') AS queued_night,

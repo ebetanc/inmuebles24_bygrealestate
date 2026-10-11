@@ -18,8 +18,9 @@ const WAIT = '<span style="color:#B7791F;font-weight:700">&#8987;</span>';
 const tierName = (t) => ({owner:'propietario', primary_guard:'guardia', backup_guard:'guardia', sandy:'Sandy'}[t] || t || '');
 
 let alerts = [];
-const scraperAge = h.scraper_last_ok ? mins(h.scraper_last_ok, row.until) : null;
-if (scraperAge === null || scraperAge > 40) alerts.push('Scraper sin corrida OK hace ' + (scraperAge ?? '?') + ' min');
+// Tokko (WF25) replaced the i24 scraper 2026-10-10; leads arrive every day, so 24 h of silence is a broken intake.
+const tokkoAge = h.tokko_last ? mins(h.tokko_last, row.until) : null;
+if (tokkoAge === null || tokkoAge > 1440) alerts.push('Sin avisos de Tokko hace ' + (tokkoAge === null ? '?' : Math.round(tokkoAge / 60)) + ' h');
 if (Number(h.stuck_requested) > 0) alerts.push(h.stuck_requested + ' oferta(s) pedidas hace >3 min sin enviar (¿WF23/WF13 caído?)');
 if (Number(h.stuck_expired) > 0) alerts.push(h.stuck_expired + ' oferta(s) vencidas sin escalar (¿WF23 apagado?)');
 if (Number(h.manual_review_new) > 0) alerts.push(h.manual_review_new + ' solicitud(es) nuevas cayeron en revisión manual (sin ID EasyBroker)');
@@ -33,7 +34,10 @@ const cards = leads.map(l => {
   const detected = events.find(e => e.type === 'detected');
   if (detected && new Date(detected.at) >= new Date(row.since)) nNew++;
   const contacted = events.find(e => e.type === 'i24_contacted');
-  lines.push(`Detectado ${hhmm(detected ? detected.at : l.created_at)} · Contactado en Inmuebles24 ${contacted ? OK + ' ' + hhmm(contacted.at) : (l.contactado_status === 'verified' ? OK : WAIT)}`);
+  const via = l.origin === 'tokko'
+    ? 'vía Tokko' + (l.portal ? ' (' + esc(l.portal) + ')' : '')
+    : `Contactado en Inmuebles24 ${contacted ? OK + ' ' + hhmm(contacted.at) : (l.contactado_status === 'verified' ? OK : WAIT)}`;
+  lines.push(`Detectado ${hhmm(detected ? detected.at : l.created_at)} · ${via}`);
   if (l.v3_night_queued_at) lines.push(`Cola nocturna ${hhmm(l.v3_night_queued_at)} ${dmy(l.v3_night_queued_at)} → liberado ${l.v3_night_released_at ? OK + ' ' + hhmm(l.v3_night_released_at) : WAIT + ' pendiente 08:05'}`);
   // NOTE: attempts.claimed_at is the sender's lease (WF13/WF23), NOT the human click.
   // The human click is opportunity.accepted_at, on the offer addressed to the assigned agent.
@@ -106,11 +110,11 @@ ${problems.length ? '<div style="color:#C8483B;font-weight:700;margin-bottom:6px
 const label = 'Reporte del día';
 const dayStr = new Date(row.until).toLocaleDateString('es-MX', {timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long'});
 const summary = `${leads.length} lead(s) con actividad · ${nClaim} tomado(s) por asesor/guardia · ${nUnassigned} sin asignación${nSandy ? ' · ' + nSandy + ' a Sandy' : ''} · ${nOpen} en oferta · ${nEbOk} con EasyBroker cerrado · ${nProblem} con problema`;
-const healthHtml = `<div style="font-size:13px;color:#5D6C79">Scraper último OK ${hhmm(h.scraper_last_ok)} (hace ${scraperAge ?? '?'} min) · en cola nocturna ${h.queued_night} · ofertas atoradas ${h.stuck_requested} · vencidas sin escalar ${h.stuck_expired}</div>`;
+const healthHtml = `<div style="font-size:13px;color:#5D6C79">Último aviso de Tokko ${hhmm(h.tokko_last)} (hace ${tokkoAge ?? '?'} min) · en cola nocturna ${h.queued_night} · ofertas atoradas ${h.stuck_requested} · vencidas sin escalar ${h.stuck_expired}</div>`;
 const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:760px;color:#16232E">
 <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#5D6C79">Inmobiliaria24 · BYG · Lead Routing V3</div>
 <h2 style="margin:4px 0 8px">${label} · ${dayStr}</h2>
-${alerts.length ? '<div style="background:#F8E1DD;border:1px solid #C8483B;color:#7A2A22;padding:10px 12px;border-radius:6px;font-weight:700">&#9888; ' + alerts.map(esc).join('<br>&#9888; ') + '</div>' : '<div style="background:#DCEFEC;border:1px solid #157A73;color:#0F4F4A;padding:8px 12px;border-radius:6px">&#10004; Motores sanos: scraper, envíos y reloj de escalación</div>'}
+${alerts.length ? '<div style="background:#F8E1DD;border:1px solid #C8483B;color:#7A2A22;padding:10px 12px;border-radius:6px;font-weight:700">&#9888; ' + alerts.map(esc).join('<br>&#9888; ') + '</div>' : '<div style="background:#DCEFEC;border:1px solid #157A73;color:#0F4F4A;padding:8px 12px;border-radius:6px">&#10004; Motores sanos: Tokko, envíos y reloj de escalación</div>'}
 <p style="font-size:14px"><b>${summary}</b></p>
 ${healthHtml}
 ${leads.length ? cards.join('') : '<p style="color:#5D6C79">Sin leads con actividad en esta ventana.</p>'}
@@ -123,7 +127,7 @@ const LIMIT = 4000;
 const FOOTER = 'Hechos leídos directamente de Supabase (oportunidades, intentos de entrega, eventos, efectos EasyBroker). Horas en CDMX. Generado por WF24.';
 const headerText = [
   `📋 ${label} · ${dayStr}`,
-  alerts.length ? alerts.map(a => '⚠ ' + a).join('\n') : '✔ Motores sanos: scraper, envíos y reloj de escalación',
+  alerts.length ? alerts.map(a => '⚠ ' + a).join('\n') : '✔ Motores sanos: Tokko, envíos y reloj de escalación',
   summary,
   stripHtml(healthHtml),
 ].join('\n');
