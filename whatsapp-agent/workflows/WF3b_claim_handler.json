@@ -616,6 +616,7 @@
   },
   "settings": {
     "executionOrder": "v1",
+    "errorWorkflow": "He95yJflKVspGFyb",
     "saveExecutionProgress": false,
     "saveManualExecutions": false,
     "saveDataErrorExecution": "all",
