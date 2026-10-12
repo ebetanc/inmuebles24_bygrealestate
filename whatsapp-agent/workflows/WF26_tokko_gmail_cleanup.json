@@ -1,0 +1,104 @@
+{
+  "id": "TokkoWF26Cleanup",
+  "name": "WF26 - Tokko Limpieza Gmail",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 3 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Diario 03:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6f0b8f0e-26a1-4c11-9a01-26a1c0000001"
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "q": "from:notifier@tokkobroker.com older_than:7d",
+          "readStatus": "both"
+        }
+      },
+      "name": "Avisos con más de 7 días",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        0
+      ],
+      "id": "6f0b8f0e-26a1-4c11-9a01-26a1c0000002",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Hx7tXWjVzyLEwMnJ",
+          "name": "Gmail ESTEBAN"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "trash",
+        "threadId": "={{ $json.id }}"
+      },
+      "name": "A la papelera",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        0
+      ],
+      "id": "6f0b8f0e-26a1-4c11-9a01-26a1c0000003",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Hx7tXWjVzyLEwMnJ",
+          "name": "Gmail ESTEBAN"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Diario 03:30": {
+      "main": [
+        [
+          {
+            "node": "Avisos con más de 7 días",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisos con más de 7 días": {
+      "main": [
+        [
+          {
+            "node": "A la papelera",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Mexico_City",
+    "errorWorkflow": "He95yJflKVspGFyb",
+    "saveDataSuccessExecution": "none",
+    "executionTimeout": 120
+  }
+}

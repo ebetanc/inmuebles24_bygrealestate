@@ -50,6 +50,7 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
    lo reenvía a esteban.betanc@gmail.com; WF25 lo lee cada minuto, lo guarda en
    `tokko_shadow_leads` y, si trae contacto + `Ref: EB-…`, llama `v3_tokko_intake`.
    Los dos avisos de un mismo lead (Consulta + WhatsApp) son una sola oportunidad.
+   WF26 manda a la papelera (03:30 CDMX) los avisos con más de 7 días.
 2. **Sin Contactado.** Ya no se marca nada en Inmuebles24 ni se escriben notas ahí:
    la captura de Tokko nace verificada. El scraper de la Pi está apagado
    (`inmobiliaria24.timer` y `gost-proxy` deshabilitados; rollback: re-habilitarlos,
@@ -92,6 +93,7 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
 | WF3c | `UNIKqyAvIUAZkNIs` | Sub-workflow (WF23) | `v3_advance_routing_tier` / `v3_assign_sandy` |
 | WF7 | `xzBG0GIsHCUd44DC` | Cron 08:05 `America/Mexico_City` | `v3_release_night_queue` + reporte matutino |
 | WF25 | `TokkoWF25Shadow1` | Gmail cada minuto | Lee avisos de Tokko → `tokko_shadow_leads` + `v3_tokko_intake` |
+| WF26 | `TokkoWF26Cleanup` | Cron 03:30 CDMX | Manda a la papelera los avisos de Tokko con más de 7 días en el Gmail de intake |
 | WF20 | `pYV88ntxI0Lc4NCB` | Cron diario 09:00 CDMX | Watchdog: 24 h sin avisos de Tokko, errores, silencios |
 | WF21 | `He95yJflKVspGFyb` | Error trigger global | Email de error con throttling |
 | WF24 | `WF24V3MonitorDia` | 20:45 CDMX | Reporte diario V3 por email y WhatsApp (`reporte_diario_v3`, botón "Ver detalle") (se genera con `build_wf24_monitor.py`) |
