@@ -122,7 +122,8 @@ def _rotate_proxy_ip() -> str | None:
             ROTATE_PROXY_CMD,
             capture_output=True,
             text=True,
-            timeout=60,
+            # The script tries up to 20 sessids until i24 stops hard-blocking.
+            timeout=300,
         )
     except Exception as e:
         logger.warning("rotate-proxy-ip could not be run: {}", e)
@@ -472,6 +473,15 @@ async def launch_chrome(
     ]
     if headless:
         args.append("--headless=new")
+        # Cloudflare hard-blocks the "HeadlessChrome" user agent (seen 2026-10-13):
+        # present the same reduced UA a headful Chrome of this version sends.
+        version = subprocess.run([str(chrome_path), "--version"], capture_output=True, text=True).stdout
+        major = next((w.split(".")[0] for w in version.split() if w[:1].isdigit()), "")
+        if major:
+            args.append(
+                "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                f"(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
+            )
 
     # Optional upstream proxy (e.g. a local gost relay forwarding to a
     # residential/mobile proxy). Set CHROME_PROXY to a no-auth proxy URL.

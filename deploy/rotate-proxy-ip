@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# rotate-proxy-ip: bump the DataImpulse sticky sessid baked into
+# gost-proxy.service's ExecStart until Inmuebles24 stops answering with a
+# Cloudflare hard block, then print the new egress IP.
+# Installed at /usr/local/bin/rotate-proxy-ip (root, sudoers for inmobiliaria24).
+#
+# Since 2026-10-13 most DataImpulse residential IPs get "Attention Required"
+# (even with the Anonymous filter, ~1 in 8 passes), so one bump is not enough.
+# ponytail: sessid counter lives directly in the unit file (no separate state
+# file) — the unit IS the state. Wraps byg99 -> byg01.
+set -euo pipefail
+UNIT=/etc/systemd/system/gost-proxy.service
+MAX_TRIES=${MAX_TRIES:-20}
+UA="Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+if [[ $EUID -ne 0 ]]; then
+    echo "rotate-proxy-ip: must run as root" >&2
+    exit 1
+fi
+if [[ ! -f "$UNIT" ]]; then
+    echo "rotate-proxy-ip: unit file not found: $UNIT" >&2
+    exit 1
+fi
+cp -p "$UNIT" "${UNIT}.bak.$(date +%Y%m%d%H%M%S)"
+for ((try = 1; try <= MAX_TRIES; try++)); do
+    current=$(grep -oP 'sessid\.byg\K[0-9]+' "$UNIT" | head -n1)
+    if [[ -z "$current" ]]; then
+        echo "rotate-proxy-ip: could not find sessid.bygNN in $UNIT" >&2
+        exit 1
+    fi
+    # Force base-10 (avoid bash treating a leading-zero string like 08/09 as octal).
+    next=$((10#$current + 1))
+    if (( next > 99 )); then
+        next=1
+    fi
+    sed -i "s/sessid\.byg$(printf '%02d' "$((10#$current))")/sessid.byg$(printf '%02d' "$next")/" "$UNIT"
+    systemctl daemon-reload
+    systemctl restart gost-proxy
+    sleep 2
+    title=$(curl -s -m 30 -x http://127.0.0.1:18080 -A "$UA" https://www.inmuebles24.com/ \
+        | grep -o '<title>[^<]*' | head -n1 || true)
+    echo "sessid byg$(printf '%02d' "$next"): ${title#<title>}"
+    if [[ -n "$title" && "$title" != *"Attention Required"* ]]; then
+        echo "ip: $(curl -s -x http://127.0.0.1:18080 -m 20 https://api.ipify.org || echo unknown)"
+        exit 0
+    fi
+done
+echo "rotate-proxy-ip: no unblocked IP after ${MAX_TRIES} tries" >&2
+exit 1
