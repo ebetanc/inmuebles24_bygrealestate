@@ -51,10 +51,15 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
    `tokko_shadow_leads` y, si trae contacto + `Ref: EB-…`, llama `v3_tokko_intake`.
    Los dos avisos de un mismo lead (Consulta + WhatsApp) son una sola oportunidad.
    WF26 manda a la papelera (03:30 CDMX) los avisos con más de 7 días.
-2. **Sin Contactado.** Ya no se marca nada en Inmuebles24 ni se escriben notas ahí:
-   la captura de Tokko nace verificada. El scraper de la Pi está apagado
-   (`inmobiliaria24.timer` y `gost-proxy` deshabilitados; rollback: re-habilitarlos,
-   `ENABLE TRIGGER v3_enqueue_i24_note` y desconectar «Crear lead V3» en WF25).
+2. **Contactado al TOMO (desde 2026-10-13).** La captura de Tokko nace verificada y la Pi ya
+   no captura. Con `I24_TOKKO_MARK=1`, `inmobiliaria24.timer` (cada 5 min) solo marca: cuando
+   un lead de Tokko/Inmuebles24 queda asignado, empareja su conversación en la bandeja de i24
+   (mismo aviso + mismo correo o teléfono, una sola coincidencia, ventana 3 h), la pasa a
+   Contactado y escribe `<Nombre> · V3 HH:MM` (`i24_note_ledger`, 5 intentos). Los leads sin
+   asignación quedan en Pendiente. Sin trabajo no abre Chrome. Proxy `gost-proxy` →
+   DataImpulse residencial con Anonymous filter; `rotate-proxy-ip` (`deploy/`) prueba
+   sessids hasta que i24 no responda con bloqueo duro de Cloudflare. El trigger
+   `v3_enqueue_i24_note` sigue deshabilitado (rollback a captura: ver historial de git).
 3. **Intake.** El despachador de la Pi (`inmobiliaria24-dispatch.timer`, sin navegador) hace
    `POST https://n8n.srv856940.hstgr.cloud/webhook/scraper-leads`
    → WF10, que crea/reusa la oportunidad y decide si es de día o de noche.
@@ -152,7 +157,7 @@ sudo systemctl restart easybroker.timer reporte-semanal.timer
 systemctl list-timers | grep -E 'inmobiliaria24|easybroker|n8n-export'
 ```
 
-Timers en el Pi: `inmobiliaria24.timer` (APAGADO desde 2026-10-10, lo reemplaza Tokko/WF25),
+Timers en el Pi: `inmobiliaria24.timer` (cada 5 min, solo Contactado + nota i24 de leads Tokko tomados),
 `inmobiliaria24-dispatch.timer` (cada minuto),
 `easybroker.timer` (cada minuto), `reporte-semanal.timer`,
 `n8n-export.timer` (domingo 03:00 CDMX, snapshot privado en
@@ -215,7 +220,9 @@ Copia `.env.example` a `.env`. Las claves que importan hoy en el Pi:
 | `I24_WEBHOOK_TOKEN` | secreto compartido con n8n | header auth del webhook |
 | `LEAD_ROUTING_V3_ENABLED` | `1` | activa el camino V3 en el scraper |
 | `LEAD_ROUTING_ACCOUNT_KEY` | clave del tenant | debe ser igual a `EASYBROKER_ACCOUNT_KEY` |
-| `MARK_CONTACTED` | legacy | gate viejo del cambio de estado |
+| `MARK_CONTACTED` | `1` | permite pasar la conversación i24 a Contactado |
+| `I24_TOKKO_MARK` | `1` | la Pi solo marca i24 (no captura) |
+| `I24_FAST_DAY` | `0` | con `1` un bloqueo de Cloudflare aborta sin rotar IP (era de la captura) |
 | `EASYBROKER_EMAIL` / `EASYBROKER_PASSWORD` | login de la UI de EB | nota + `Atendida` |
 | `EASYBROKER_API_KEY` | key de cuenta | correlación de solicitudes (lectura) |
 | `EASYBROKER_V3_INBOX` | `1` | inbox durable a nivel solicitud |
