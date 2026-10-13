@@ -42,6 +42,15 @@ function Mark({ ok, label }: { ok: boolean | null; label: string }) {
   );
 }
 
+const portalLabel: Record<string, string> = { inmuebles24: "Inmuebles24", jamesedition: "JamesEdition" };
+
+/** Contactado + nota in Inmuebles24: only for leads taken with TOMO (since 2026-10-13). */
+function i24Mark(l: V3Lead): boolean | null {
+  if (l.i24_mark_state === "succeeded") return true;
+  if (l.i24_mark_state === "manual_review") return false;
+  return null;
+}
+
 function responsable(l: V3Lead): string {
   if (!l.assigned_agent_id) return "Sin responsable todavia";
   if (l.assignment_method === "claim") {
@@ -72,7 +81,7 @@ export default async function LeadsV3Page() {
       <div className="mb-5">
         <h2 className="font-display text-base font-bold text-foreground">Leads V3</h2>
         <div className="text-xs text-muted-foreground">
-          Motor de ruteo V3 — ultimos 7 dias, leido de la vista v3_leads_dashboard
+          Motor de ruteo V3 — ultimos 7 dias. Los leads llegan por avisos de Tokko desde el 10-oct
         </div>
       </div>
 
@@ -104,7 +113,7 @@ export default async function LeadsV3Page() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b-2 border-foreground bg-[var(--neutral)]">
-                {["Hora", "Lead", "Propiedad", "Estado", "Responsable", "WhatsApp", "EasyBroker", "Problema"].map((h) => (
+                {["Hora", "Lead", "Propiedad", "Estado", "Responsable", "WhatsApp", "EasyBroker", "Inmuebles24", "Problema"].map((h) => (
                   <th
                     key={h}
                     className="px-3.5 py-3 text-left font-display text-[11px] font-extrabold uppercase tracking-[0.08em] text-foreground"
@@ -126,6 +135,11 @@ export default async function LeadsV3Page() {
                   <td className="px-3.5 py-3">
                     <div className="text-[13px] font-bold text-foreground">{l.lead_name || "Sin nombre"}</div>
                     <div className="font-mono text-[11px] text-muted-foreground">{l.lead_phone || "-"}</div>
+                    {l.origin === "tokko" && (
+                      <div className="text-[11px] text-muted-foreground">
+                        Tokko · {portalLabel[l.portal ?? ""] ?? l.portal ?? "?"}
+                      </div>
+                    )}
                   </td>
                   <td className="max-w-[200px] px-3.5 py-3">
                     <div className="font-mono text-[11px] text-muted-foreground">{l.property_id || "sin ID EB"}</div>
@@ -156,6 +170,13 @@ export default async function LeadsV3Page() {
                   <td className="px-3.5 py-3">
                     <Mark label="nota" ok={l.eb_note_ok} />
                     <Mark label="Atendida" ok={l.eb_attended_ok} />
+                  </td>
+                  <td className="px-3.5 py-3">
+                    {l.portal === "inmuebles24" || l.origin !== "tokko" ? (
+                      <Mark label="Contactado + nota" ok={i24Mark(l)} />
+                    ) : (
+                      <span className="text-[12px] text-muted-foreground">no aplica</span>
+                    )}
                   </td>
                   <td className="max-w-[220px] px-3.5 py-3 text-[12px] font-semibold text-[var(--rose)]">
                     {l.problem_reason || ""}

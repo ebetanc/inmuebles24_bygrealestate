@@ -1,156 +1,100 @@
-import { getScrapeRuns } from "@/lib/queries";
+import { getTokkoNotices } from "@/lib/queries";
 import { formatMx, mxStartOfToday } from "@/lib/datetime";
 
 export const dynamic = "force-dynamic";
 
-// Visual mapping per run status. "ok" = corrida limpia (con o sin leads).
-const statusChip: Record<string, { label: string; cls: string; dot: string }> = {
-  ok: { label: "OK", cls: "is-primary", dot: "bg-[var(--green)]" },
-  running: { label: "En curso", cls: "is-accent", dot: "bg-[var(--accent)]" },
-  dry_run: { label: "Prueba", cls: "is-blue", dot: "bg-[var(--blue)]" },
-  auth_error: { label: "Error de sesión", cls: "is-alert", dot: "bg-[var(--rose)]" },
-  error: { label: "Error", cls: "is-alert", dot: "bg-[var(--rose)]" },
-};
-
-// Origen de la corrida: EasyBroker (n8n WF8b) escribe metadata.source='easybroker'
-// y run_id con prefijo 'eb-'. El scraper del Pi (Inmuebles24) deja metadata en null.
-function sourceOf(run: { metadata: Record<string, unknown> | null; run_id: string }) {
-  const s = (run.metadata?.source as string | undefined) ?? (run.run_id?.startsWith("eb-") ? "easybroker" : "inmuebles24");
-  return s === "easybroker"
-    ? { label: "EasyBroker", cls: "is-blue" }
-    : { label: "Inmuebles24", cls: "is-accent" };
+// Since 2026-10-10 every lead arrives as a Tokko notice email (WF25 reads it about a minute later).
+// What V3 did with it: created_new = lead nuevo; returning_* = la misma persona ya tenía lead abierto.
+function resultOf(n: { parse_ok: boolean; disposition: string | null; opportunity_id: number | null }) {
+  if (!n.parse_ok) return { label: "No se pudo leer", cls: "is-alert" };
+  if (!n.disposition) return { label: "Sin lead", cls: "is-blue" };
+  if (n.disposition === "created_new") return { label: `Lead #${n.opportunity_id}`, cls: "is-primary" };
+  if (n.disposition.startsWith("returning")) return { label: `Repetido · #${n.opportunity_id}`, cls: "is-accent" };
+  return { label: n.disposition, cls: "is-blue" };
 }
+
+const portalLabel: Record<string, string> = { inmuebles24: "Inmuebles24", jamesedition: "JamesEdition" };
 
 function fmtTime(iso: string) {
-  return formatMx(iso, {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatMx(iso, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-function duration(started: string, completed: string | null) {
-  if (!completed) return "—";
-  const secs = Math.round((new Date(completed).getTime() - new Date(started).getTime()) / 1000);
-  if (secs < 60) return `${secs}s`;
-  return `${Math.floor(secs / 60)}m ${secs % 60}s`;
-}
-
-export default async function LogsPage() {
-  const runs = await getScrapeRuns();
+export default async function TokkoNoticesPage() {
+  const notices = await getTokkoNotices();
 
   const todayStart = mxStartOfToday();
-  const runsToday = runs.filter((r) => new Date(r.started_at) >= todayStart);
-  const leadsToday = runsToday.reduce((sum, r) => sum + (r.new_listings || 0), 0);
-  const lastRun = runs[0];
+  const today = notices.filter((n) => new Date(n.received_at ?? n.created_at) >= todayStart);
+  const newToday = today.filter((n) => n.disposition === "created_new").length;
+  const last = notices[0];
 
   return (
     <div>
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h2 className="font-display text-base font-bold text-foreground">Logs de Subastas</h2>
+          <h2 className="font-display text-base font-bold text-foreground">Avisos Tokko</h2>
           <div className="text-xs text-muted-foreground">
-            Bitácora de scrapers — Inmuebles24 (Pi) + EasyBroker (n8n), cada 15 min, 08:00–22:00 MX
+            Cada aviso de consulta que Tokko manda por correo y el lead que generó en V3 — últimos 100
           </div>
         </div>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="rounded-[var(--radius)] border-2 border-foreground bg-foreground p-5 shadow-[var(--shadow-sm)]">
-          <div className="font-mono text-[32px] font-bold text-background">{runsToday.length}</div>
-          <div className="font-display text-[11px] font-extrabold uppercase tracking-[0.06em] text-background/70 mt-1">Corridas hoy</div>
+          <div className="font-mono text-[32px] font-bold text-background">{today.length}</div>
+          <div className="font-display text-[11px] font-extrabold uppercase tracking-[0.06em] text-background/70 mt-1">Avisos hoy</div>
         </div>
         <div className="rounded-[var(--radius)] border-2 border-foreground bg-foreground p-5 shadow-[var(--shadow-sm)]">
-          <div className="font-mono text-[32px] font-bold text-background">{leadsToday}</div>
+          <div className="font-mono text-[32px] font-bold text-background">{newToday}</div>
           <div className="font-display text-[11px] font-extrabold uppercase tracking-[0.06em] text-background/70 mt-1">Leads nuevos hoy</div>
         </div>
         <div className="rounded-[var(--radius)] border-2 border-foreground bg-foreground p-5 shadow-[var(--shadow-sm)]">
           <div className="font-mono text-[15px] font-bold text-background leading-tight pt-1">
-            {lastRun ? fmtTime(lastRun.started_at) : "—"}
+            {last ? fmtTime(last.received_at ?? last.created_at) : "—"}
           </div>
-          <div className="font-display text-[11px] font-extrabold uppercase tracking-[0.06em] text-background/70 mt-1">Última corrida</div>
+          <div className="font-display text-[11px] font-extrabold uppercase tracking-[0.06em] text-background/70 mt-1">Último aviso</div>
         </div>
       </div>
 
-      {/* Run rows */}
       <div className="flex flex-col gap-2">
-        {runs.map((run) => {
-          const chip = statusChip[run.status] || { label: run.status, cls: "is-blue", dot: "bg-[var(--blue)]" };
-          const src = sourceOf(run);
-          const noLeads = (run.new_listings || 0) === 0;
-
+        {notices.map((n) => {
+          const result = resultOf(n);
           return (
             <div
-              key={run.id}
-              className="flex items-center gap-4 rounded-[var(--radius)] border-2 border-foreground bg-card px-5 py-3.5 shadow-[var(--shadow-sm)]"
+              key={n.gmail_message_id}
+              className="flex flex-wrap items-center gap-4 rounded-[var(--radius)] border-2 border-foreground bg-card px-5 py-3.5 shadow-[var(--shadow-sm)]"
             >
-              {/* Time */}
-              <div className="shrink-0 w-[150px]">
-                <div className="font-mono text-[13px] font-bold text-foreground tabular-nums">
-                  {fmtTime(run.started_at)}
-                </div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">
-                  Duración {duration(run.started_at, run.completed_at)}
-                </div>
-              </div>
-
-              {/* Status */}
               <div className="shrink-0 w-[130px]">
-                <span className={`nb-chip ${chip.cls}`}>
-                  <span className={`h-2 w-2 rounded-full ${chip.dot}`} />
-                  {chip.label}
-                </span>
+                <div className="font-mono text-[13px] font-bold text-foreground tabular-nums">
+                  {fmtTime(n.received_at ?? n.created_at)}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">{n.kind || "—"}</div>
               </div>
 
-              {/* Source */}
               <div className="shrink-0 w-[120px]">
-                <span className={`nb-chip ${src.cls}`}>{src.label}</span>
+                <span className="nb-chip is-accent">{portalLabel[n.portal ?? ""] ?? n.portal ?? "—"}</span>
               </div>
 
-              {/* Counts */}
-              <div className="flex flex-1 gap-6">
-                <div>
-                  <div className="font-display text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">Leads nuevos</div>
-                  <div className={`mt-0.5 font-mono text-[14px] font-bold tabular-nums ${noLeads ? "text-muted-foreground" : "text-foreground"}`}>
-                    {run.new_listings || 0}
-                  </div>
-                </div>
-                <div>
-                  <div className="font-display text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">Total scrapeados</div>
-                  <div className="mt-0.5 font-mono text-[14px] font-bold text-foreground tabular-nums">
-                    {run.total_scraped || 0}
-                  </div>
-                </div>
-                <div>
-                  <div className="font-display text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">Duplicados</div>
-                  <div className="mt-0.5 font-mono text-[14px] font-bold text-muted-foreground tabular-nums">
-                    {run.duplicates || 0}
-                  </div>
-                </div>
-                <div>
-                  <div className="font-display text-[10px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">Páginas</div>
-                  <div className="mt-0.5 font-mono text-[14px] font-bold text-muted-foreground tabular-nums">
-                    {run.pages_scraped || 0}
-                  </div>
-                </div>
+              <div className="min-w-[160px] flex-1">
+                <div className="text-[13px] font-bold text-foreground">{n.lead_name || "Sin nombre"}</div>
+                <div className="font-mono text-[11px] text-muted-foreground">{n.phone || n.email || "—"}</div>
               </div>
 
-              {/* Error message, if any */}
-              {run.error_message && (
-                <div className="shrink-0 max-w-[260px] truncate text-[11px] font-semibold text-[var(--rose)]" title={run.error_message}>
-                  {run.error_message}
-                </div>
-              )}
+              <div className="min-w-[160px] flex-1">
+                <div className="font-mono text-[11px] text-muted-foreground">{n.eb_ref || "sin ID EB"}</div>
+                <div className="truncate text-[13px] text-foreground">{n.property_title || "—"}</div>
+              </div>
+
+              <div className="shrink-0">
+                <span className={`nb-chip ${result.cls}`}>{result.label}</span>
+              </div>
             </div>
           );
         })}
       </div>
 
-      {runs.length === 0 && (
+      {notices.length === 0 && (
         <div className="nb p-12 text-center font-display text-sm font-bold text-muted-foreground">
-          Aún no hay corridas registradas — esperando la próxima ejecución del Pi
+          Aún no hay avisos de Tokko registrados
         </div>
       )}
     </div>

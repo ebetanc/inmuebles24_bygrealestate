@@ -60,22 +60,6 @@ export interface GuardShift {
   agents?: { name: string };
 }
 
-export interface ScrapeRun {
-  id: number;
-  run_id: string;
-  started_at: string;
-  completed_at: string | null;
-  status: string;
-  total_scraped: number;
-  new_listings: number;
-  duplicates: number;
-  pages_scraped: number;
-  error_message: string | null;
-  notifications_sent: boolean;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
-}
-
 export interface SLABreach {
   conversation_id: string;
   lead_name: string | null;
@@ -155,6 +139,28 @@ export interface V3Lead {
   dispatch_status: string | null;
   has_problem: boolean;
   problem_reason: string | null;
+  // Not in the view: merged in getV3Leads from the opportunity and i24_note_ledger.
+  origin: string | null; // "tokko" since 2026-10-10
+  portal: string | null; // inmuebles24, jamesedition... (Tokko notice)
+  i24_mark_state: string | null; // i24_note_ledger.state: Contactado + nota en Inmuebles24
+}
+
+/** One Tokko notice email read by WF25 (tokko_shadow_leads) and what V3 did with it. */
+export interface TokkoNotice {
+  gmail_message_id: string;
+  received_at: string | null;
+  portal: string | null;
+  kind: string | null;
+  lead_name: string | null;
+  phone: string | null;
+  email: string | null;
+  eb_ref: string | null;
+  property_title: string | null;
+  parse_ok: boolean;
+  created_at: string;
+  webcontact_id: string | null;
+  opportunity_id: number | null;
+  disposition: string | null;
 }
 
 export interface V3KPIs {

@@ -1,5 +1,5 @@
 import { createSupabaseServer } from "./supabase";
-import type { Agent, Conversation, Auction, NightQueueItem, KPIs, ScrapeRun, SLABreach, RoutingV2OpsRow, RoutingV2KPIs, V3Lead, V3KPIs } from "./types";
+import type { Agent, Conversation, Auction, NightQueueItem, KPIs, TokkoNotice, SLABreach, RoutingV2OpsRow, RoutingV2KPIs, V3Lead, V3KPIs } from "./types";
 import { mxStartOfToday, mxToday } from "./datetime";
 
 const db = () => createSupabaseServer();
@@ -183,16 +183,29 @@ export async function getNightQueue(): Promise<NightQueueItem[]> {
   return (data || []) as NightQueueItem[];
 }
 
-// Bitácora de corridas del scraper (Pi) — una fila por corrida cada 15 min,
-// incluso si no trajo ningún lead. Fuente: tabla scrape_logs.
-export async function getScrapeRuns(limit = 100): Promise<ScrapeRun[]> {
+// Bitácora de avisos de Tokko (fuente de leads desde 2026-10-10): una fila por
+// correo leído por WF25, con la oportunidad V3 que generó (i24_capture_events
+// guarda external_event_id = 'tokko:<webcontact_id>').
+export async function getTokkoNotices(limit = 100): Promise<TokkoNotice[]> {
   const supabase = db();
   const { data } = await supabase
-    .from("scrape_logs")
-    .select("*")
-    .order("started_at", { ascending: false })
+    .from("tokko_shadow_leads")
+    .select("gmail_message_id, received_at, portal, kind, lead_name, phone, email, eb_ref, property_title, parse_ok, created_at, webcontact_id")
+    .order("created_at", { ascending: false })
     .limit(limit);
-  return (data || []) as ScrapeRun[];
+  const notices = (data || []) as Omit<TokkoNotice, "opportunity_id" | "disposition">[];
+  const ids = notices.filter((n) => n.webcontact_id).map((n) => `tokko:${n.webcontact_id}`);
+  const { data: captures } = ids.length
+    ? await supabase
+        .from("i24_capture_events")
+        .select("external_event_id, opportunity_id, disposition")
+        .in("external_event_id", ids)
+    : { data: [] };
+  const byId = new Map((captures || []).map((c) => [c.external_event_id as string, c]));
+  return notices.map((n) => {
+    const c = byId.get(`tokko:${n.webcontact_id}`);
+    return { ...n, opportunity_id: c?.opportunity_id ?? null, disposition: c?.disposition ?? null };
+  });
 }
 
 export async function getGuardSchedule() {
@@ -240,7 +253,24 @@ export async function getV3Leads({ since }: { since?: Date } = {}): Promise<V3Le
     .gte("created_at", from.toISOString())
     .order("created_at", { ascending: false })
     .limit(200);
-  return (data || []) as V3Lead[];
+  const rows = (data || []) as V3Lead[];
+  const ids = rows.map((r) => r.opportunity_id);
+  if (!ids.length) return rows;
+  const [opps, marks] = await Promise.all([
+    supabase
+      .from("lead_routing_opportunities")
+      .select("opportunity_id, origin:v3_offer_context->>origin, portal:v3_offer_context->>portal")
+      .in("opportunity_id", ids),
+    supabase.from("i24_note_ledger").select("opportunity_id, state").in("opportunity_id", ids),
+  ]);
+  const oppById = new Map((opps.data || []).map((o) => [o.opportunity_id as number, o]));
+  const markById = new Map((marks.data || []).map((m) => [m.opportunity_id as number, m.state as string]));
+  return rows.map((r) => ({
+    ...r,
+    origin: (oppById.get(r.opportunity_id)?.origin as string | undefined) ?? null,
+    portal: (oppById.get(r.opportunity_id)?.portal as string | undefined) ?? null,
+    i24_mark_state: markById.get(r.opportunity_id) ?? null,
+  }));
 }
 
 export async function getV3Kpis(): Promise<V3KPIs> {

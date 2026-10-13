@@ -19,7 +19,7 @@ const navSections = [
     items: [
       { href: "/nocturno", label: "Nocturno", icon: "night" },
       { href: "/calendario", label: "Calendario", icon: "calendar" },
-      { href: "/logs", label: "Logs de Subastas", icon: "logs" },
+      { href: "/logs", label: "Avisos Tokko", icon: "logs" },
     ],
   },
 ];
@@ -114,7 +114,7 @@ export function Sidebar() {
           <span className="dot live" />
           Conectado — Produccion
         </div>
-        <div className="text-[11px] font-medium text-muted-foreground">n8n + Supabase + Evolution API</div>
+        <div className="text-[11px] font-medium text-muted-foreground">n8n + Supabase + Tokko</div>
       </div>
     </aside>
   );
