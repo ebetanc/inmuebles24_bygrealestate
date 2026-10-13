@@ -18,7 +18,7 @@ import asyncio
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from loguru import logger
 from playwright.async_api import async_playwright
@@ -257,6 +257,27 @@ async def _run_v3_route_dispatch(settings, store: StateStore) -> list[dict]:
     return dispatched
 
 
+# A TOMO pairs within minutes; past this window the advisor marks it by hand.
+TOKKO_PAIR_WINDOW = timedelta(hours=3)
+
+
+async def _run_v3_tokko_marks(page, unpaired: list[dict], since: datetime, inbox_responses) -> int:
+    """Pair taken Tokko leads with their i24 conversation, then Contactado + note."""
+    from inmobiliaria24 import supa
+    from inmobiliaria24.fast_inbox import read_fast_inbox
+    from inmobiliaria24.i24_notes import pair_tokko_leads, run_v3_i24_note_worker
+    from inmobiliaria24.scraper import _capture_i24_status_evidence
+
+    if unpaired:
+        # The i24 inquiry precedes the Tokko email; a day of margin covers it.
+        rows = await read_fast_inbox(page, since=since - timedelta(days=1), initial_responses=inbox_responses)
+        pairs = pair_tokko_leads(unpaired, rows)
+        for opportunity_id, lead_id in pairs:
+            await supa.v3_i24_tokko_pair(opportunity_id, lead_id)
+        logger.info("Tokko -> i24: {} sin emparejar, {} emparejados", len(unpaired), len(pairs))
+    return await run_v3_i24_note_worker(page, supa, evidence=_capture_i24_status_evidence)
+
+
 # ---------------------------------------------------------------------------
 # Async main
 # ---------------------------------------------------------------------------
@@ -264,6 +285,17 @@ async def _run_v3_route_dispatch(settings, store: StateStore) -> list[dict]:
 
 async def async_main(args: argparse.Namespace, settings: Settings) -> int:
     """Run the scraper lifecycle. Returns an integer exit code (0=success, 1=failure)."""
+    # Tokko mode: the Pi only marks i24. Without work, skip the browser (and the proxy).
+    tokko_mark = os.environ.get("I24_TOKKO_MARK", "") == "1" and not (
+        args.dry_run or args.mark_test or args.inspect_status or args.inspect_controls is not None
+    )
+    if tokko_mark:
+        from inmobiliaria24.supa import v3_i24_notes_pending, v3_i24_tokko_unpaired
+        tokko_since = datetime.now(timezone.utc) - TOKKO_PAIR_WINDOW
+        unpaired = await v3_i24_tokko_unpaired(tokko_since)
+        if not unpaired and not await v3_i24_notes_pending():
+            logger.info("Tokko -> i24: nada que marcar")
+            return 0
     with StateStore(settings.state_db_path) as store:
         run_id = store.start_run()
         started_at = datetime.now(timezone.utc)
@@ -283,12 +315,12 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                 inbox_responses = []
                 def remember_response(response):
                     inbox_responses.append(response)
-                if fast_day:
+                if fast_day or tokko_mark:
                     context.on("response", remember_response)
                 try:
                     page = await load_or_login(context, settings)
                 finally:
-                    if fast_day:
+                    if fast_day or tokko_mark:
                         context.remove_listener("response", remember_response)
                 if args.dry_run:
                     logger.info("Dry run complete — session is valid, on Mis avisos")
@@ -348,6 +380,12 @@ async def async_main(args: argparse.Namespace, settings: Settings) -> int:
                     print(f"Dumped {len(controls)} controls for lead {lead_id} -> logs/lead_controls_{lead_id}.json")
                     status = "dry_run"
                     store.finish_run(run_id, status="dry_run")
+                    return 0
+
+                if tokko_mark:
+                    total = await _run_v3_tokko_marks(page, unpaired, tokko_since, inbox_responses)
+                    metadata.update(mode="tokko_mark", unpaired=len(unpaired))
+                    store.finish_run(run_id, total=total, status="ok")
                     return 0
 
                 # Mis avisos exposes both the Inmuebles24 listing ID and the

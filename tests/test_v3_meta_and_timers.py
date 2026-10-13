@@ -42,9 +42,8 @@ def test_meta_v3_templates_have_frozen_contract():
 def test_v3_timers_match_operational_cadence():
     i24 = (ROOT / "deploy" / "inmobiliaria24.timer").read_text(encoding="utf-8")
     easybroker = (ROOT / "deploy" / "easybroker.timer").read_text(encoding="utf-8")
-    assert "OnCalendar=*-*-* 00..07,20..23:0/15:00 America/Mexico_City" in i24
-    assert "OnCalendar=*-*-* 08:05..59:00 America/Mexico_City" in i24
-    assert "OnCalendar=*-*-* 09..19:*:00 America/Mexico_City" in i24
+    # Tokko era: the Pi only marks i24 Contactado + note after TOMO.
+    assert "OnCalendar=*-*-* *:0/5:00 America/Mexico_City" in i24
     assert "RandomizedDelaySec=0" in i24
     assert "OnCalendar=*-*-* *:*:00 America/Mexico_City" in easybroker
     assert "RandomizedDelaySec=5" in easybroker

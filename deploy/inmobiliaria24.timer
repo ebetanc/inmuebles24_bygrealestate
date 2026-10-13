@@ -1,12 +1,10 @@
 [Unit]
-Description=Inmobiliaria24 every minute during daytime; existing night cadence
+Description=Inmobiliaria24 Tokko -> i24 Contactado + note, every 5 minutes
 
 [Timer]
-# Capture always runs; only notification routing changes during the night window.
-OnCalendar=*-*-* 00..07,20..23:0/15:00 America/Mexico_City
-OnCalendar=*-*-* 08:00:00 America/Mexico_City
-OnCalendar=*-*-* 08:05..59:00 America/Mexico_City
-OnCalendar=*-*-* 09..19:*:00 America/Mexico_City
+# Since 2026-10-13 the Pi only marks i24 (I24_TOKKO_MARK=1); idle runs never open the browser.
+# Old capture cadence (every minute by day): git show 9d435c6:deploy/inmobiliaria24.timer
+OnCalendar=*-*-* *:0/5:00 America/Mexico_City
 RandomizedDelaySec=0
 AccuracySec=1s
 Persistent=true

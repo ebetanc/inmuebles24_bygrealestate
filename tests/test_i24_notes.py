@@ -137,11 +137,90 @@ def test_worker_closes_every_lease_including_the_failing_one(monkeypatch):
         return {"ok": True, "already": False, "reason": None, "url": ""}
 
     monkeypatch.setattr(i24_notes, "write_internal_note", write)
+    _contactado(monkeypatch, {})
 
     written = asyncio.run(i24_notes.run_v3_i24_note_worker(FakePage(), supa))
 
     assert written == 1
     assert finished == [(1, "tok-1", True), (2, "tok-2", False)]
+
+
+def _contactado(monkeypatch, outcomes: dict, marked=None):
+    """outcomes: lead_id -> error_code; a missing lead_id means Contactado OK."""
+    async def mark(page, lead, *, evidence=None):
+        if marked is not None:
+            marked.append(lead["lead_id"])
+        if lead["lead_id"] in outcomes:
+            evidence["error_code"] = outcomes[lead["lead_id"]]
+            return False
+        return True
+
+    monkeypatch.setattr(i24_notes, "mark_lead_contacted", mark)
+
+
+def test_worker_marks_contactado_before_the_note_and_skips_the_note_on_failure(monkeypatch):
+    finished, typed, marked = [], [], []
+
+    async def claim(limit):
+        return [
+            {"opportunity_id": 1, "i24_lead_id": "111", "note_text": "Lupita · V3 16:18",
+             "lease_token": "t1", "attempt": 1},
+            {"opportunity_id": 2, "i24_lead_id": "222", "note_text": "Gina · V3 10:00",
+             "lease_token": "t2", "attempt": 1},
+            {"opportunity_id": 3, "i24_lead_id": "333", "note_text": "Paty · V3 11:00",
+             "lease_token": "t3", "attempt": 1},
+        ]
+
+    async def finish(opportunity_id, token, ok, evidence):
+        finished.append((opportunity_id, ok))
+        return True
+
+    async def write(page, lead_id, text, *, evidence=None):
+        typed.append(lead_id)
+        return {"ok": True}
+
+    monkeypatch.setattr(i24_notes, "write_internal_note", write)
+    _contactado(monkeypatch, {"222": "status_chip_not_found",
+                              "333": "unexpected_terminal_status"}, marked)
+    supa = SimpleNamespace(claim_v3_i24_notes=claim, finish_v3_i24_note=finish)
+
+    asyncio.run(i24_notes.run_v3_i24_note_worker(FakePage(), supa))
+
+    assert marked == ["111", "222", "333"]
+    # 222 failed Contactado: retried later, no note. 333 Finalizado: noted, left as is.
+    assert typed == ["111", "333"]
+    assert finished == [(1, True), (2, False), (3, True)]
+
+
+def test_tokko_lead_pairs_only_with_a_single_matching_conversation():
+    opps = [
+        # Vanessa 1191: email matches
+        {"opportunity_id": 1191, "email": "van.del.rosal@gmail.com", "phone": "+525564223458",
+         "listing_id": "151311972", "property_public_id": "EB-WV7938"},
+        # phone only (email differs in i24), matched by EB code
+        {"opportunity_id": 2, "email": "otro@x.com", "phone": "+525511112222",
+         "listing_id": "", "property_public_id": "EB-AAA111"},
+        # same person on a different listing: no pair
+        {"opportunity_id": 3, "email": "ana@x.com", "phone": "",
+         "listing_id": "999", "property_public_id": "EB-ZZZ999"},
+        # two conversations match: ambiguous, no pair
+        {"opportunity_id": 4, "email": "dup@x.com", "phone": "",
+         "listing_id": "555", "property_public_id": ""},
+    ]
+    rows = [
+        {"lead_id": "900", "email": "Van.Del.Rosal@gmail.com", "phone": "5215500000000",
+         "listing_id": "151311972", "property_public_id": "EB-WV7938"},
+        {"lead_id": "901", "email": "", "phone": "525511112222",
+         "listing_id": "777", "property_public_id": "eb-aaa111"},
+        {"lead_id": "902", "email": "ana@x.com", "phone": "", "listing_id": "123",
+         "property_public_id": "EB-OTRA01"},
+        {"lead_id": "903", "email": "dup@x.com", "phone": "", "listing_id": "555",
+         "property_public_id": ""},
+        {"lead_id": "904", "email": "dup@x.com", "phone": "", "listing_id": "555",
+         "property_public_id": ""},
+    ]
+
+    assert i24_notes.pair_tokko_leads(opps, rows) == [(1191, "900"), (2, "901")]
 
 
 def test_note_worker_is_off_unless_explicitly_enabled(monkeypatch):

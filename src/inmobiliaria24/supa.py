@@ -298,3 +298,52 @@ async def finish_v3_i24_note(
         )
         response.raise_for_status()
     return response.json() is True
+
+
+async def v3_i24_tokko_unpaired(since: datetime) -> list[dict]:
+    """Assigned Tokko/Inmuebles24 opportunities without an i24 conversation paired."""
+    cfg = _supa_cfg()
+    if not cfg:
+        return []
+    url, key = cfg
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"{url}/rest/v1/rpc/v3_i24_tokko_unpaired",
+            json={"p_since": since.isoformat()},
+            headers=_headers(key),
+        )
+        response.raise_for_status()
+    return _v3_rpc_rows(response.json())
+
+
+async def v3_i24_tokko_pair(opportunity_id: int, i24_lead_id: str) -> bool:
+    """Enqueue Contactado + note for one paired opportunity (idempotent)."""
+    cfg = _supa_cfg()
+    if not cfg:
+        return False
+    url, key = cfg
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(
+            f"{url}/rest/v1/rpc/v3_i24_tokko_pair",
+            json={"p_opportunity_id": opportunity_id, "p_i24_lead_id": i24_lead_id},
+            headers=_headers(key),
+        )
+        response.raise_for_status()
+    return response.json() is True
+
+
+async def v3_i24_notes_pending() -> bool:
+    """True when the note queue has work a browser run could do."""
+    cfg = _supa_cfg()
+    if not cfg:
+        return False
+    url, key = cfg
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(
+            f"{url}/rest/v1/i24_note_ledger",
+            params={"select": "opportunity_id", "state": "in.(pending,leased,failed)",
+                    "attempts": "lt.5", "limit": "1"},
+            headers=_headers(key),
+        )
+        response.raise_for_status()
+    return bool(response.json())

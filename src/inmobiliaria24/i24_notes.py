@@ -1,5 +1,8 @@
 """Write the internal note in the Inmuebles24 conversation after the auction outcome.
 
+Since 2026-10-13 the queue holds only Tokko leads taken with TOMO: the worker first
+flips the conversation to Contactado, then types the note.
+
 The team used to type "Nota interna: <nombre>" by hand once a lead had an owner.
 `i24_note_ledger` (migration 20260913100000) turns that into a leased job; this
 worker is the hand that types it, once per scraper run, on the same logged-in
@@ -14,7 +17,7 @@ import re
 
 from loguru import logger
 
-from .scraper import INTERESADOS_URL, _navigate_spa
+from .scraper import INTERESADOS_URL, _navigate_spa, mark_lead_contacted
 
 # The tab is a plain <button><div><span>Notas</span></div></button>: no role, no id.
 NOTES_TAB_SELECTORS = ("text=/^\\s*Notas\\s*$/",)
@@ -68,15 +71,49 @@ async def write_internal_note(
     return result
 
 
+def _digits10(value) -> str:
+    return re.sub(r"\D", "", str(value or ""))[-10:]
+
+
+def pair_tokko_leads(opportunities: list[dict], rows: list[dict]) -> list[tuple[int, str]]:
+    """Pair each Tokko opportunity with exactly one i24 inbox conversation.
+
+    Same listing (i24 id or EB code) AND same email or 10-digit phone. Zero or
+    several candidates pair nothing: a missing mark beats marking the wrong lead.
+    """
+    pairs = []
+    for opp in opportunities:
+        email = str(opp.get("email") or "").strip().lower()
+        phone = _digits10(opp.get("phone"))
+        listing = str(opp.get("listing_id") or "")
+        code = str(opp.get("property_public_id") or "").strip().upper()
+        hits = {
+            str(row["lead_id"]) for row in rows
+            if ((listing and str(row.get("listing_id") or "") == listing)
+                or (code and str(row.get("property_public_id") or "").upper() == code))
+            and ((email and str(row.get("email") or "").strip().lower() == email)
+                 or (len(phone) == 10 and _digits10(row.get("phone")) == phone))
+        }
+        if len(hits) == 1:
+            pairs.append((int(opp["opportunity_id"]), hits.pop()))
+    return pairs
+
+
 async def run_v3_i24_note_worker(page, supa, *, evidence=None, limit: int = 10) -> int:
-    """Drain the leased note queue on this run's browser. Returns notes written."""
+    """Drain the leased queue: Contactado first, then the note. Returns notes written."""
     written = 0
     for claim in await supa.claim_v3_i24_notes(limit):
         lead_id = str(claim.get("i24_lead_id") or "")
         try:
-            result = await write_internal_note(
-                page, lead_id, str(claim.get("note_text") or ""), evidence=evidence
-            )
+            status: dict = {}
+            # A Finalizado conversation was closed by hand: keep it, still note it.
+            contacted = await mark_lead_contacted(page, {"lead_id": lead_id}, evidence=status)
+            if not contacted and status.get("error_code") != "unexpected_terminal_status":
+                result = {"ok": False, "reason": f"contactado:{status.get('error_code')}"}
+            else:
+                result = await write_internal_note(
+                    page, lead_id, str(claim.get("note_text") or ""), evidence=evidence
+                )
         except Exception as exc:
             result = {"ok": False, "reason": f"{type(exc).__name__}: {exc}"[:300]}
         logger.info(
