@@ -175,6 +175,10 @@ async def _session_is_valid(page: Page, *, wait_for_render: bool = True) -> bool
         text = await page.evaluate("() => (document.body && document.body.innerText) || ''")
     except Exception:
         text = ""
+    # Logged out, Interesados renders a login modal over an "Error de Carga" shell
+    # that is long enough to pass the length check below (seen 2026-10-13).
+    if "Ingresa tu email" in text:
+        return False
     if len(text.strip()) < 100:
         if not wait_for_render:
             return False
