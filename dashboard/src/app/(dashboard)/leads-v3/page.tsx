@@ -58,7 +58,7 @@ function responsable(l: V3Lead): string {
       ? `toco Tomo en ${l.minutes_to_claim} min`
       : "toco Tomo";
   }
-  if (l.assignment_method === "sandy_fallback") return "Sandy por vencimiento";
+  if (l.assignment_method === "sandy_fallback") return `${l.assigned_name ?? "Sandy"} por vencimiento`;
   if (l.assignment_method === "unassigned") return "Sin asignación";
   return "asignacion directa";
 }
@@ -66,7 +66,7 @@ function responsable(l: V3Lead): string {
 const kpiCards = [
   { key: "total" as const, label: "Leads Hoy" },
   { key: "claimed" as const, label: "Tomados" },
-  { key: "sandy" as const, label: "A Sandy" },
+  { key: "sandy" as const, label: "A respaldo" },
   { key: "unassigned" as const, label: "Sin asignación" },
   { key: "open" as const, label: "En Oferta" },
   { key: "withProblem" as const, label: "Con Problema" },

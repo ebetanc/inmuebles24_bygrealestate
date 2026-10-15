@@ -50,7 +50,7 @@ const cards = leads.map(l => {
       else if (a.status === 'expired') st = `${BAD} venció sin respuesta`;
       else if (a.status === 'failed' || a.failed_at) { st = `${BAD} WhatsApp falló ${hhmm(a.failed_at)}`; if (!l.assigned_agent_id) problems.push('WhatsApp no llegó a ' + a.to); }
       else if (a.delivered_at && l.assigned_agent_id) st = `${BAD} venció sin respuesta`;
-      else if (a.delivered_at) st = `${WAIT} entregado, esperando Tomo (5 min)`;
+      else if (a.delivered_at) st = `${WAIT} entregado, esperando Tomo`;
       else if (a.sent_at) { st = `${WAIT} enviado, sin confirmación de entrega`; if (!l.assigned_agent_id && mins(a.sent_at, row.until) > 3) problems.push('Sin "entregado" de Meta para ' + a.to); }
       else { st = `${WAIT} pedido, aún no enviado`; if (!l.assigned_agent_id && mins(a.requested_at, row.until) > 3) problems.push('Oferta a ' + a.to + ' pedida hace ' + mins(a.requested_at, row.until) + ' min sin enviar'); }
       lines.push(`WhatsApp a <b>${esc(a.to)}</b> (${tierName(a.tier)}): enviado ${hhmm(a.sent_at || a.requested_at)} · entregado ${a.delivered_at ? OK + ' ' + hhmm(a.delivered_at) : '—'} · ${st}`);
@@ -60,7 +60,7 @@ const cards = leads.map(l => {
   }
   const sandyEv = events.find(e => e.type === 'manager_assigned');
   if (l.assigned_agent_id) {
-    if (claimed) nClaim++; else if (l.assigned_role === 'manager') nSandy++; else nClaim++;
+    if (claimed) nClaim++; else if (sandyEv) nSandy++; else nClaim++;
     const how = claimed ? 'tocó Tomo' : (sandyEv ? 'nadie tomó → responsable final' + (sandyEv.reason ? ' (' + esc(sandyEv.reason) + ')' : '') : 'asignación directa');
     lines.push(`<b>Asignado a ${esc(l.assigned_name || l.assigned_agent_id)}</b> ${hhmm(l.assigned_at)} · ${how}`);
   } else if (l.state === 'unassigned') {
@@ -109,7 +109,7 @@ ${problems.length ? '<div style="color:#C8483B;font-weight:700;margin-bottom:6px
 
 const label = 'Reporte del día';
 const dayStr = new Date(row.until).toLocaleDateString('es-MX', {timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long'});
-const summary = `${leads.length} lead(s) con actividad · ${nClaim} tomado(s) por asesor/guardia · ${nUnassigned} sin asignación${nSandy ? ' · ' + nSandy + ' a Sandy' : ''} · ${nOpen} en oferta · ${nEbOk} con EasyBroker cerrado · ${nProblem} con problema`;
+const summary = `${leads.length} lead(s) con actividad · ${nClaim} tomado(s) por asesor/guardia · ${nUnassigned} sin asignación${nSandy ? ' · ' + nSandy + ' a respaldo (Sandy/BYG)' : ''} · ${nOpen} en oferta · ${nEbOk} con EasyBroker cerrado · ${nProblem} con problema`;
 const healthHtml = `<div style="font-size:13px;color:#5D6C79">Último aviso de Tokko ${hhmm(h.tokko_last)} (hace ${tokkoAge ?? '?'} min) · en cola nocturna ${h.queued_night} · ofertas atoradas ${h.stuck_requested} · vencidas sin escalar ${h.stuck_expired}</div>`;
 const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:760px;color:#16232E">
 <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#5D6C79">Inmobiliaria24 · BYG · Lead Routing V3</div>

@@ -51,6 +51,10 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
    `tokko_shadow_leads` y, si trae contacto + `Ref: EB-…`, llama `v3_tokko_intake`.
    Los dos avisos de un mismo lead (Consulta + WhatsApp) son una sola oportunidad.
    WF26 manda a la papelera (03:30 CDMX) los avisos con más de 7 días.
+   **EasyBroker directo (desde 2026-10-15):** WF27 lee cada 2 min la API `contact_requests`
+   y mete por `v3_tokko_intake` (`origin=easybroker`, id `eb:<request>`) todo lo que no sea
+   Inmuebles24 (ya llega por Tokko) ni Instagram: Lamudi, Pincali, MLS, web… El worker EB
+   enlaza la solicitud existente (no crea otra); no hay marca ni nota en i24.
 2. **Contactado al TOMO (desde 2026-10-13).** La captura de Tokko nace verificada y la Pi ya
    no captura. Con `I24_TOKKO_MARK=1`, `inmobiliaria24.timer` (cada 5 min) solo marca: cuando
    un lead de Tokko/Inmuebles24 queda asignado, empareja su conversación en la bandeja de i24
@@ -67,18 +71,25 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
    el tag de la propiedad (nombre del ejecutivo) contra `property_agent_alias`.
    Sandy puede ser dueña aunque sea manager. Cero o más de un tag = dueño
    inválido → se escala directo a guardia.
-5. **Oferta.** WF13 envía la plantilla Meta `lead_subasta_v3` con un solo botón
+5. **Oferta.** WF13 envía la plantilla Meta `lead_subasta_v3b` (sin minutos fijos) con un solo botón
    "Tomo" (payload `claim:v3:<opp>:<attempt>`). **Requiere URL pública de
    EasyBroker**; sin ella no hay mensaje posible.
 6. **Reclamo.** Callbacks de Meta → WF22 (valida HMAC, escribe en un inbox
    durable) → WF1 → WF3b `claim_v3_delivery_from_webhook`. El primer clic válido
-   gana; respuestas tardías o de otro intento no cambian al responsable.
-7. **Tiempos.** WF23 es el **único** temporizador (cron cada 30 s): 2 minutos sin
-   `delivered`, o 5 minutos después de `delivered`, disparan WF3c
-   `v3_advance_routing_tier` → guardia del turno (`get_guard_coverage_slots`, una
-   sola guardia por turno, tomada del calendario del dashboard) → 5 minutos más →
-   cierre `unassigned` ("SIN ASIGNACIÓN") vía `v3_mark_unassigned`. Sandy no recibe
-   WhatsApp por este cierre.
+   gana; respuestas tardías o de otro intento no cambian al responsable. Un "tomo"
+   escrito a mano también vale: toma la oferta citada o, si no cita, la única oferta
+   abierta del remitente (con varias abiertas pide usar el botón). Al que llega tarde
+   WF3b le dice quién lo tomó.
+7. **Tiempos (hora compartida desde 2026-10-15).** WF23 es el **único** temporizador
+   (cron cada 30 s). El dueño tiene 5 min solo (o 2 min sin `delivered`); entonces WF3c
+   `v3_advance_routing_tier` manda la oferta a la guardia del turno **sin cerrar la del
+   dueño**: los dos pueden tocar Tomo hasta el minuto 65 (`v3_shared_deadline` = primera
+   oferta + 65 min). Si no hay guardia o la guardia es la propia dueña, la segunda oferta
+   va a Sandy (`v3_second_offer_target`). Nadie la toma en el minuto 65 →
+   `v3_assign_manager`: Sandy de lunes a viernes 09:00–18:00 CDMX, el celular BYG
+   (Marusa, `agent_manager_2`) el resto (`v3_fallback_agent`), con aviso
+   `lead_asignado_v3`. `SIN ASIGNACIÓN` queda solo si no hay a quién ofrecer.
+   Prueba sin escribir nada: `python scripts/v3_shared_hour_check.py`.
 8. **Cierre EasyBroker.** El worker `src/easybroker/` corre cada minuto, correlaciona
    la solicitud exacta (propiedad + email/teléfono) y escribe por Playwright la nota
    `RESPONSABLE: <nombre>` y el estado `Atendida`. Los efectos son idempotentes vía
@@ -90,14 +101,15 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
 |----|----|-----------|----------|
 | WF10 | `Obr38705ZZYS3FB8` | Webhook `/webhook/scraper-leads` | Intake del scraper, dedupe, día/noche |
 | WF12 | `w7yJr7naWoxPq6Pw` | Sub-workflow (WF10) | Resuelve dueño por tag de EasyBroker |
-| WF13 | `Bo2YbbUpmBzRbhDa` | Sub-workflow | Envía `lead_subasta_v3` al destinatario del tier |
+| WF13 | `Bo2YbbUpmBzRbhDa` | Sub-workflow | Envía `lead_subasta_v3b` al destinatario del tier |
 | WF22 | `Z89IQDw1fgWlqXEW` | Webhook Meta (HMAC) | Inbox durable de callbacks `sent/delivered/read/failed` y clics |
 | WF1 | `snF6Sr9CBJIevMVD` | Sub-workflow (WF22) | Enruta el evento entrante al handler correcto |
 | WF3b | `JM2HxJxl53k4zlki` | Sub-workflow (WF1) | `claim_v3_delivery_from_webhook`: reclamo atómico |
 | WF23 | `MjfHw3tYE2qYgJfM` | Cron cada 30 s | Único motor de tiempos: detecta vencimientos |
-| WF3c | `UNIKqyAvIUAZkNIs` | Sub-workflow (WF23) | `v3_advance_routing_tier` / `v3_assign_sandy` |
+| WF3c | `UNIKqyAvIUAZkNIs` | Sub-workflow (WF23) | `v3_advance_routing_tier` (guardia en el min 5, respaldo en el 65) |
 | WF7 | `xzBG0GIsHCUd44DC` | Cron 08:05 `America/Mexico_City` | `v3_release_night_queue` + reporte matutino |
 | WF25 | `TokkoWF25Shadow1` | Gmail cada minuto | Lee avisos de Tokko → `tokko_shadow_leads` + `v3_tokko_intake` |
+| WF27 | `EBDirectWF27Intk` | Cron cada 2 min | EasyBroker directo (todo menos Inmuebles24 e Instagram) → `v3_tokko_intake` |
 | WF26 | `TokkoWF26Cleanup` | Cron 03:30 CDMX | Manda a la papelera los avisos de Tokko con más de 7 días en el Gmail de intake |
 | WF20 | `pYV88ntxI0Lc4NCB` | Cron diario 09:00 CDMX | Watchdog: 24 h sin avisos de Tokko, errores, silencios |
 | WF21 | `He95yJflKVspGFyb` | Error trigger global | Email de error con throttling |

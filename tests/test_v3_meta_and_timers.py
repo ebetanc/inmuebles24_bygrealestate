@@ -21,17 +21,23 @@ def _templates():
 
 def test_meta_v3_templates_have_frozen_contract():
     templates = {template["name"]: template for template in _templates()}
-    assert set(templates) == {"lead_subasta_v3", "lead_asignado_v3", "alerta_routing_v3"}
-    for name in ("lead_subasta_v3", "lead_asignado_v3"):
+    assert set(templates) == {"lead_subasta_v3", "lead_subasta_v3b", "lead_asignado_v3", "alerta_routing_v3"}
+    for name in ("lead_subasta_v3", "lead_subasta_v3b", "lead_asignado_v3"):
         body = next(part for part in templates[name]["components"] if part["type"] == "BODY")
         assert [body["text"].count(f"{{{{{number}}}}}") for number in range(1, 9)] == [1] * 8
         assert templates[name]["language"] == "es_MX"
         assert templates[name]["category"] == "UTILITY"
-    buttons = next(
-        part for part in templates["lead_subasta_v3"]["components"]
-        if part["type"] == "BUTTONS"
+    for name in ("lead_subasta_v3", "lead_subasta_v3b"):
+        buttons = next(
+            part for part in templates[name]["components"]
+            if part["type"] == "BUTTONS"
+        )
+        assert buttons["buttons"] == [{"type": "QUICK_REPLY", "text": "Tomo"}]
+    # Shared hour (2026-10-15): the live offer template names no fixed minutes.
+    assert "minutos" not in next(
+        part["text"] for part in templates["lead_subasta_v3b"]["components"]
+        if part["type"] == "BODY"
     )
-    assert buttons["buttons"] == [{"type": "QUICK_REPLY", "text": "Tomo"}]
     assert all(part["type"] != "BUTTONS" for part in templates["lead_asignado_v3"]["components"])
     assert "Este lead fue asignado directamente a ti." in next(
         part["text"] for part in templates["lead_asignado_v3"]["components"]

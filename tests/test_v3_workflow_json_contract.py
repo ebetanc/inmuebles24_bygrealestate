@@ -242,7 +242,10 @@ def test_wf3b_routes_v3_to_exact_claim_rpc_and_keeps_v2_drain():
         assert "webhook_event_id" in claim["parameters"]["options"]["queryReplacement"]
         assert claim["credentials"]["postgres"]["id"]
         result_builder = node(workflow, "Build V3 Claim Result")["parameters"]["jsCode"]
-        assert "claimed: 'Prospecto asignado. Ya puedes atenderlo.'" in result_builder
+        assert "claimed: '✅ Te asignamos el prospecto'" in result_builder
+        # Shared hour (2026-10-15): late tappers learn who took it; a typed "tomo" explains itself.
+        for outcome in ("already_assigned_other", "ambiguous_text_claim", "no_open_offer", "late"):
+            assert outcome + ":" in result_builder
         send = node(workflow, "Send Routing V2 Claim Result")
         assert send["continueOnFail"] is False
         assert send["retryOnFail"] is True and send["maxTries"] == 3

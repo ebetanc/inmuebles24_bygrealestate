@@ -1,0 +1,108 @@
+{
+  "id": "EBDirectWF27Intk",
+  "name": "WF27 - EasyBroker Directo Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "f2a7e1c0-0027-4a00-8000-000000000001",
+      "name": "Cada 2 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.easybroker.com/v1/contact_requests",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Authorization",
+              "value": "={{ $env.EASYBROKER_API_KEY }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "page", "value": "1" },
+            { "name": "limit", "value": "50" },
+            { "name": "happened_after", "value": "={{ new Date(Date.now() - 6 * 3600 * 1000).toISOString() }}" }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "f2a7e1c0-0027-4a00-8000-000000000002",
+      "name": "Solicitudes EasyBroker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0],
+      "retryOnFail": true,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "jsCode": "// WF27: leads directos de EasyBroker (Lamudi, Pincali, MLS, web...) -> V3.\n// Inmuebles24 ya entra por Tokko (WF25); Instagram queda fuera (Marusa, 13-oct).\n// v3_tokko_intake es idempotente por 'eb:<id>', asi que releer la misma solicitud no duplica.\nconst START = Date.parse('2026-10-15T06:00:00Z'); // sin backfill de antes de la salida\nconst since = Math.max(START, Date.now() - 6 * 3600 * 1000);\nconst e164 = (raw) => {\n  const s = String(raw || '').trim();\n  const d = s.replace(/\\D/g, '');\n  if (s.startsWith('+') && /^[1-9]\\d{7,14}$/.test(d)) return '+' + d;\n  if (/^\\d{10}$/.test(d)) return '+52' + d;\n  if (/^52\\d{10}$/.test(d)) return '+' + d;\n  return null;\n};\nconst rows = $input.first().json.content || [];\nreturn rows\n  .filter((r) => !/inmuebles24|instagram|^\\s*ig\\s*$/i.test(String(r.source || '')))\n  .filter((r) => Date.parse(r.happened_at) >= since && /^EB-[A-Z0-9]{4,}$/i.test(String(r.property_id || '')))\n  .map((r) => ({ json: {\n    eb_request_id: r.id,\n    source: r.source || 'EasyBroker',\n    name: r.name || null,\n    phone: e164(r.phone),\n    email: String(r.email || '').trim().toLowerCase() || null,\n    property_id: String(r.property_id).toUpperCase(),\n    message: String(r.message || '').replace(/\\s+/g, ' ').trim().slice(0, 2000) || null,\n  } }))\n  .filter((x) => x.json.phone || x.json.email);"
+      },
+      "id": "f2a7e1c0-0027-4a00-8000-000000000003",
+      "name": "Filtrar fuentes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT t.*\nFROM (SELECT $1::jsonb AS j) s,\nLATERAL public.v3_tokko_intake(\n  $2,\n  'eb:' || (s.j->>'eb_request_id'),\n  'eb:' || (s.j->>'eb_request_id'),\n  s.j->>'property_id', s.j->>'email', s.j->>'phone',\n  jsonb_strip_nulls(jsonb_build_object(\n    'origin', 'easybroker', 'portal', s.j->>'source',\n    'lead_id', 'eb:' || (s.j->>'eb_request_id'), 'eb_request_id', (s.j->>'eb_request_id')::bigint,\n    'name', s.j->>'name', 'phone', s.j->>'phone', 'email', s.j->>'email',\n    'message', s.j->>'message', 'property_public_id', s.j->>'property_id')),\n  now()) t;",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json), $env.V3_ACCOUNT_KEY || $env.EASYBROKER_ACCOUNT_KEY || 'default'] }}",
+          "queryBatching": "independently",
+          "connectionTimeout": 15
+        }
+      },
+      "id": "f2a7e1c0-0027-4a00-8000-000000000004",
+      "name": "Crear lead V3",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [720, 0],
+      "credentials": {
+        "postgres": {
+          "id": "dEHKygi1neTNvPtH",
+          "name": "Postgres account BYG project"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada 2 minutos": {
+      "main": [[{ "node": "Solicitudes EasyBroker", "type": "main", "index": 0 }]]
+    },
+    "Solicitudes EasyBroker": {
+      "main": [[{ "node": "Filtrar fuentes", "type": "main", "index": 0 }]]
+    },
+    "Filtrar fuentes": {
+      "main": [[{ "node": "Crear lead V3", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Mexico_City",
+    "errorWorkflow": "He95yJflKVspGFyb",
+    "saveDataSuccessExecution": "none",
+    "executionTimeout": 60
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}

@@ -62,6 +62,32 @@ TEMPLATES = (
         ],
     },
     {
+        # 2026-10-13: dueño + guardia comparten la hora; sin minutos fijos en el texto.
+        "name": "lead_subasta_v3b",
+        "language": "es_MX",
+        "category": "UTILITY",
+        "components": [
+            {
+                "type": "BODY",
+                "text": (
+                    "🏠 Nuevo lead\n\n"
+                    "Prospecto: {{1}}\nTeléfono: {{2}}\n\n"
+                    "Propiedad: {{3}}\nOperación: {{4}}\nZona: {{5}}\n"
+                    "Precio: {{6}}\nID: {{7}}\nEasyBroker: {{8}}\n\n"
+                    "Toca Tomo para quedártelo. Se lo queda quien lo tome primero."
+                ),
+                "example": {
+                    "body_text": [[
+                        "Andrea Ejemplo", "+525500000000", "Casa muestra",
+                        "Venta", "Zona Centro", "$1,000,000 MXN",
+                        "EB-DEMO123", "https://www.easybroker.com/"
+                    ]]
+                },
+            },
+            {"type": "BUTTONS", "buttons": [{"type": "QUICK_REPLY", "text": "Tomo"}]},
+        ],
+    },
+    {
         "name": "lead_asignado_v3",
         "language": "es_MX",
         "category": "UTILITY",
