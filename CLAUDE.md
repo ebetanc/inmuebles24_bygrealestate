@@ -10,7 +10,7 @@ Rules:
 
 ## Proyecto
 
-Lead Routing V3 en producción (desde 2026-09-02). Flujo, IDs de los 13 workflows vivos y
+Lead Routing V3 en producción (desde 2026-09-02). Flujo, IDs de los 16 workflows vivos y
 horarios: `README.md` (sección «Flujo» y tabla de workflows).
 
 Reglas de operación:

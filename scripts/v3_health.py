@@ -13,7 +13,7 @@ from psycopg.rows import dict_row
 
 ROOT = Path(__file__).resolve().parents[1]
 MINUTES = int(sys.argv[1]) if len(sys.argv) > 1 else 35
-V3_WORKFLOWS = 13
+V3_WORKFLOWS = 16
 
 env = {}
 for raw in (ROOT / ".env").read_text(encoding="utf-8-sig").splitlines():
@@ -90,7 +90,7 @@ if not pi.startswith("active active"):
     alerts.append(f"Pi timers/ssh: {pi[:120]}")
 
 n8n = ssh("root@69.62.108.2",
-          "docker exec root-n8n-1 n8n list:workflow --active=true 2>/dev/null | grep -cE 'WF(1|3b|3c|7|10|12|13|17|20|21|22|23|24) '; "
+          "docker exec root-n8n-1 n8n list:workflow --active=true 2>/dev/null | grep -cE 'WF(1|3b|3c|7|10|12|13|17|20|21|22|23|24|25|26|27) '; "
           "docker stats --no-stream --format '{{.MemUsage}}' root-n8n-1")
 print("== n8n active V3 workflows / mem:", n8n.replace("\n", " · "))
 try:
