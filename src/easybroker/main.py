@@ -35,6 +35,7 @@ from easybroker.supa import (
     claim_v3_easybroker_effects,
     finish_v3_easybroker_effect,
     fetch_contact_requests,
+    fetch_ingested_contact_request,
     create_pending_easybroker_requests,
     reconcile_i24_easybroker_requests,
 )
@@ -80,7 +81,11 @@ async def _run_v3_effect_worker(settings, page, *, limit: int = 20) -> tuple[int
         responsible = str(claim.get("responsible_first_name") or "").strip()
         lease_token = str(claim["lease_token"])
         note_text = f"RESPONSABLE: {responsible}"
-        provider_request = provider_requests.get(request_id) or {}
+        provider_request = provider_requests.get(request_id)
+        if provider_request is None:
+            # Older than the API window (backfilled or long-retried effects):
+            # the ingested copy of that same feed still has the identity.
+            provider_request = await fetch_ingested_contact_request(settings, request_id) or {}
         property_id = str(provider_request.get("property_public_id") or "")
         phone = str(provider_request.get("e164_phone") or "")
         email = str(provider_request.get("normalized_email") or "")

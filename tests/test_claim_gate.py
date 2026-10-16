@@ -594,6 +594,59 @@ def test_v3_worker_maps_api_request_to_exact_property_and_phone(monkeypatch):
     assert captured["evidence"]["match_method"] == "property+identity"
 
 
+def test_v3_worker_falls_back_to_ingested_identity_for_old_requests(monkeypatch):
+    """A request older than the API window is absent from fetch_contact_requests;
+    its ingested inbox row supplies property + identity instead of skipping."""
+    captured = {}
+
+    async def provider_rows(settings):
+        return []
+
+    async def ingested(settings, request_id):
+        captured["looked_up"] = request_id
+        return {
+            "eb_request_id": 41498042,
+            "property_public_id": "EB-XC1022",
+            "e164_phone": "+525554326565",
+            "normalized_email": "cynthiawc76@gmail.com",
+        }
+
+    async def claims(settings, limit):
+        return [{
+            "eb_request_id": 41498042,
+            "responsible_first_name": "Gina",
+            "lease_token": "lease",
+            "note_due": True,
+            "attended_due": False,
+        }]
+
+    async def attend(page, **kwargs):
+        captured.update(kwargs)
+        return {
+            "found": True,
+            "match_method": "property+identity",
+            "status_ok": True,
+            "note_ok": True,
+            "status_changed": False,
+            "note_changed": True,
+        }
+
+    async def finish(settings, **kwargs):
+        return {"ok": True}
+
+    monkeypatch.setattr(eb_main, "fetch_contact_requests", provider_rows)
+    monkeypatch.setattr(eb_main, "fetch_ingested_contact_request", ingested)
+    monkeypatch.setattr(eb_main, "claim_v3_easybroker_effects", claims)
+    monkeypatch.setattr(eb_main, "attend_lead", attend)
+    monkeypatch.setattr(eb_main, "finish_v3_easybroker_effect", finish)
+
+    asyncio.run(eb_main._run_v3_effect_worker(object(), object()))
+    assert captured["looked_up"] == 41498042
+    assert captured["property_id"] == "EB-XC1022"
+    assert captured["phone"] == "+525554326565"
+    assert captured["email"] == "cynthiawc76@gmail.com"
+
+
 def test_v3_worker_persists_responsible_conflict_as_failed_effect(monkeypatch):
     captured = {}
 

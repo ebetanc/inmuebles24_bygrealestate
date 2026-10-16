@@ -528,6 +528,21 @@ async def get_ingestion_checkpoint(settings, *, account_key: str) -> dict | None
     return rows[0] if isinstance(rows, list) and rows else None
 
 
+async def fetch_ingested_contact_request(settings, request_id: int) -> dict | None:
+    """Identity of one request as ingested from the same API feed, for requests
+    older than the 48 h window fetch_contact_requests still returns."""
+    endpoint = (
+        f"{settings.supabase_url.rstrip('/')}/rest/v1/easybroker_contact_request_inbox"
+        f"?select=eb_request_id,property_public_id,e164_phone,normalized_email"
+        f"&eb_request_id=eq.{int(request_id)}&limit=1"
+    )
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.get(endpoint, headers=_headers(settings.supabase_service_key))
+        response.raise_for_status()
+        rows = response.json()
+    return rows[0] if isinstance(rows, list) and rows else None
+
+
 async def ingest_contact_request_batch(settings, requests: list[dict], *, account_key: str) -> dict:
     """Persist one complete sanitized batch; checkpointing is DB-transactional."""
     endpoint = f"{settings.supabase_url.rstrip('/')}/rest/v1/rpc/ingest_easybroker_contact_request_batch"
