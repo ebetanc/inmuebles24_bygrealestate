@@ -61,8 +61,6 @@ with psycopg.connect(host=env["SUPABASE_DB_HOST"], port=int(env["SUPABASE_DB_POR
 
 print(f"== V3 health · ventana {MINUTES} min · ahora {h['now_cdmx']:%H:%M} CDMX")
 print("supabase:", json.dumps({k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in h.items()}, ensure_ascii=False, default=str))
-if h["scraper_age_min"] is None or h["scraper_age_min"] > 40:
-    alerts.append(f"Scraper sin corrida OK hace {h['scraper_age_min']} min")
 if h["stuck_requested"]:
     alerts.append(f"{h['stuck_requested']} envío(s) WhatsApp en 'requested' >3 min (WF23/WF13)")
 if h["stuck_expired"]:
@@ -84,10 +82,15 @@ pi = ssh("esteban@100.88.225.103",
          "systemctl is-active inmobiliaria24.timer easybroker.timer | paste -sd' '; "
          f"C=$(date -d '-{MINUTES} min' '+%Y-%m-%d %H:%M'); "
          "for f in eb_run.log run.log; do sudo -n tail -c 80000 /opt/inmobiliaria24/logs/$f 2>/dev/null"
-         " | grep -a 'ERROR\\|EasyBroker V3 .* failed' | awk -v c=\"$C\" 'substr($0,1,16)>=c' | tail -5 | sed \"s/^/$f: /\"; done")
+         " | grep -a 'ERROR\\|EasyBroker V3 .* failed' | awk -v c=\"$C\" 'substr($0,1,16)>=c' | tail -5 | sed \"s/^/$f: /\"; done; "
+         # Since the Tokko cutover the Pi only writes scrape_logs when it marks a lead in i24,
+         # so the liveness signal is the 5-min 'Tokko -> i24' tick in the journal, not scrape_logs.
+         "echo HB=$(sudo -n journalctl -u inmobiliaria24.service --since '-12 min' -o cat 2>/dev/null | grep -c 'Tokko -> i24')")
 print("== pi:", pi)
 if not pi.startswith("active active"):
     alerts.append(f"Pi timers/ssh: {pi[:120]}")
+elif "HB=0" in pi or "HB=" not in pi:
+    alerts.append("Pi: sin tick 'Tokko -> i24' en 12 min (marcado i24 parado)")
 
 n8n = ssh("root@69.62.108.2",
           "docker exec root-n8n-1 n8n list:workflow --active=true 2>/dev/null | grep -cE 'WF(1|3b|3c|7|10|12|13|17|20|21|22|23|24|25|26|27) '; "

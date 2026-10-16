@@ -240,8 +240,10 @@
         1500,
         1100
       ],
-      "retryOnFail": false,
-      "onError": "continueRegularOutput"
+      "retryOnFail": true,
+      "onError": "continueRegularOutput",
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {

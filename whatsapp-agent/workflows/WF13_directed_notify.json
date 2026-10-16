@@ -163,7 +163,9 @@
         300
       ],
       "onError": "continueErrorOutput",
-      "retryOnFail": false
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -330,7 +332,9 @@
         100
       ],
       "onError": "continueErrorOutput",
-      "retryOnFail": false
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
