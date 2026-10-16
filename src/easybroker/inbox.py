@@ -154,11 +154,23 @@ async def find_request_by_property_and_identity(
     if not property_value or not (target_phone or target_email):
         return False
 
-    hrefs = await page.evaluate(_FIND_PROPERTY_HREFS_JS, property_value)
-    if not hrefs:
-        # A request older than the first Buzón page (~15 rows) never shows up
-        # there, so filter the Buzón server-side by the lead's identity first
-        # and apply the same property + identity verification below.
+    async def verified_rows() -> list[str]:
+        verified: list[str] = []
+        for href in await page.evaluate(_FIND_PROPERTY_HREFS_JS, property_value):
+            if not await _open_conv_href(page, href):
+                continue
+            body = await page.locator("body").inner_text()
+            phone_match = bool(target_phone and target_phone in re.sub(r"\D", "", body))
+            email_match = bool(target_email and target_email in body.lower())
+            if phone_match or email_match:
+                verified.append(href)
+        return verified
+
+    verified = await verified_rows()
+    if not verified:
+        # A request older than the first Buzón page (~15 rows) is not there
+        # (or only other leads of the same property are), so filter the Buzón
+        # server-side by the lead's identity and verify the same way.
         for query in (re.sub(r"\D", "", phone or ""), target_email):
             if not query:
                 continue
@@ -166,18 +178,9 @@ async def find_request_by_property_and_identity(
             if not await _navigate_render(page, url):
                 continue
             await asyncio.sleep(random.uniform(1.5, 2.5))
-            hrefs = await page.evaluate(_FIND_PROPERTY_HREFS_JS, property_value)
-            if hrefs:
+            verified = await verified_rows()
+            if verified:
                 break
-    verified: list[str] = []
-    for href in hrefs:
-        if not await _open_conv_href(page, href):
-            continue
-        body = await page.locator("body").inner_text()
-        phone_match = bool(target_phone and target_phone in re.sub(r"\D", "", body))
-        email_match = bool(target_email and target_email in body.lower())
-        if phone_match or email_match:
-            verified.append(href)
 
     if len(verified) != 1:
         logger.error(

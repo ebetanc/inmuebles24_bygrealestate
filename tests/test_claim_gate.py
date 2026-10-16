@@ -546,6 +546,50 @@ def test_easybroker_property_resolution_searches_buzon_when_request_is_old(monke
     assert page.current == "/agent/conversations/7"
 
 
+def test_easybroker_property_resolution_searches_when_first_page_has_other_lead(monkeypatch):
+    """The first page shows another lead of the same property (no identity
+    match); the lead's own conversation is found through the Buzón filter."""
+    class Body:
+        def __init__(self, page):
+            self.page = page
+
+        async def inner_text(self):
+            return self.page.bodies[self.page.current]
+
+    class Page:
+        def __init__(self):
+            self.searched = None
+            self.current = ""
+            self.bodies = {
+                "/agent/conversations/1": "Claudia Teléfono +52 26 1370 7177",
+                "/agent/conversations/9": "Itzel Teléfono +52 55 1158 0895",
+            }
+
+        async def evaluate(self, script, value):
+            return ["/agent/conversations/9"] if self.searched else ["/agent/conversations/1"]
+
+        def locator(self, selector):
+            return Body(self)
+
+    page = Page()
+
+    async def navigate(current_page, url, **_):
+        current_page.searched = url
+        return True
+
+    async def open_href(current_page, href):
+        current_page.current = href
+        return True
+
+    monkeypatch.setattr(inbox, "_navigate_render", navigate)
+    monkeypatch.setattr(inbox, "_open_conv_href", open_href)
+    monkeypatch.setattr(inbox.random, "uniform", lambda *_: 0)
+    assert asyncio.run(inbox.find_request_by_property_and_identity(
+        page, "EB-UQ5945", "+525511580895", "itzel.godigifts@gmail.com"
+    )) is True
+    assert page.current == "/agent/conversations/9"
+
+
 def test_v3_worker_maps_api_request_to_exact_property_and_phone(monkeypatch):
     captured = {}
 
