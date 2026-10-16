@@ -643,3 +643,22 @@ def test_fetch_contact_requests_follows_url_next_page(monkeypatch):
     rows = asyncio.run(supa.fetch_contact_requests(SimpleNamespace(api_key="k")))
     assert calls == [1, 2]
     assert [r["eb_request_id"] for r in rows] == [1, 2]
+
+
+def test_creation_match_accepts_eb_merged_contact_at_post_second():
+    # Opp 1263: EB merged the POST into a contact it had with another email.
+    claim = {
+        "property_public_id": "EB-ABCD1", "normalized_email": "new@gmail.test",
+        "e164_phone": "+525511112222",
+        "correlation_window_start_at": "2026-10-15T19:57:00Z",
+        "correlation_horizon_at": "2026-10-16T19:57:00Z",
+        "post_attempted_at": "2026-10-15T20:02:14.777Z",
+    }
+    row = {"id": 99, "property_id": "EB-ABCD1", "email": "old@hotmail.test",
+           "phone_e164": "+525511112222", "happened_at": "2026-10-15T20:02:15Z"}
+    assert supa._creation_match(claim, row)
+    row["happened_at"] = "2026-10-15T20:05:00Z"  # outside POST + 2 min
+    assert not supa._creation_match(claim, row)
+    row["happened_at"] = "2026-10-15T20:02:15Z"
+    row["phone_e164"] = "+525599998888"  # nothing matches -> never
+    assert not supa._creation_match(claim, row)

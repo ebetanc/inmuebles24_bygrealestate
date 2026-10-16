@@ -130,10 +130,6 @@ def _creation_match(claim: dict, row: dict) -> bool:
     if not ((expected_email and expected_email == actual_email)
             or (expected_phone and expected_phone == actual_phone)):
         return False
-    if expected_email and actual_email and expected_email != actual_email:
-        return False
-    if expected_phone and actual_phone and expected_phone != actual_phone:
-        return False
     try:
         happened = datetime.fromisoformat(str(normalized["happened_at"]).replace("Z", "+00:00"))
         start = datetime.fromisoformat(str(claim["correlation_window_start_at"]).replace("Z", "+00:00"))
@@ -141,6 +137,19 @@ def _creation_match(claim: dict, row: dict) -> bool:
         if not (start <= happened <= horizon):
             return False
     except (KeyError, TypeError, ValueError):
+        return False
+    # EB merges our POST into a contact it already had (older email/phone); a
+    # request at our POST second needs only one matching id (same rule as
+    # correlate_easybroker_request).
+    try:
+        posted = datetime.fromisoformat(str(claim["post_attempted_at"]).replace("Z", "+00:00"))
+        if posted - timedelta(seconds=5) <= happened <= posted + timedelta(minutes=2):
+            return True
+    except (KeyError, TypeError, ValueError):
+        pass
+    if expected_email and actual_email and expected_email != actual_email:
+        return False
+    if expected_phone and actual_phone and expected_phone != actual_phone:
         return False
     return True
 
