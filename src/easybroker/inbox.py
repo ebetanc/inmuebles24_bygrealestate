@@ -216,7 +216,8 @@ _TAG_STATUS_OPTION_JS = """
         let inMenu = false;
         for (let p = el.parentElement; p; p = p.parentElement) {
             const tc = p.textContent || '';
-            if (tc.includes('Sin atender') && tc.includes('Archivada') && tc.includes('Spam')) { inMenu = true; break; }
+            // Oct-2026 EB menu: "Cambiar estatus" + Sin atender/Atendida only.
+            if (tc.includes('Cambiar estatus') || (tc.includes('Sin atender') && tc.includes('Archivada') && tc.includes('Spam'))) { inMenu = true; break; }
         }
         if (!inMenu) continue;                          // skip the trigger itself
         let c = el;
