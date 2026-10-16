@@ -71,6 +71,10 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
    el tag de la propiedad (nombre del ejecutivo) contra `property_agent_alias`.
    Sandy puede ser dueña aunque sea manager. Cero o más de un tag = dueño
    inválido → se escala directo a guardia.
+   **Cliente que regresa (desde 2026-10-16):** antes del dueño, si la misma persona
+   (correo o teléfono) ya la tomó una asesora en los últimos 90 días, va directo a esa
+   asesora con aviso `lead_asignado_v3`, sin oferta (`v3_returning_client_agent`). Los de
+   MLS son otros asesores y se reparten normal; los números de BYG no cuentan.
 5. **Oferta.** WF13 envía la plantilla Meta `lead_subasta_v3b` (sin minutos fijos) con un solo botón
    "Tomo" (payload `claim:v3:<opp>:<attempt>`). **Requiere URL pública de
    EasyBroker**; sin ella no hay mensaje posible.
