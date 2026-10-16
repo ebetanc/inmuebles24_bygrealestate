@@ -63,6 +63,13 @@ def test_unparseable_notice_is_kept_but_flagged():
     assert row["parse_ok"] is False and row["gmail_message_id"] == "x"
 
 
+@needs_node
+def test_country_code_typed_twice_is_collapsed():
+    html = "Hay una nueva consulta de X<br>Móvil: +52 52 5551043838<br>Ref: EB-XG3457<br>Teléfono: 12345678901234"
+    (row,) = _parse([{"id": "d", "html": html}])
+    assert row["phone"] == "+525551043838"
+
+
 def test_intake_contract():
     trigger = _node("Correo de Tokko")["parameters"]
     assert trigger["filters"] == {"q": 'from:notifier@tokkobroker.com "nueva consulta"', "readStatus": "both"}
