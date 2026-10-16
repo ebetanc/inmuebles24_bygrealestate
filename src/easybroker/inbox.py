@@ -12,6 +12,7 @@ import random
 import re
 import unicodedata
 from pathlib import Path
+from urllib.parse import quote
 
 from loguru import logger
 from playwright.async_api import Page
@@ -154,6 +155,20 @@ async def find_request_by_property_and_identity(
         return False
 
     hrefs = await page.evaluate(_FIND_PROPERTY_HREFS_JS, property_value)
+    if not hrefs:
+        # A request older than the first Buzón page (~15 rows) never shows up
+        # there, so filter the Buzón server-side by the lead's identity first
+        # and apply the same property + identity verification below.
+        for query in (re.sub(r"\D", "", phone or ""), target_email):
+            if not query:
+                continue
+            url = f"{APP_URL}/agent/conversations?search_criteria%5Bquery%5D={quote(query)}&reset_page=true"
+            if not await _navigate_render(page, url):
+                continue
+            await asyncio.sleep(random.uniform(1.5, 2.5))
+            hrefs = await page.evaluate(_FIND_PROPERTY_HREFS_JS, property_value)
+            if hrefs:
+                break
     verified: list[str] = []
     for href in hrefs:
         if not await _open_conv_href(page, href):

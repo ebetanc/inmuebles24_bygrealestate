@@ -507,6 +507,45 @@ def test_easybroker_property_phone_resolution_fails_closed_when_ambiguous(monkey
     )) is False
 
 
+def test_easybroker_property_resolution_searches_buzon_when_request_is_old(monkeypatch):
+    """A request that fell off the first Buzón page is found by filtering the
+    Buzón by the lead's phone, then verified exactly like a recent row."""
+    class Body:
+        async def inner_text(self):
+            return "Teléfono +52 55 9956 9566 Email other@example.com"
+
+    class Page:
+        def __init__(self):
+            self.searched = None
+            self.current = ""
+
+        async def evaluate(self, script, value):
+            assert value == "EB-WT7488"
+            return ["/agent/conversations/7"] if self.searched else []
+
+        def locator(self, selector):
+            return Body()
+
+    page = Page()
+
+    async def navigate(current_page, url, **_):
+        current_page.searched = url
+        return True
+
+    async def open_href(current_page, href):
+        current_page.current = href
+        return True
+
+    monkeypatch.setattr(inbox, "_navigate_render", navigate)
+    monkeypatch.setattr(inbox, "_open_conv_href", open_href)
+    monkeypatch.setattr(inbox.random, "uniform", lambda *_: 0)
+    assert asyncio.run(inbox.find_request_by_property_and_identity(
+        page, "EB-WT7488", "+525599569566", "lead@example.com"
+    )) is True
+    assert "search_criteria%5Bquery%5D=525599569566" in page.searched
+    assert page.current == "/agent/conversations/7"
+
+
 def test_v3_worker_maps_api_request_to_exact_property_and_phone(monkeypatch):
     captured = {}
 
