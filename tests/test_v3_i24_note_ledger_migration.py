@@ -83,7 +83,10 @@ def test_migration_and_rollback_fixture_pass_on_pg17():
                 assert seeded.returncode == 0, seeded.stderr
 
         # The fixture is one transaction, so nothing survives the ROLLBACK.
-        run = psql("BEGIN;\n" + FIXTURE.read_text(encoding="utf-8") + "\nROLLBACK;")
+        # 20261010210000 (Tokko) disables the trigger in prod; the fixture still
+        # checks its body, so it runs with the trigger re-enabled.
+        run = psql("BEGIN;\nALTER TABLE public.lead_routing_opportunities ENABLE TRIGGER v3_enqueue_i24_note;\n"
+                   + FIXTURE.read_text(encoding="utf-8") + "\nROLLBACK;")
         assert run.returncode == 0, run.stdout + run.stderr
         assert "V3_I24_NOTE_LEDGER_TESTS_PASS" in run.stderr + run.stdout
     finally:
