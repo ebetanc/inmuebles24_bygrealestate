@@ -105,7 +105,7 @@ r = claim(FR, button=f"claim:v3:{o}:{a}", ctx=ow); check("S2b owner button in sh
 # S3: nobody claims -> open at 30, fallback at 66
 o, cap, a, ow = mk(); adv(o, 'owner', 6); g = st(o)['cur']; deliver(g, 'wamid.g3')
 check("S3 open at 30", adv(o, 'primary_guard', 30)['state'] == 'open', st(o))
-r = adv(o, 'primary_guard', 66); exp_agent = 'agent_manager'
+r = adv(o, 'primary_guard', 66); exp_agent = one(f"select public.v3_fallback_agent(now()+{OFF}+interval '66 min') a")['a']
 check("S3 fallback assigned", r['state'] == 'assigned' and st(o)['assigned_agent_id'] == exp_agent, [r, st(o)])
 nt = one("select count(*) n from lead_routing_delivery_attempts where opportunity_id=%s and delivery_kind='assigned_notice' and target_agent_id=%s", o, exp_agent)['n']
 check("S3 notice enqueued", nt == 1, nt)
@@ -135,6 +135,26 @@ r = claim(FR, body='tomo'); check("S7 ambiguous", r.get('outcome') == 'ambiguous
 r = claim(CAROL, body='tomo'); check("S7 no open offer", r.get('outcome') == 'no_open_offer', r)
 r = claim(FR, body='tomo', ctx=ow1); check("S8 quoted tomo", r.get('outcome') == 'claimed' and r['opportunity_id'] == o1, r)
 r = claim(FR, body='tomo nota'); check("S8b non-claim text ignored", r.get('outcome') == 'verified_webhook_mismatch', r)
+
+# S10 (opp 1277): guard send fails -> owner offer stays claimable; nobody -> fallback at 66
+sched('agent_carol')
+for take in (True, False):
+    o, cap, a, ow = mk(); g = adv(o, 'owner', 6)['attempt_id']
+    one("select public.fallback_failed_owner_delivery(%s,'131000') r", g)
+    s = st(o); check("S10 guard send failed keeps owner open", s['state'] == 'owner_open' and s['cur'] == a and s['exp'].total_seconds() > 3000, s)
+    if take:
+        r = claim(FR, button=f"claim:v3:{o}:{a}", ctx=ow); check("S10 owner still claims", r.get('outcome') == 'claimed', r)
+    else:
+        check("S10b fallback at 66", adv(o, 'owner', 66)['state'] == 'assigned' and st(o)['assigned_agent_id'] == exp_agent, st(o))
+
+# S11: owner send fails, nothing delivered -> straight to Sandy/BYG
+o = one("insert into lead_routing_opportunities(state,v3_enabled,property_id) values('resolved',true,'EB-TXTEST') returning opportunity_id")['opportunity_id']
+cap = one("""insert into i24_capture_events(account_key,source,happened_at,idempotency_key,disposition,contactado_status,opportunity_id,offer_context)
+  values('default','inmuebles24',now(),'txtest_s11','created_new','verified',%s,'{}') returning capture_event_id""", o)['capture_event_id']
+a = one("select public.v3_request_offer(%s,'owner','tx:owner:s11','agent_test_fr',%s) a", cap, FR)['a']
+one("select public.fallback_failed_owner_delivery(%s,'131000') r", a)
+fb = one("select public.v3_fallback_agent(now()) a")['a']
+check("S11 owner send failed -> fallback", st(o)['assigned_agent_id'] == fb, st(o))
 
 for ts, exp in [("2026-10-14 10:00", "agent_manager"), ("2026-10-14 08:59", "agent_manager_2"),
                 ("2026-10-14 18:00", "agent_manager_2"), ("2026-10-17 11:00", "agent_manager_2")]:
