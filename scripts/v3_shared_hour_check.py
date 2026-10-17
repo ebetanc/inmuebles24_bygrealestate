@@ -180,6 +180,23 @@ byg = one("select whatsapp_number w from agents where agent_id='agent_manager_2'
 o, r = mk_lead('rc4@gmail.com', '+52' + ''.join(ch for ch in byg if ch.isdigit())[-10:], 'inmuebles24', 10)
 check("S15 BYG own number -> normal offer", r.get('state') == 'guard_delivery_requested', [r, st(o)])
 
+# S16-S19 asesores (Marusa 16-oct): marca "asesor" o heurística → reparto normal.
+o, r = mk_lead('rc5@gmail.com', '+525500000905', 'inmuebles24', 10)
+check("S16a antes de marcar -> Carol directo", r.get('state') == 'direct_assigned', [r, st(o)])
+c.execute("insert into lead_advisor_flags(opportunity_id,normalized_email,e164_phone,flagged_by_agent_id) values(%s,'rc5@gmail.com','+525500000905','agent_carol')", (o,))
+o2, r2 = mk_lead('rc5@gmail.com', '+525500000905', 'inmuebles24', None)
+check("S16b marcado asesor -> oferta normal", r2.get('state') == 'guard_delivery_requested' and one("select public.v3_advisor_reason(%s) a", o2)['a'] == 'agent_flag', [r2, st(o2)])
+o, r = mk_lead('ventas@consorcio-prueba.com', '+525500000906', 'inmuebles24', 10)
+check("S17 correo de empresa -> oferta normal", r.get('state') == 'guard_delivery_requested' and one("select public.v3_advisor_reason(%s) a", o)['a'] == 'heuristic_email', [r, st(o)])
+o, cap, a, w = mk()  # oferta owner a agent_test_fr; mk() no pone identidad, la marca la necesita
+c.execute("update lead_routing_opportunities set normalized_email='rc7@gmail.com', e164_phone='+525500000907' where opportunity_id=%s", (o,))
+res = one("select public.v3_flag_advisor_from_webhook(%s) r", inbox(FR, body="asesor", ctx=w))['r']
+check("S18 'asesor' citando la oferta -> marcado", res.get('outcome') == 'advisor_flagged' and res.get('opportunity_id') == o
+      and one("select count(*) n from lead_advisor_flags where opportunity_id=%s", o)['n'] == 1, res)
+o_b, cap_b, a_b, w_b = mk()
+res = one("select public.v3_flag_advisor_from_webhook(%s) r", inbox(FR, body="asesor"))['r']
+check("S19 'asesor' sin cita con dos ofertas -> ambiguo", res.get('outcome') == 'advisor_ambiguous', res)
+
 for ts, exp in [("2026-10-14 10:00", "agent_manager"), ("2026-10-14 08:59", "agent_manager_2"),
                 ("2026-10-14 18:00", "agent_manager_2"), ("2026-10-17 11:00", "agent_manager_2")]:
     a_ = one("select public.v3_fallback_agent((%s::timestamp at time zone 'America/Mexico_City')) a", ts)['a']; check("S9 " + ts, a_ == exp, a_)
