@@ -168,16 +168,16 @@ def mk_lead(email, phone, portal, prev_days=None):
       values('default','inmuebles24',now(),%s,'created_new','verified',%s,'{}') returning capture_event_id""", k, o)['capture_event_id']
     return o, one(f"select public.v3_route_ready_opportunity(%s,%s,ARRAY[]::text[],now()+{OFF}) r", o, cap)['r']
 sched('agent_gina')
-o, r = mk_lead('rc1@x.mx', '+525500000901', 'inmuebles24', 10)
+o, r = mk_lead('rc1@gmail.com', '+525500000901', 'inmuebles24', 10)
 nt = one("select count(*) n from lead_routing_delivery_attempts where opportunity_id=%s and delivery_kind='assigned_notice' and target_agent_id='agent_carol'", o)['n']
 check("S12 returning client -> Carol direct", r.get('state') == 'direct_assigned' and st(o)['assigned_agent_id'] == 'agent_carol' and nt == 1, [r, st(o), nt])
 v = one("select assignment_method from v3_leads_dashboard where opportunity_id=%s", o); check("S12 dashboard direct", v['assignment_method'] == 'direct', v)
-o, r = mk_lead('rc2@x.mx', '+525500000902', 'MLS', 10)
+o, r = mk_lead('rc2@gmail.com', '+525500000902', 'MLS', 10)
 check("S13 MLS broker -> normal offer", r.get('state') == 'guard_delivery_requested', [r, st(o)])
-o, r = mk_lead('rc3@x.mx', '+525500000903', 'inmuebles24', 100)
+o, r = mk_lead('rc3@gmail.com', '+525500000903', 'inmuebles24', 100)
 check("S14 older than 90 days -> normal offer", r.get('state') == 'guard_delivery_requested', [r, st(o)])
 byg = one("select whatsapp_number w from agents where agent_id='agent_manager_2'")['w']
-o, r = mk_lead('rc4@x.mx', '+52' + ''.join(ch for ch in byg if ch.isdigit())[-10:], 'inmuebles24', 10)
+o, r = mk_lead('rc4@gmail.com', '+52' + ''.join(ch for ch in byg if ch.isdigit())[-10:], 'inmuebles24', 10)
 check("S15 BYG own number -> normal offer", r.get('state') == 'guard_delivery_requested', [r, st(o)])
 
 for ts, exp in [("2026-10-14 10:00", "agent_manager"), ("2026-10-14 08:59", "agent_manager_2"),
