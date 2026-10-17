@@ -75,6 +75,13 @@ No identifica quién cambió el estado ni vuelve a repartir esas solicitudes.
    (correo o teléfono) ya la tomó una asesora en los últimos 90 días, va directo a esa
    asesora con aviso `lead_asignado_v3`, sin oferta (`v3_returning_client_agent`). Los de
    MLS son otros asesores y se reparten normal; los números de BYG no cuentan.
+   **Asesores (desde 2026-10-17):** la regla de 90 días no aplica si la persona está marcada
+   como asesor (`lead_advisor_flags`: la asesora contesta `asesor` por WhatsApp citando la
+   oferta o el aviso del lead; sin cita vale su único lead de las últimas 24 h) o si
+   `v3_identity_looks_like_advisor` detecta correo de empresa (cualquier dominio que no sea
+   de consumidor), nombre de inmobiliaria o mensaje de colega. En ambos casos el lead entra a
+   reparto normal. `asesor` solo marca: no toma ni cierra el lead.
+   `v3_advisor_reason(opportunity_id)` dice por qué.
 5. **Oferta.** WF13 envía la plantilla Meta `lead_subasta_v3b` (sin minutos fijos) con un solo botón
    "Tomo" (payload `claim:v3:<opp>:<attempt>`). **Requiere URL pública de
    EasyBroker**; sin ella no hay mensaje posible.
